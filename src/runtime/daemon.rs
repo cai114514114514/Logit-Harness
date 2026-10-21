@@ -101,7 +101,8 @@ pub async fn serve(paths: Paths, id: &str) -> anyhow::Result<()> {
         key,
         config.search_limit,
         WebUsage::default(),
-    )?;
+    )?
+    .with_usage_file(paths.logs(id)?.join("web-usage.json"))?;
     if let (Some(money), Some(campaign)) = (money, &session.campaign) {
         web = web.with_money(money, campaign.prices.clone());
     }

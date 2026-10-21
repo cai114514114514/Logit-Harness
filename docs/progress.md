@@ -153,12 +153,33 @@ Spec: docs/spec.md
 
 ## Implementation watch list
 
+- Terminal checkpoint: Ratatui/Crossterm now provide continuous input, Chinese/grapheme editing,
+  bracketed multiline paste, scrollback, status/diff/budget and lifecycle controls. A dedicated socket
+  reader prevents redraw/input cancellation from discarding partial JSON frames. Replayed events
+  cannot double-count budget; late snapshots cannot rewind a newer status. The latter and exact-width
+  newline layout bugs were reproduced and corrected RED→GREEN.
+- Actual macOS PTY fixture verified paste waits for Enter, Chinese correction delivery, Ctrl-C pause,
+  clean detach and an independently surviving server. A real Flash session `ec0a2bf05c9e49a7` also
+  received the added -40→-40 requirement through the TUI and completed after the client detached.
+  External `python3 -B -m unittest -v test_temperature.py`: 3/3 passed. Original 0→32 and 100→212 tests
+  remain. Session was stopped after verification. Replay bytes: artifacts/tui-live.ansi; report:
+  artifacts/campaign/terminal-probe.json. This is an engineering smoke, not a comparative quality run.
+- Cumulative accounted experimental spend: **0.39785736 RMB / 50 RMB**, zero uncertain or outstanding
+  reservation. The probe's task token ceiling was raised through `/budget` to 500000, which does not
+  alter the shared money cap. Overall usage in this probe: 230483 tokens.
+- Search/fetch attempt quotas now persist before network dispatch and survive daemon restart.
+  UI polling uses a small status projection rather than retransmitting actor/image history; a real
+  socket test verifies a 420 KiB model history is excluded from the status response.
+- Latest full `cargo test`: **89/89** integration tests passed. Native Terminal window visual review
+  is still unverified: Computer Use explicitly prohibited access to com.apple.Terminal. No alternate
+  UI automation was used to bypass that restriction. User-facing usage: docs/terminal.md.
+
 - Model/tool fixtures live in tests only. Real validation reads the ignored `.env` key into subprocess
   environment; ordinary shell sessions still do not automatically inherit it.
 - Keep the existing 50 RMB account at artifacts/campaign/money.sqlite across every real run.
 - Current application-layer command policy is not an adversarial shell sandbox.
-- Remaining: durable web quotas, browser authorization/recovery refinements,
-  full TUI, frozen 36-task corpus/comparisons/ablations, macOS packaging and fresh final review.
+- Remaining: browser authorization/recovery refinements, native terminal visual review,
+  frozen 36-task corpus/comparisons/ablations, macOS packaging and fresh final review.
 - Also verify paused side questions, clarification cancellation and stale evidence; add explicit
   assumption/acceptance-note storage without letting model notes replace user requirements.
 - New Session snapshots have no compatibility requirement yet; keep one clean schema as implementation

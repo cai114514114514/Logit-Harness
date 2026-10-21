@@ -2,9 +2,10 @@ use super::{Effect, Tool, ToolContext, ToolEvent, ToolResult, ToolSpec};
 use crate::domain::EvidenceKind;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+mod quota;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct WebUsage {
@@ -15,8 +16,7 @@ pub struct WebUsage {
 pub struct WebClient {
     pub base: String,
     key: String,
-    usage: Mutex<WebUsage>,
-    limit: u32,
+    quota: quota::Quota,
     client: reqwest::Client,
     money: Option<(
         Arc<crate::runtime::money::Money>,
@@ -37,8 +37,7 @@ impl WebClient {
         Ok(Self {
             base: base.trim_end_matches('/').into(),
             key,
-            usage: Mutex::new(used),
-            limit,
+            quota: quota::Quota::new(limit, used),
             client,
             money: None,
         })
@@ -52,11 +51,11 @@ impl WebClient {
         self
     }
     pub fn usage(&self) -> WebUsage {
-        self.usage
-            .lock()
-            .map_err(|_| anyhow::anyhow!("quota lock poisoned"))
-            .expect("recorded usage must not be lost to a poisoned lock")
-            .clone()
+        self.quota.usage()
+    }
+    pub fn with_usage_file(mut self, path: std::path::PathBuf) -> anyhow::Result<Self> {
+        self.quota.attach(path)?;
+        Ok(self)
     }
     pub async fn search(
         &self,
@@ -69,14 +68,11 @@ impl WebClient {
             "query must contain 1..128 characters"
         );
         anyhow::ensure!((1..=50).contains(&count), "count must be 1..50");
-        {
-            let mut usage = self
-                .usage
-                .lock()
-                .map_err(|_| anyhow::anyhow!("quota lock poisoned"))?;
-            anyhow::ensure!(usage.searches < self.limit, "search limit exhausted");
-            usage.searches += 1;
-        }
+        anyhow::ensure!(
+            !cancel.is_cancelled(),
+            "web request cancelled before admission"
+        );
+        self.quota.consume(true)?;
         self.post(
             "search",
             json!({"query":query,"count":count,"need_content":true}),
@@ -91,17 +87,11 @@ impl WebClient {
             "fetch needs an HTTP(S) URL"
         );
         ensure_public_target(&parsed)?;
-        {
-            let mut usage = self
-                .usage
-                .lock()
-                .map_err(|_| anyhow::anyhow!("quota lock poisoned"))?;
-            anyhow::ensure!(
-                usage.fetches < self.limit.saturating_mul(2),
-                "fetch limit exhausted"
-            );
-            usage.fetches += 1;
-        }
+        anyhow::ensure!(
+            !cancel.is_cancelled(),
+            "web request cancelled before admission"
+        );
+        self.quota.consume(false)?;
         self.post("fetch", json!({"url":url}), cancel).await
     }
     async fn post(

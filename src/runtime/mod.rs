@@ -17,4 +17,5 @@ pub mod runner;
 pub mod state;
 mod steering;
 mod verify;
+pub mod view;
 mod workers;

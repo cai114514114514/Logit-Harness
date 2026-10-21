@@ -19,15 +19,27 @@ pub enum ClientMessage {
     Subscribe { after: u64 },
     Command { command: Control },
     Snapshot,
+    Status,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerMessage {
-    Event { event: SessionEvent },
-    Snapshot { state: Session, sequence: u64 },
+    Event {
+        event: SessionEvent,
+    },
+    Snapshot {
+        state: Session,
+        sequence: u64,
+    },
+    View {
+        state: super::view::SessionView,
+        sequence: u64,
+    },
     Ack,
-    Error { message: String },
+    Error {
+        message: String,
+    },
 }
 
 #[derive(Clone)]
@@ -130,6 +142,17 @@ async fn serve(stream: UnixStream, endpoint: Endpoint) -> anyhow::Result<()> {
                 .enqueue(&endpoint.session, &serde_json::to_value(command)?)?;
             let _ = endpoint.control.try_send(Control::Wake);
             send(reader.get_mut(), &ServerMessage::Ack).await?;
+        }
+        ClientMessage::Status => {
+            let (state, sequence): (Session, u64) = endpoint.store.snapshot(&endpoint.session)?;
+            send(
+                reader.get_mut(),
+                &ServerMessage::View {
+                    state: state.into(),
+                    sequence,
+                },
+            )
+            .await?;
         }
         ClientMessage::Snapshot => {
             let (state, sequence) = endpoint.store.snapshot(&endpoint.session)?;

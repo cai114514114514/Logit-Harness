@@ -135,3 +135,42 @@ async fn socket_routes_controls_and_replays_after_a_cursor() {
     cancel.cancel();
     task.await.unwrap().unwrap();
 }
+
+#[tokio::test]
+async fn ui_status_does_not_retransmit_large_model_or_image_history() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::new(root.path().join("state"));
+    paths.prepare().unwrap();
+    let store = Arc::new(Store::open(&paths.database()).unwrap());
+    let mut session = Session::new(root.path().to_owned(), "status projection", 1000, 60);
+    session
+        .actors
+        .get_mut("main")
+        .unwrap()
+        .context
+        .user(&"large context ".repeat(30_000));
+    store
+        .commit(
+            &session.id,
+            &session,
+            EventData::Diagnostic {
+                message: "fixture".into(),
+            },
+        )
+        .unwrap();
+    let (control, _) = mpsc::channel(8);
+    let (events, _) = broadcast::channel(8);
+    let path = paths.socket(&session.id).unwrap();
+    let server = Server::bind(path.clone(), session.id.clone(), store, control, events)
+        .await
+        .unwrap();
+    let cancel = CancellationToken::new();
+    let running = tokio::spawn(server.run(cancel.clone()));
+    let response = ipc::request(&path, ClientMessage::Status).await.unwrap();
+    let bytes = serde_json::to_vec(&response).unwrap();
+    assert!(bytes.len() < 10_000);
+    assert!(!String::from_utf8_lossy(&bytes).contains("large context"));
+    assert!(matches!(response, ServerMessage::View { .. }));
+    cancel.cancel();
+    running.await.unwrap().unwrap();
+}

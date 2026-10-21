@@ -59,3 +59,44 @@ async fn invalid_query_does_not_consume_network_quota() {
     );
     assert_eq!(client.usage().fetches, 0);
 }
+
+#[tokio::test]
+async fn attempted_web_calls_keep_their_quota_after_restart() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("web.json");
+    let client = WebClient::new(
+        "http://127.0.0.1:1".into(),
+        "fixture".into(),
+        1,
+        WebUsage::default(),
+    )
+    .unwrap()
+    .with_usage_file(path.clone())
+    .unwrap();
+    // An unavailable endpoint still consumes one attempted call; restarting cannot erase it.
+    assert!(
+        client
+            .search("Rust", 1, CancellationToken::new())
+            .await
+            .is_err()
+    );
+    drop(client);
+    let resumed = WebClient::new(
+        "http://127.0.0.1:1".into(),
+        "fixture".into(),
+        1,
+        WebUsage::default(),
+    )
+    .unwrap()
+    .with_usage_file(path)
+    .unwrap();
+    assert_eq!(resumed.usage().searches, 1);
+    assert!(
+        resumed
+            .search("Retry", 1, CancellationToken::new())
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("limit")
+    );
+}

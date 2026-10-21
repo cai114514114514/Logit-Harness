@@ -6,9 +6,12 @@ use crate::{
         state::Control,
     },
 };
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 
 pub async fn attach(paths: &Paths, id: &str, after: u64, json: bool) -> anyhow::Result<()> {
+    if !json && std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
+        return super::terminal::attach(paths, id, after).await;
+    }
     let socket = paths.socket(id)?;
     let mut reader = ipc::subscribe(&socket, after).await?;
     loop {
