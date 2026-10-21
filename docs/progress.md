@@ -26,4 +26,12 @@ Spec: docs/spec.md
 - Ruling: rate-limit retries happen in transport; potentially billable 5xx retries require a new
   runtime budget reservation rather than hiding several uncertain calls behind one allowance.
   Cost if wrong: fewer automatic retries, not unaccounted spend.
-- Next: workspace/process tools. Runtime will integrate metering and compaction.
+- Task 3 core: hash-guarded create/replace/delete, real PTY process groups, source search,
+  tool dispatch authorization and requirement leases, web HTTP transport/limits implemented.
+  Watched 7 base tool tests fail, then stale-action/service/search/web tests fail before implementation.
+  `cargo test` passed 28/28. macOS sandbox-exec actually prevented source writes while allowing build output.
+- Pending integration: long-lived service lifecycle, persisted quota restoration, runtime metering,
+  cancellation/reconciliation and compaction remain in Task 4; don't claim a functioning agent yet.
+- Official price snapshot saved in docs/pricing.md; peak-rate upper bounds will enforce the 50 RMB
+  campaign cap. No paid model or search call has been made. Environment key remains absent.
+- Next: runtime session state, controls, money ledger and continuous actor loop.
