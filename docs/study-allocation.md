@@ -40,6 +40,14 @@ Initial candidate provenance (superseded by the verification feedback repair bef
 - Executable SHA-256: `197dfdfd8773519e7330405263dc1cf8951c8e9e0bcf77e5a0643347cedb8b36`.
 - Account: `weft-first-evaluation`, original `artifacts/campaign` state directory.
 
+The repaired candidate is commit `cec7d6b`, with 127 development tests and 21 release-mode tests
+passing, strict Clippy passing and a clean default release build:
+
+- Source hash: `a55af6d616bf4ca44337cdd4f61953788cb2ffd52de4a68b85cb12564a78fddf`.
+- Executable SHA-256: `debad6356f7ca9fc44e0269e3a7f17385713806e9c268d67132155cefebd6ef9`.
+- Installed at `/opt/homebrew/bin/loh`, verified byte-identical to the built executable and with a
+  valid local ad-hoc signature. The storage-correction probe records this exact executable hash.
+
 The study's generated `study.json` is the exact execution pin. All 360 held-out entries remain in
 its denominator even if funding stops earlier. Reports retain task counts, missing repetitions,
 errors, scripted interventions, conservative costs and uncertainty. Missing human review remains

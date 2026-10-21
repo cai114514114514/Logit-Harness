@@ -354,3 +354,24 @@ Spec: docs/spec.md
 - The actual command-based regression failed before repair and passes afterward. Strict Clippy
   and the complete **127-test** suite pass. No held-out trajectory has started, so this change does
   not tune against held-out outcomes. Release checks and the corrected fixture follow before pinning.
+
+## Correction scope repair before holdout
+
+- The corrected fixture first confirmed real JSON persistence, then delivered the SQLite correction
+  while the old verification process ran. Session `f9d030db55e44aed` reached Completed after 120
+  active seconds / 378,801 tokens; all external SQLite and caller-file checks passed.
+- Inspecting the saved requirement graph exposed an invalid success scope: the classifier returned
+  `replace` together with updates to r1 and two additions. Replacement deactivated r1; its updated
+  core requirement was silently excluded from final acceptance. This trajectory is retained in
+  `artifacts/storage-correction`, explicitly **not** accepted as full requirement-aware completion.
+- Replacement and updates are now mutually exclusive and rejected before any revision/history
+  mutation. The same classifier receives a concrete error and can retry as refine. A valid whole-task
+  replacement retains the user's complete verbatim objective as an active acceptance requirement,
+  even when model-derived subrequirements omit a clause. The classifier instructions distinguish
+  changing a backend from replacing the entire task.
+- Two domain regressions failed before the repair, then passed. A runner integration confirms the
+  malformed classification is retried, only one revision is committed, and the original core
+  requirement remains active. A final `artifacts/storage-acceptance` run will check this invariant
+  alongside real initial/final storage, old-process cancellation and preservation of caller edits.
+- No held-out trajectory has started. Old binaries and trajectories remain distinct; none of these
+  fixes or examples can be represented as a held-out research improvement.

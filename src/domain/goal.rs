@@ -119,9 +119,19 @@ impl Goal {
             !change.replacement || !change.additions.is_empty(),
             "replacement needs a new objective"
         );
+        anyhow::ensure!(
+            !change.replacement || change.updates.is_empty(),
+            "replacement cannot also update old requirements: use refine for a scoped correction, or supply the complete new objective in additions without updates"
+        );
+        let mut additions = change.additions.clone();
+        if change.replacement && !additions.iter().any(|text| text == &change.source) {
+            // A replacement's model-derived subrequirements cannot substitute
+            // for the user's complete request at the acceptance gate.
+            additions.insert(0, change.source.clone());
+        }
         Ok(ValidatedChange {
             updates: change.updates.clone(),
-            additions: change.additions.clone(),
+            additions,
             replacement: change.replacement,
         })
     }
@@ -136,8 +146,8 @@ impl Goal {
                 changed.insert(requirement.id.clone());
             }
         }
-        // 现状语义：replacement 与 updates 同传时，updates 的目标可能刚被停用，
-        // 但文本更新仍会写入（该需求已不在活跃集合中）。保持现状。
+        // Validation makes replacement and updates mutually exclusive, so an
+        // updated requirement always stays in the active acceptance set.
         for requirement in self.requirements.values_mut() {
             if let Some(text) = validated.updates.get(&requirement.id) {
                 requirement.text = text.clone();

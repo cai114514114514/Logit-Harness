@@ -51,6 +51,46 @@ fn invalid_correction_is_atomic() {
 }
 
 #[test]
+fn replacement_cannot_update_requirements_it_would_deactivate() {
+    let mut goal = Goal::new("Keep the CLI and use JSON storage");
+    let before = serde_json::to_string(&goal).unwrap();
+    let result = goal.revise(Change {
+        source: "Change storage to SQLite; keep the CLI and verify it".into(),
+        updates: BTreeMap::from([("r1".into(), "Keep the CLI and use SQLite storage".into())]),
+        additions: vec!["Verify the SQLite implementation".into()],
+        replacement: true,
+    });
+    assert!(
+        result.is_err(),
+        "mixed replacement/update must not silently drop the updated requirement"
+    );
+    assert_eq!(serde_json::to_string(&goal).unwrap(), before);
+}
+
+#[test]
+fn a_replacement_retains_the_complete_user_objective_for_acceptance() {
+    let mut goal = Goal::new("Build a todo application");
+    let replacement =
+        "Cancel the todo application. Build an offline calculator with keyboard input.";
+    goal.revise(Change {
+        source: replacement.into(),
+        updates: BTreeMap::new(),
+        additions: vec!["Build an offline calculator".into()],
+        replacement: true,
+    })
+    .unwrap();
+    assert!(!goal.requirements["r1"].active);
+    assert!(
+        goal.requirements.values().any(|requirement| {
+            requirement.active
+                && requirement.text == replacement
+                && requirement.source == replacement
+        }),
+        "derived replacement requirements must not omit the complete verbatim user request"
+    );
+}
+
+#[test]
 fn passing_result_does_not_cover_an_omitted_requirement() {
     let goal = Goal::new("Store notes offline and support keyboard shortcuts");
     assert_eq!(goal.missing_evidence(&[], &BTreeMap::new()), vec!["r1"]);
