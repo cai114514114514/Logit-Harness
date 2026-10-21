@@ -318,4 +318,41 @@ async fn source_search_reports_actual_locations_and_hashes() {
     assert_eq!(result.data["matches"][0]["path"], "module.rs");
     assert_eq!(result.data["matches"][0]["line"], 2);
     assert!(!result.files["module.rs"].is_empty());
+    assert!(
+        result.files.contains_key("$workspace"),
+        "negative search conclusions need a repository fingerprint too"
+    );
+}
+
+#[tokio::test]
+async fn agents_own_edits_refresh_prior_workspace_observations() {
+    let dir = tempfile::tempdir().unwrap();
+    let logs = tempfile::tempdir().unwrap();
+    let goal = Arc::new(tokio::sync::RwLock::new(Goal::new("create two files")));
+    let workspace = Workspace::open(dir.path()).unwrap();
+    let mut scope = Scope {
+        requirements: goal.read().await.active_versions(),
+        observed: workspace.fingerprints().unwrap(),
+        ..Scope::default()
+    };
+    let host = ToolHost::new(workspace, goal, logs.path().to_owned());
+    let (events, _) = mpsc::unbounded_channel();
+    for path in ["one", "two"] {
+        let call = ToolCall {
+            id: path.into(),
+            name: "apply_patch".into(),
+            arguments: json!({"edits":[{"path":path,"expected":"missing","operation":"create","content":"ok"}]}),
+        };
+        let result = host
+            .execute(
+                call,
+                scope.clone(),
+                CancellationToken::new(),
+                events.clone(),
+            )
+            .await
+            .unwrap();
+        scope.observed.extend(result.files);
+    }
+    assert!(dir.path().join("two").exists());
 }

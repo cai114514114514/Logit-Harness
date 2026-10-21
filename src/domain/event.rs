@@ -12,11 +12,29 @@ pub enum Status {
     Completed,
     Stopped,
     Failed,
+    Pausing,
+    Stopping,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventData {
+    ModelRequested {
+        actor: String,
+        artifact: String,
+    },
+    ModelFinished {
+        actor: String,
+        artifact: String,
+        model: String,
+    },
+    ProcessStarted {
+        id: String,
+        pid: u32,
+    },
+    Plan {
+        steps: serde_json::Value,
+    },
     Created {
         objective: String,
         workspace: String,

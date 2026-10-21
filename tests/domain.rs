@@ -161,3 +161,22 @@ fn state_and_events_survive_reopen_with_monotonic_cursor() {
     assert_eq!(events[0].sequence, second.sequence);
     assert!(reopened.events("different-session", 0).unwrap().is_empty());
 }
+
+#[test]
+fn deletion_evidence_expires_if_the_file_returns() {
+    let goal = Goal::new("remove obsolete file");
+    let evidence = Evidence {
+        id: "delete-check".into(),
+        kind: EvidenceKind::Review,
+        requirements: goal.active_versions(),
+        files: BTreeMap::from([("obsolete.txt".into(), "missing".into())]),
+        passed: true,
+        description: "absent".into(),
+        artifact: None,
+    };
+    assert!(evidence.current(&goal, &BTreeMap::new()));
+    assert!(!evidence.current(
+        &goal,
+        &BTreeMap::from([("obsolete.txt".into(), "restored".into())])
+    ));
+}

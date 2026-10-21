@@ -33,10 +33,10 @@ impl Evidence {
                     .get(id)
                     .is_some_and(|r| r.active && r.revision == *revision)
             })
-            && self
-                .files
-                .iter()
-                .all(|(path, hash)| files.get(path) == Some(hash))
+            && self.files.iter().all(|(path, hash)| match files.get(path) {
+                Some(current) => current == hash,
+                None => hash == "missing",
+            })
     }
 }
 

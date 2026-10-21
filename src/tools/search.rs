@@ -50,7 +50,8 @@ impl Tool for Search {
         let limit = args.limit.unwrap_or(100).clamp(1, 500);
         let paths = context.workspace.fingerprints()?;
         let mut matches = vec![];
-        let mut files = BTreeMap::new();
+        // A no-match result is also evidence, and expires when the searched tree changes.
+        let mut files = BTreeMap::from([("$workspace".into(), paths["$workspace"].clone())]);
         let mut truncated = vec![];
         for (path, hash) in paths.iter().filter(|(p, _)| p.as_str() != "$workspace") {
             anyhow::ensure!(!cancel.is_cancelled(), "search cancelled");

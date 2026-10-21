@@ -29,7 +29,7 @@ pub struct ToolSpec {
     pub effect: Effect,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Scope {
     pub requirements: BTreeMap<String, u64>,
     pub observed: Fingerprints,
@@ -187,17 +187,25 @@ impl ToolHost {
             }
         }
         anyhow::ensure!(!cancel.is_cancelled(), "tool cancelled before dispatch");
-        tool.call(
-            call.arguments,
-            ToolContext {
-                workspace: self.workspace.clone(),
-                logs: self.logs.clone(),
-                id: call.id,
-            },
-            cancel,
-            events,
-        )
-        .await
+        let mut result = tool
+            .call(
+                call.arguments,
+                ToolContext {
+                    workspace: self.workspace.clone(),
+                    logs: self.logs.clone(),
+                    id: call.id,
+                },
+                cancel,
+                events,
+            )
+            .await?;
+        if effect == Effect::Write {
+            let snapshot = self.workspace.fingerprints()?;
+            result
+                .files
+                .insert("$workspace".into(), snapshot["$workspace"].clone());
+        }
+        Ok(result)
     }
 }
 
