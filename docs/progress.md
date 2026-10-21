@@ -393,3 +393,33 @@ Spec: docs/spec.md
   incomplete at 20/180; the remaining admissible account balance is allocated to the fixed held-out
   schedule. No further tuning based on held-out outcomes is permitted; missing research and human
   reviews will remain explicit.
+
+## Budget-limited research checkpoint
+
+- Held-out driver finished with `budget_limited`: **15/360** trajectories, one distinct task,
+  **13/15** external passes, **0/15** independent completions. Thirteen runs exhausted task token
+  admission; the last two exhausted shared money admission. No core, prompt, tool, task or oracle
+  change occurred after the held-out pin. Native processes are settled and stopped.
+- Final shared account: 19.76413632 RMB accounted + 28.114944 RMB uncertain, zero reserved;
+  liabilities 47.87908032 RMB. Remaining 2.12091968 RMB cannot cover the fixed 2.162688 RMB next-call
+  reserve. The new uncertainty is one network send failure; the original twelve HTTP 400 allowances
+  remain unchanged. No funding, refund assumption or replacement account was introduced.
+- Full research is incomplete: 505/540 scheduled trajectories remain, and human review is pending.
+  The one-task paired comparison has no task-level confidence interval and shows no scripted
+  intervention reduction versus the strongest observed baseline. Effectiveness is not established.
+- `docs/research-results.md` presents the counts, caveats and budget; original per-trial reports,
+  source snapshots, events, frozen programs and ledger remain available for inspection/recovery.
+
+## Packaged delivery
+
+- Current package: `dist/delivery/loh-macos-arm64-0.1.0.tar.gz`; archive SHA-256:
+  `46b5cfd0a652577e3f758d3b6bf702cb7ff9f74131bde4efcf639922ec44338c`.
+  Older `dist/release` and `dist/engineering-checkpoint` packages remain historical and superseded.
+- Extracted the current archive into a fresh temporary directory. Its binary matches both the
+  installed `/opt/homebrew/bin/loh` and the frozen held-out binary; doctor, local signature and
+  offline replay of the Completed→Stopped event tail pass. The package includes the offline reader
+  and allowlisted synthetic event/acceptance records, with no credentials or campaign database.
+- Verification receipt: `dist/delivery/verification.json`. No paid operation was used for package
+  validation. No evaluation daemons or model reservations remain. Research remains incomplete for
+  the documented budget and review reasons; the overall approved research objective is not marked
+  complete.
