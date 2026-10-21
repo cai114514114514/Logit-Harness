@@ -79,13 +79,29 @@ impl Runner {
         let actor = &self.session.actors[actor_id];
         if matches!(actor.role, Role::Verifier | Role::Worker | Role::Question) {
             tools.retain(|v| {
-                self.tools.effect(v["name"].as_str().unwrap_or("")) == Some(Effect::Read)
+                self.tools
+                    .effect(v["name"].as_str().unwrap_or(""))
+                    .is_some_and(Effect::readonly)
             });
         }
         if actor.role == Role::Steering {
             tools.clear();
         }
         tools.extend(prompts::special(&actor.role));
+        if actor.role == Role::Verifier {
+            for tool in &mut tools {
+                if tool["name"] == "report_verification" {
+                    tool["parameters"]["properties"]["checks"]["items"]["properties"]["requirement"]
+                        ["enum"] = json!(
+                        self.session
+                            .goal
+                            .active_versions()
+                            .keys()
+                            .collect::<Vec<_>>()
+                    );
+                }
+            }
+        }
         let compact = actor.role != Role::Steering
             && serde_json::to_vec(&actor.context.items)?.len() > self.settings.context_limit;
         let request = Request {

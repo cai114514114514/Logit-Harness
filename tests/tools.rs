@@ -356,3 +356,50 @@ async fn agents_own_edits_refresh_prior_workspace_observations() {
     }
     assert!(dir.path().join("two").exists());
 }
+#[tokio::test]
+async fn independent_checks_can_execute_but_cannot_modify_source() {
+    use std::sync::Arc;
+    use weft::tools::{Scope, ToolHost};
+    use weft::{domain::Goal, model::ToolCall};
+    let root = tempfile::tempdir().unwrap();
+    let logs = tempfile::tempdir().unwrap();
+    std::fs::write(root.path().join("answer.py"), "value = 42\n").unwrap();
+    let goal = Goal::new("Deliver answer.py");
+    let scope = Scope {
+        requirements: goal.active_versions(),
+        readonly: true,
+        ..Scope::default()
+    };
+    let host = ToolHost::new(
+        Workspace::open(root.path()).unwrap(),
+        Arc::new(tokio::sync::RwLock::new(goal)),
+        logs.path().to_owned(),
+    );
+    let (events, _) = tokio::sync::mpsc::unbounded_channel();
+    for (command, expected) in [
+        (
+            "python3 -B -c 'from answer import value; assert value == 42'",
+            true,
+        ),
+        ("printf broken > answer.py", false),
+    ] {
+        let result = host
+            .execute(
+                ToolCall {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    name: "check".into(),
+                    arguments: serde_json::json!({"command":command}),
+                },
+                scope.clone(),
+                CancellationToken::new(),
+                events.clone(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.success, expected);
+    }
+    assert_eq!(
+        std::fs::read_to_string(root.path().join("answer.py")).unwrap(),
+        "value = 42\n"
+    );
+}

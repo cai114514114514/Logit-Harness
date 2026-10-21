@@ -62,9 +62,31 @@ impl Runner {
                 },
                 ResultData::Model(result),
             ) => {
-                self.session
-                    .budget
-                    .settle(&reservation, result.as_ref().ok().map(|r| &r.usage))?;
+                let refused = result
+                    .as_ref()
+                    .err()
+                    .is_some_and(|error| error.is::<super::meter::BudgetReached>());
+                let zero = crate::domain::Usage::default();
+                let not_submitted = result
+                    .as_ref()
+                    .err()
+                    .is_some_and(|error| error.is::<super::charge::NotSubmitted>());
+                self.session.budget.settle(
+                    &reservation,
+                    if refused || not_submitted {
+                        Some(&zero)
+                    } else {
+                        result.as_ref().ok().map(|r| &r.usage)
+                    },
+                )?;
+                if refused {
+                    self.session.actors.get_mut(&job.actor).unwrap().phase = Phase::Ready;
+                    self.halt(
+                        Status::Exhausted,
+                        "campaign money limit reached before submission",
+                    )?;
+                    return Ok(());
+                }
                 match result {
                     Ok(response) => {
                         let path = self.tools.logs.join(format!("{id}.response.json"));

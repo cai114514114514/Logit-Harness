@@ -20,11 +20,20 @@ impl Context {
         );
     }
     pub fn compact(&mut self, summary: &str) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.unanswered().is_empty(),
+            "cannot compact across outstanding tool calls"
+        );
+        anyhow::ensure!(!summary.trim().is_empty(), "empty context summary");
+        self.items = vec![json!({"role":"user", "content":summary})];
+        Ok(())
+    }
+    pub fn unanswered(&self) -> BTreeSet<String> {
         let mut pending = BTreeSet::new();
         for item in &self.items {
             match item["type"].as_str() {
                 Some("function_call" | "custom_tool_call") => {
-                    pending.insert(item["call_id"].as_str().unwrap_or(""));
+                    pending.insert(item["call_id"].as_str().unwrap_or("").to_owned());
                 }
                 Some("function_call_output" | "custom_tool_call_output") => {
                     pending.remove(item["call_id"].as_str().unwrap_or(""));
@@ -32,12 +41,6 @@ impl Context {
                 _ => (),
             }
         }
-        anyhow::ensure!(
-            pending.is_empty(),
-            "cannot compact across outstanding tool calls"
-        );
-        anyhow::ensure!(!summary.trim().is_empty(), "empty context summary");
-        self.items = vec![json!({"role":"user", "content":summary})];
-        Ok(())
+        pending
     }
 }

@@ -196,6 +196,30 @@ impl Runner {
         let report: Report = serde_json::from_value(arguments.clone())?;
         let snapshot = self.tools.workspace.fingerprints()?;
         let versions = self.session.goal.active_versions();
+        // A malformed verdict is a verifier protocol error, not a reason to rewrite
+        // a correct deliverable. Validate the entire report before adding evidence.
+        let mut reported = BTreeSet::new();
+        for check in &report.checks {
+            anyhow::ensure!(
+                versions.contains_key(&check.requirement),
+                "requirement must be an active ID, not its text; valid IDs: {:?}",
+                versions.keys()
+            );
+            anyhow::ensure!(
+                reported.insert(check.requirement.clone()),
+                "duplicate requirement verdict"
+            );
+            for id in &check.evidence {
+                anyhow::ensure!(
+                    self.session.evidence.iter().any(|e| e.id == *id),
+                    "unknown evidence ID: {id}"
+                );
+            }
+        }
+        anyhow::ensure!(
+            reported == versions.keys().cloned().collect(),
+            "report must cover every active requirement ID"
+        );
         let mut covered = BTreeSet::new();
         let mut failures = vec![];
         let actor_scope = self.session.actors[actor_id].scope.clone();

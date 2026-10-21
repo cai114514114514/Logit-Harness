@@ -25,7 +25,11 @@ impl Store {
                 sequence INTEGER PRIMARY KEY AUTOINCREMENT,
                 session TEXT NOT NULL, timestamp TEXT NOT NULL, data TEXT NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS events_session ON events(session, sequence);",
+            CREATE INDEX IF NOT EXISTS events_session ON events(session, sequence);
+            CREATE TABLE IF NOT EXISTS controls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, session TEXT NOT NULL, data TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS controls_session ON controls(session,id);",
         )?;
         Ok(Self {
             connection: Mutex::new(connection),
@@ -72,6 +76,84 @@ impl Store {
                 row.get(0)
             })?;
         Ok(serde_json::from_str(&state)?)
+    }
+    pub fn snapshot<T: DeserializeOwned>(&self, session: &str) -> anyhow::Result<(T, u64)> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let (state, sequence): (String, u64) = connection.query_row(
+            "SELECT state,
+            (SELECT COALESCE(MAX(sequence),0) FROM events WHERE session=?1)
+            FROM sessions WHERE id=?1",
+            [session],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        Ok((serde_json::from_str(&state)?, sequence))
+    }
+    pub fn append(&self, session: &str, data: EventData) -> anyhow::Result<SessionEvent> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        connection.execute(
+            "INSERT INTO events(session,timestamp,data) VALUES(?1,?2,?3)",
+            params![session, timestamp, serde_json::to_string(&data)?],
+        )?;
+        Ok(SessionEvent {
+            sequence: connection.last_insert_rowid() as u64,
+            session: session.into(),
+            timestamp,
+            data,
+        })
+    }
+    pub fn enqueue(&self, session: &str, data: &serde_json::Value) -> anyhow::Result<u64> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        connection.execute(
+            "INSERT INTO controls(session,data) VALUES(?1,?2)",
+            params![session, serde_json::to_string(data)?],
+        )?;
+        Ok(connection.last_insert_rowid() as u64)
+    }
+    pub fn queued(
+        &self,
+        session: &str,
+        after: u64,
+    ) -> anyhow::Result<Vec<(u64, serde_json::Value)>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let mut query = connection
+            .prepare("SELECT id,data FROM controls WHERE session=?1 AND id>?2 ORDER BY id")?;
+        let rows = query.query_map(params![session, after], |row| {
+            Ok((row.get::<_, u64>(0)?, row.get::<_, String>(1)?))
+        })?;
+        rows.map(|row| {
+            let (id, data) = row?;
+            Ok((id, serde_json::from_str(&data)?))
+        })
+        .collect()
+    }
+    pub fn snapshots(&self) -> anyhow::Result<Vec<(String, serde_json::Value)>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let mut query =
+            connection.prepare("SELECT id,state FROM sessions ORDER BY updated DESC")?;
+        let rows = query.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        rows.map(|row| {
+            let (id, state) = row?;
+            Ok((id, serde_json::from_str(&state)?))
+        })
+        .collect()
     }
     pub fn events(&self, session: &str, after: u64) -> anyhow::Result<Vec<SessionEvent>> {
         let connection = self

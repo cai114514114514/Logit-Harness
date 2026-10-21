@@ -1,10 +1,15 @@
 mod actor;
+pub mod charge;
 mod control;
+pub mod daemon;
 mod dispatch;
 pub mod graph;
+pub mod ipc;
 mod meta;
+pub mod meter;
 pub mod money;
 mod observe;
 mod prompts;
+pub mod recovery;
 pub mod runner;
 pub mod state;

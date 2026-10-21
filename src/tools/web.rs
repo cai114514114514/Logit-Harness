@@ -18,6 +18,10 @@ pub struct WebClient {
     usage: Mutex<WebUsage>,
     limit: u32,
     client: reqwest::Client,
+    money: Option<(
+        Arc<crate::runtime::money::Money>,
+        crate::runtime::money::Prices,
+    )>,
 }
 
 impl WebClient {
@@ -36,7 +40,16 @@ impl WebClient {
             usage: Mutex::new(used),
             limit,
             client,
+            money: None,
         })
+    }
+    pub fn with_money(
+        mut self,
+        money: Arc<crate::runtime::money::Money>,
+        prices: crate::runtime::money::Prices,
+    ) -> Self {
+        self.money = Some((money, prices));
+        self
     }
     pub fn usage(&self) -> WebUsage {
         self.usage.lock().unwrap().clone()
@@ -92,6 +105,20 @@ impl WebClient {
         body: Value,
         cancel: CancellationToken,
     ) -> anyhow::Result<Value> {
+        anyhow::ensure!(
+            !cancel.is_cancelled(),
+            "web request cancelled before submission"
+        );
+        let reservation = if let Some((money, prices)) = &self.money {
+            let amount = if path == "search" {
+                prices.search
+            } else {
+                prices.fetch
+            };
+            Some((money.admit(amount, &cancel).await?, amount))
+        } else {
+            None
+        };
         let operation = async {
             let response = self
                 .client
@@ -107,7 +134,11 @@ impl WebClient {
             );
             Ok(response.json().await?)
         };
-        tokio::select! {biased; _=cancel.cancelled()=>anyhow::bail!("web request cancelled"),result=operation=>result}
+        let result = tokio::select! {biased; _=cancel.cancelled()=>Err(anyhow::anyhow!("web request cancelled")),result=operation=>result};
+        if let Some((charge, amount)) = reservation {
+            charge.settle(result.as_ref().ok().map(|_| amount))?;
+        }
+        result
     }
 }
 

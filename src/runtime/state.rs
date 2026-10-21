@@ -1,7 +1,15 @@
 use super::actor::{Action, Actor, Role};
 use super::graph::Graph;
+use super::money::Prices;
 use crate::domain::{Budget, Evidence, Goal, Status};
 use crate::tools::Scope;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Campaign {
+    pub name: String,
+    pub limit: u64,
+    pub prices: Prices,
+}
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -22,6 +30,8 @@ pub struct Session {
     pub workspace: PathBuf,
     pub goal: Goal,
     pub status: Status,
+    /// Durable destination after every cancelled operation has actually settled.
+    pub transition: Option<Status>,
     pub graph: Graph,
     pub actors: BTreeMap<String, Actor>,
     pub actions: BTreeMap<String, Action>,
@@ -34,6 +44,8 @@ pub struct Session {
     pub seconds: u64,
     pub elapsed: u64,
     pub final_report: Option<String>,
+    pub cursor: u64,
+    pub campaign: Option<Campaign>,
 }
 
 impl Session {
@@ -53,6 +65,7 @@ impl Session {
             workspace,
             goal,
             status: Status::Ready,
+            transition: None,
             graph: Graph::default(),
             actors: BTreeMap::from([("main".into(), main)]),
             actions: BTreeMap::new(),
@@ -65,6 +78,8 @@ impl Session {
             seconds,
             elapsed: 0,
             final_report: None,
+            cursor: 0,
+            campaign: None,
         }
     }
 }
@@ -72,6 +87,8 @@ impl Session {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Control {
+    #[serde(skip)]
+    Wake,
     Message {
         text: String,
     },

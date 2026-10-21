@@ -382,3 +382,222 @@ async fn malformed_planning_arguments_are_feedback_not_a_runner_crash() {
         .unwrap();
     assert_eq!(session.status, Status::Completed);
 }
+
+#[tokio::test]
+async fn campaign_refusal_is_exhaustion_without_unknown_token_charges() {
+    use weft::runtime::{
+        meter::Metered,
+        money::{Money, Prices},
+    };
+    let workspace = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let session = Session::new(
+        workspace.path().to_owned(),
+        "Write result.txt",
+        1_000_000,
+        60,
+    );
+    let store = Arc::new(Store::open(&state.path().join("state.db")).unwrap());
+    let tools = Arc::new(ToolHost::new(
+        Workspace::open(workspace.path()).unwrap(),
+        Arc::new(tokio::sync::RwLock::new(session.goal.clone())),
+        state.path().join("logs"),
+    ));
+    let prices = Prices {
+        input: 2000,
+        cached: 40,
+        output: 8000,
+        search: 5_000_000,
+        fetch: 5_000_000,
+    };
+    let money = Arc::new(Money::open(&state.path().join("money.db"), "tiny", 1, &prices).unwrap());
+    let provider = Arc::new(Metered::new(
+        Arc::new(Script {
+            main: AtomicUsize::new(0),
+            premature: false,
+            long_command: false,
+        }),
+        money,
+        prices,
+    ));
+    let (runner, _control, _events) = Runner::new(
+        session,
+        store,
+        provider,
+        tools,
+        Settings {
+            linger: false,
+            max_output: 1024,
+            ..Settings::default()
+        },
+    );
+    let session = tokio::time::timeout(Duration::from_secs(3), runner.run())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(session.status, Status::Exhausted);
+    assert_eq!(session.budget.uncertain, 0);
+    assert!(!workspace.path().join("result.txt").exists());
+}
+struct SlowCancellation;
+#[async_trait::async_trait]
+impl Provider for SlowCancellation {
+    async fn respond(
+        &self,
+        _request: Request,
+        cancel: CancellationToken,
+        _events: mpsc::UnboundedSender<ModelEvent>,
+    ) -> anyhow::Result<Response> {
+        cancel.cancelled().await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        anyhow::bail!("cancelled")
+    }
+}
+
+#[tokio::test]
+async fn resume_during_cancellation_is_saved_and_runs_after_settlement() {
+    let workspace = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let session = Session::new(workspace.path().to_owned(), "work", 1_000_000, 60);
+    let id = session.id.clone();
+    let store = Arc::new(Store::open(&state.path().join("state.db")).unwrap());
+    let tools = Arc::new(ToolHost::new(
+        Workspace::open(workspace.path()).unwrap(),
+        Arc::new(tokio::sync::RwLock::new(session.goal.clone())),
+        state.path().join("logs"),
+    ));
+    let (runner, control, mut events) = Runner::new(
+        session,
+        store.clone(),
+        Arc::new(SlowCancellation),
+        tools,
+        Settings::default(),
+    );
+    let running = tokio::spawn(runner.run());
+    while !matches!(
+        events.recv().await.unwrap().data,
+        EventData::ModelRequested { .. }
+    ) {}
+    control.send(Control::Pause).await.unwrap();
+    control.send(Control::Resume).await.unwrap();
+    let restarted = tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if matches!(
+                events.recv().await.unwrap().data,
+                EventData::ModelRequested { .. }
+            ) {
+                break;
+            }
+        }
+    })
+    .await;
+    let snapshot: Session = store.load(&id).unwrap();
+    control.send(Control::Stop).await.unwrap();
+    running.await.unwrap().unwrap();
+    assert!(
+        restarted.is_ok(),
+        "resume must not be lost while the earlier model request cancels; state={:?}",
+        snapshot.status
+    );
+}
+struct ReportFormat {
+    inner: Script,
+    malformed: std::sync::atomic::AtomicBool,
+}
+#[async_trait::async_trait]
+impl Provider for ReportFormat {
+    async fn respond(
+        &self,
+        request: Request,
+        cancel: CancellationToken,
+        events: mpsc::UnboundedSender<ModelEvent>,
+    ) -> anyhow::Result<Response> {
+        let verifier = request.instructions.starts_with("ROLE: verifier");
+        let mut response = self.inner.respond(request, cancel, events).await?;
+        if verifier
+            && response.output[0]["name"] == "report_verification"
+            && !self.malformed.swap(true, Ordering::SeqCst)
+        {
+            let mut arguments: Value =
+                serde_json::from_str(response.output[0]["arguments"].as_str().unwrap()).unwrap();
+            arguments["checks"][0]["requirement"] = json!("Write result.txt");
+            response.output[0]["arguments"] = json!(arguments.to_string());
+        }
+        Ok(response)
+    }
+}
+
+#[tokio::test]
+async fn malformed_verdict_is_repaired_by_verifier_without_redoing_implementation() {
+    let workspace = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let session = Session::new(
+        workspace.path().to_owned(),
+        "Write result.txt",
+        1_000_000,
+        60,
+    );
+    let store = Arc::new(Store::open(&state.path().join("state.db")).unwrap());
+    let tools = Arc::new(ToolHost::new(
+        Workspace::open(workspace.path()).unwrap(),
+        Arc::new(tokio::sync::RwLock::new(session.goal.clone())),
+        state.path().join("logs"),
+    ));
+    let provider = Arc::new(ReportFormat {
+        inner: Script {
+            main: AtomicUsize::new(0),
+            premature: false,
+            long_command: false,
+        },
+        malformed: false.into(),
+    });
+    let (runner, _, _) = Runner::new(
+        session,
+        store,
+        provider.clone(),
+        tools,
+        Settings {
+            linger: false,
+            max_output: 1024,
+            ..Settings::default()
+        },
+    );
+    let session = tokio::time::timeout(Duration::from_secs(3), runner.run())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(session.status, Status::Completed);
+    assert_eq!(
+        provider.inner.main.load(Ordering::SeqCst),
+        2,
+        "malformed verdicts are not evidence that the implementation needs changing"
+    );
+}
+#[tokio::test]
+async fn resuming_completed_work_preserves_its_completion() {
+    let root = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let mut session = Session::new(root.path().into(), "done", 10000, 60);
+    session.status = Status::Completed;
+    let id = session.id.clone();
+    let store = Arc::new(Store::open(&state.path().join("db")).unwrap());
+    let tools = Arc::new(ToolHost::new(
+        Workspace::open(root.path()).unwrap(),
+        Arc::new(tokio::sync::RwLock::new(session.goal.clone())),
+        state.path().join("logs"),
+    ));
+    let (runner, control, mut events) = Runner::new(
+        session,
+        store.clone(),
+        Arc::new(SlowCancellation),
+        tools,
+        Settings::default(),
+    );
+    let running = tokio::spawn(runner.run());
+    control.send(Control::Resume).await.unwrap();
+    events.recv().await.unwrap();
+    let snapshot: Session = store.load(&id).unwrap();
+    control.send(Control::Stop).await.unwrap();
+    running.await.unwrap().unwrap();
+    assert_eq!(snapshot.status, Status::Completed);
+}

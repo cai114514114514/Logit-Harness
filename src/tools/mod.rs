@@ -2,6 +2,7 @@ mod builtin;
 mod edit;
 pub mod files;
 mod host;
+pub mod identity;
 pub mod policy;
 pub mod process;
 mod search;

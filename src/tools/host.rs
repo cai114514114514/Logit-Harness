@@ -15,10 +15,17 @@ use tokio_util::sync::CancellationToken;
 #[serde(rename_all = "snake_case")]
 pub enum Effect {
     Read,
+    Check,
     Write,
     Service,
     External,
     Unknown,
+}
+
+impl Effect {
+    pub fn readonly(self) -> bool {
+        matches!(self, Self::Read | Self::Check)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -135,7 +142,7 @@ impl ToolHost {
             .ok_or_else(|| anyhow::anyhow!("unknown tool: {}", call.name))?;
         let effect = tool.spec().effect;
         anyhow::ensure!(
-            !scope.readonly || effect == Effect::Read,
+            !scope.readonly || effect.readonly(),
             "worker cannot directly mutate the workspace or external state"
         );
         let decision = match effect {
@@ -154,7 +161,7 @@ impl ToolHost {
             }
             super::policy::Decision::Allow => (),
         }
-        let _owner = if effect == Effect::Write {
+        let _owner = if matches!(effect, Effect::Write | Effect::Check) {
             Some(tokio::select! {
                 biased;
                 _ = cancel.cancelled() => anyhow::bail!("tool cancelled before mutation ownership"),
@@ -163,7 +170,7 @@ impl ToolHost {
         } else {
             None
         };
-        if effect != Effect::Read {
+        if !effect.readonly() {
             let goal = self.goal.read().await;
             if scope.requirements.is_empty()
                 || scope.requirements.iter().any(|(id, version)| {

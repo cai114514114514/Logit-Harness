@@ -27,6 +27,28 @@ pub struct ProcessOutput {
     pub output: String,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProcessRecord {
+    pub identity: super::identity::Identity,
+    pub command: String,
+    pub cwd: PathBuf,
+    pub output: Option<ProcessOutput>,
+}
+
+impl ProcessRecord {
+    fn save(&self, path: &std::path::Path) -> anyhow::Result<()> {
+        let parent = path
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("process journal needs a parent"))?;
+        let mut temp = tempfile::NamedTempFile::new_in(parent)?;
+        serde_json::to_writer(&mut temp, self)?;
+        temp.as_file().sync_all()?;
+        temp.persist(path)?;
+        std::fs::File::open(parent)?.sync_all()?;
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum ProcessEvent {
     Started { pid: u32 },
@@ -49,15 +71,23 @@ pub async fn run(
         pixel_width: 0,
         pixel_height: 0,
     })?;
-    let mut command = if let Some(profile) = spec.profile {
+    let gate_dir = tempfile::tempdir_in(spec.log.parent().unwrap())?;
+    let gate = gate_dir.path().join("release");
+    // Before the release file exists, no user command can execute. A crash before
+    // journaling leaves only a short-lived harmless gate waiter.
+    let barrier = "for i in {1..1000}; do [[ -e \"$1\" ]] && exec /bin/zsh -f -c \"$2\"; sleep 0.01; done; exit 125";
+    let mut command = if let Some(profile) = &spec.profile {
         let mut command = CommandBuilder::new("/usr/bin/sandbox-exec");
-        command.args(["-p", &profile, "/bin/zsh", "-f", "-c", &spec.command]);
+        command.args(["-p", profile, "/bin/zsh", "-f", "-c", barrier]);
         command
     } else {
         let mut command = CommandBuilder::new("/bin/zsh");
-        command.args(["-f", "-c", &spec.command]);
+        command.args(["-f", "-c", barrier]);
         command
     };
+    command.arg("weft-gate");
+    command.arg(&gate);
+    command.arg(&spec.command);
     command.cwd(&spec.cwd);
     command.env("TERM", "xterm-256color");
     for (key, _) in std::env::vars_os() {
@@ -83,11 +113,15 @@ pub async fn run(
             libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
         }
     }
-    let record = serde_json::json!({"pid":pid,"command":spec.command,"cwd":spec.cwd,"started":chrono::Utc::now()});
-    std::fs::write(
-        spec.log.with_extension("process.json"),
-        serde_json::to_vec(&record)?,
-    )?;
+    let mut record = ProcessRecord {
+        identity: super::identity::Identity::capture(pid)?
+            .ok_or_else(|| anyhow::anyhow!("process exited before journal commit"))?,
+        command: spec.command,
+        cwd: spec.cwd,
+        output: None,
+    };
+    record.save(&spec.log.with_extension("process.json"))?;
+    std::fs::File::create(&gate)?.sync_all()?;
     let _ = events.send(ProcessEvent::Started { pid });
     let drained = Arc::new(AtomicBool::new(false));
     let stop_reader = drained.clone();
@@ -115,13 +149,16 @@ pub async fn run(
     guard.armed = false;
     drained.store(true, Ordering::Release);
     let text = output.await??;
-    Ok(ProcessOutput {
+    let result = ProcessOutput {
         pid,
         code: Some(status.exit_code()),
         cancelled,
         timed_out,
         output: text,
-    })
+    };
+    record.output = Some(result.clone());
+    record.save(&spec.log.with_extension("process.json"))?;
+    Ok(result)
 }
 
 fn drain(

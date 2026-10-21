@@ -51,6 +51,37 @@ Spec: docs/spec.md
 
 ## Implementation watch list
 
+- CLI/daemon checkpoint: basic run/attach/pause/resume/stop/doctor, durable Unix-socket controls,
+  detached child process, private state paths and cross-process workspace ownership are implemented.
+  Targeted CLI (2), daemon (1), IPC (3), money (4), and web (2) tests passed.
+- Campaign wiring now shares a durable 50 RMB account across inference roles and search/fetch.
+  Credentials were found in the user-provided ignored `.env` as `ds_api`; validation maps that value
+  into the child process's `DEEPSEEK_API_KEY` without printing or modifying the secret file.
+- First real Flash smoke run 3827144166944bc9 created working Python and passed its assertions, but
+  exposed unnecessary verifier/implementer back-and-forth: verifier lacked an executable check tool.
+  Preserved all trace/artifacts under artifacts/campaign. Accounted peak-rate cost: 0.09839576 RMB.
+  This is a functional smoke test, not evidence of quality improvement.
+- Added source-readonly `check` for independent verification, with macOS sandbox enforcement and
+  pre/post source freshness checks. Actual Python execution and denied source writes tested RED→GREEN.
+  Second real smoke e33a8cf665504266 completed but revealed malformed verdict IDs being treated as
+  implementation failures. Added atomic report validation and current-ID schema constraints; regression
+  proved the verifier repairs its own report without additional implementation calls (RED→GREEN).
+- Third real smoke 138c9cabdf2a4f05 completed, 4 main turns + 6 verifier turns, 21,171 reported tokens.
+  Total accounted peak-rate cost for all three smokes: 0.19206920 RMB; no uncertain calls.
+  All are debugging tasks outside the frozen evaluation corpus, not a controlled quality claim.
+- Persistent transition intent now retains resume during cancellation; completed tasks do not reenter
+  Running on a late resume (RED→GREEN). Kernel process identities and a journal-before-execution gate
+  prevent PID reuse and unjournaled side effects. Recovery closes interrupted transcript calls,
+  reconciles real processes/files, preserves user edits, and never automatically replays uncertain writes.
+  Real daemon SIGKILL/restart tested. An observed completion/resume race was reproduced deterministically
+  and fixed; process exits are confirmed before replacement execution.
+- Money reservations now wait for concurrent requests to settle; dropped requests remain conservatively
+  charged, and dead process owners are recovered as uncertain cost without resetting the campaign cap.
+  `cargo test` now passes 59/59 integration tests, including the real detached daemon and crash recovery.
+  Current remaining runtime work: scoped parallel workers and proposals, explicit requirement
+  decomposition, dependency-specific questions, stagnation handling, durable web quotas and services.
+  Browser/MCP/Skills, full interactive terminal, frozen quality experiments and release packaging remain.
+
 - Model/tool fixtures live in tests only. Actual API key still absent from execution environment.
 - Keep the 50 RMB account durable and shared; do NOT run paid inference before wiring reservations.
 - Current application-layer command policy is not an adversarial shell sandbox.

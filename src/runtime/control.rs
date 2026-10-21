@@ -11,6 +11,7 @@ use crate::{
 impl Runner {
     pub(super) async fn handle_control(&mut self, control: Control) -> anyhow::Result<()> {
         match control {
+            Control::Wake => (), // The runner drains the durable inbox before dispatching work.
             Control::Pause => self.halt(
                 Status::Paused,
                 "pause requested; cancelling active operations",
@@ -20,9 +21,23 @@ impl Runner {
                 "stop requested; cancelling active operations",
             )?,
             Control::Resume => {
-                if self.target.is_none() {
+                // A resume received during cancellation changes its destination;
+                // it must not launch replacements before the old work has exited.
+                if self.session.transition.is_some() {
+                    self.session.transition = Some(Status::Running);
+                    self.emit(EventData::Diagnostic {
+                        message: "resume queued until active cancellations settle".into(),
+                    })?;
+                } else if matches!(
+                    self.session.status,
+                    Status::Running | Status::Completed | Status::Waiting
+                ) {
+                    self.emit(EventData::Diagnostic {
+                        message: "session has no paused execution to resume".into(),
+                    })?;
+                } else {
                     for actor in self.session.actors.values_mut() {
-                        if actor.phase == Phase::Blocked {
+                        if actor.phase == Phase::Blocked && self.session.questions.is_empty() {
                             actor.phase = Phase::Ready;
                         }
                     }
@@ -112,5 +127,17 @@ impl Runner {
             );
             self.session.actors.insert(actor.id.clone(), actor);
         }
+    }
+    pub(super) async fn drain_inbox(&mut self) -> anyhow::Result<()> {
+        for (id, value) in self.store.queued(&self.session.id, self.session.cursor)? {
+            self.session.cursor = id;
+            match serde_json::from_value(value) {
+                Ok(control) => self.handle_control(control).await?,
+                Err(error) => self.emit(EventData::Diagnostic {
+                    message: format!("invalid persisted control: {error}"),
+                })?,
+            }
+        }
+        Ok(())
     }
 }

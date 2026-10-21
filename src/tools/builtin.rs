@@ -12,6 +12,7 @@ enum Builtin {
     Read,
     Patch,
     Shell,
+    Check,
 }
 
 pub fn tools() -> Vec<Arc<dyn Tool>> {
@@ -19,6 +20,7 @@ pub fn tools() -> Vec<Arc<dyn Tool>> {
         Arc::new(Builtin::Read),
         Arc::new(Builtin::Patch),
         Arc::new(Builtin::Shell),
+        Arc::new(Builtin::Check),
     ]
 }
 
@@ -40,11 +42,23 @@ impl Tool for Builtin {
                     "content":{"type":"string"},"old":{"type":"string"},"new":{"type":"string"}},"required":["path","expected","operation"]}}},"required":["edits"],"additionalProperties":false}),
                 Effect::Write,
             ),
-            Self::Shell => (
-                "shell",
-                "Run a local command in a real terminal and wait for its actual exit. The source mutation lock is held throughout. Set timeout_seconds for long commands; cancellation terminates the process group.",
+            Self::Shell | Self::Check => (
+                if matches!(self, Self::Check) {
+                    "check"
+                } else {
+                    "shell"
+                },
+                if matches!(self, Self::Check) {
+                    "Execute verification with source writes denied by the macOS sandbox. Set build/cache outputs outside the source tree (for Python use -B). Returns actual exit status and logs. Source changes during the check invalidate its result."
+                } else {
+                    "Run a local command in a real terminal and wait for its actual exit. The source mutation lock is held throughout. Set timeout_seconds for long commands; cancellation terminates the process group."
+                },
                 json!({"type":"object","properties":{"command":{"type":"string"},"timeout_seconds":{"type":"integer"}},"required":["command"],"additionalProperties":false}),
-                Effect::Write,
+                if matches!(self, Self::Check) {
+                    Effect::Check
+                } else {
+                    Effect::Write
+                },
             ),
         };
         ToolSpec {
@@ -55,7 +69,7 @@ impl Tool for Builtin {
         }
     }
     fn policy(&self, arguments: &Value) -> super::policy::Decision {
-        if matches!(self, Self::Shell) {
+        if matches!(self, Self::Shell | Self::Check) {
             super::policy::shell(arguments["command"].as_str().unwrap_or(""))
         } else {
             super::policy::Decision::Allow
@@ -106,7 +120,7 @@ impl Tool for Builtin {
                     kind: EvidenceKind::Read,
                 })
             }
-            Self::Shell => {
+            Self::Shell | Self::Check => {
                 #[derive(Deserialize)]
                 #[serde(deny_unknown_fields)]
                 struct Args {
@@ -114,6 +128,12 @@ impl Tool for Builtin {
                     timeout_seconds: Option<u64>,
                 }
                 let args: Args = serde_json::from_value(arguments)?;
+                let before = context.workspace.fingerprints()?;
+                let profile = if matches!(self, Self::Check) {
+                    Some(super::service::profile(&context.workspace.root, &[])?)
+                } else {
+                    None
+                };
                 let timeout = args.timeout_seconds.unwrap_or(120).clamp(1, 21600);
                 let (output, mut receiver) = mpsc::unbounded_channel();
                 let relay = tokio::spawn(async move {
@@ -134,7 +154,7 @@ impl Tool for Builtin {
                         cwd: context.workspace.root.clone(),
                         log: log.clone(),
                         timeout: Duration::from_secs(timeout),
-                        profile: None,
+                        profile,
                     },
                     cancel,
                     output,
@@ -142,11 +162,13 @@ impl Tool for Builtin {
                 .await;
                 relay.await?;
                 let result = result?;
-                let success = result.code == Some(0) && !result.cancelled && !result.timed_out;
                 let snapshot = context.workspace.fingerprints()?;
+                let stable = !matches!(self, Self::Check) || before == snapshot;
+                let success =
+                    result.code == Some(0) && !result.cancelled && !result.timed_out && stable;
                 let files = BTreeMap::from([("$workspace".into(), snapshot["$workspace"].clone())]);
                 Ok(ToolResult {
-                    data: json!({"process":result,"log":log}),
+                    data: json!({"process":result,"log":log,"source_stable":stable}),
                     files,
                     success,
                     kind: EvidenceKind::Command,

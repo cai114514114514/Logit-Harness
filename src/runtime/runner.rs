@@ -64,7 +64,6 @@ pub struct Runner {
     pub(super) send: mpsc::UnboundedSender<Wire>,
     pub(super) tasks: JoinSet<(String, ResultData)>,
     pub(super) jobs: BTreeMap<String, Job>,
-    pub(super) target: Option<Status>,
 }
 impl Runner {
     pub fn new(
@@ -94,14 +93,17 @@ impl Runner {
                 wire,
                 tasks: JoinSet::new(),
                 jobs: BTreeMap::new(),
-                target: None,
             },
             control,
             subscriber,
         )
     }
     pub(super) fn emit(&self, data: EventData) -> anyhow::Result<()> {
-        let event = self.store.commit(&self.session.id, &self.session, data)?;
+        let event = if matches!(&data, EventData::Delta { .. }) {
+            self.store.append(&self.session.id, data)?
+        } else {
+            self.store.commit(&self.session.id, &self.session, data)?
+        };
         let _ = self.events.send(event);
         Ok(())
     }
@@ -116,11 +118,14 @@ impl Runner {
         self.session.inbox.iter().any(|m| !m.applied)
     }
     pub async fn run(mut self) -> anyhow::Result<Session> {
-        self.status(Status::Running, "working toward the saved objective")?;
+        if self.session.status == Status::Ready {
+            self.status(Status::Running, "working toward the saved objective")?;
+        }
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
         loop {
+            self.drain_inbox().await?;
             if self.jobs.is_empty() {
-                if let Some(target) = self.target.take() {
+                if let Some(target) = self.session.transition.take() {
                     self.status(target, "all active operations have settled")?;
                 }
                 if self.session.status == Status::Stopped
@@ -136,7 +141,7 @@ impl Runner {
                     return Ok(self.session);
                 }
             }
-            if self.target.is_none()
+            if self.session.transition.is_none()
                 && matches!(self.session.status, Status::Running | Status::Waiting)
             {
                 self.schedule().await?;
@@ -161,7 +166,7 @@ impl Runner {
         for job in self.jobs.values() {
             job.cancel.cancel();
         }
-        self.target = Some(target.clone());
+        self.session.transition = Some(target.clone());
         self.status(
             if target == Status::Stopped {
                 Status::Stopping
