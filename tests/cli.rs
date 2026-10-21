@@ -3,7 +3,7 @@ use std::process::Command;
 #[test]
 fn doctor_explains_missing_credentials_without_printing_a_secret() {
     let home = tempfile::tempdir().unwrap();
-    let output = Command::new(env!("CARGO_BIN_EXE_weft"))
+    let output = Command::new(env!("CARGO_BIN_EXE_loh"))
         .args(["--home", home.path().to_str().unwrap(), "doctor", "--json"])
         .env_remove("DEEPSEEK_API_KEY")
         .output()
@@ -22,7 +22,7 @@ fn doctor_explains_missing_credentials_without_printing_a_secret() {
 #[test]
 fn session_listing_works_before_any_model_configuration() {
     let home = tempfile::tempdir().unwrap();
-    let output = Command::new(env!("CARGO_BIN_EXE_weft"))
+    let output = Command::new(env!("CARGO_BIN_EXE_loh"))
         .args([
             "--home",
             home.path().to_str().unwrap(),

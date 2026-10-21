@@ -92,6 +92,10 @@ pub enum ToolError {
 #[async_trait::async_trait]
 pub trait Tool: Send + Sync {
     fn spec(&self) -> ToolSpec;
+    /// Dispatchers such as MCP classify the concrete target before authorization.
+    fn effect(&self, _arguments: &Value) -> Effect {
+        self.spec().effect
+    }
     fn policy(&self, _arguments: &Value) -> super::policy::Decision {
         super::policy::Decision::Allow
     }
@@ -112,6 +116,7 @@ pub struct ToolHost {
     pub steps: Arc<RwLock<BTreeMap<String, u64>>>,
     pub blocked: Arc<RwLock<BTreeSet<String>>>,
     pub services: Option<Arc<super::services::Services>>,
+    pub knowledge: Option<Arc<crate::extensions::knowledge::Knowledge>>,
     registry: BTreeMap<String, Arc<dyn Tool>>,
 }
 
@@ -130,6 +135,7 @@ impl ToolHost {
             steps: Arc::new(RwLock::new(BTreeMap::new())),
             blocked: Arc::new(RwLock::new(BTreeSet::new())),
             services: None,
+            knowledge: None,
             registry,
         }
     }
@@ -162,7 +168,7 @@ impl ToolHost {
             .registry
             .get(&call.name)
             .ok_or_else(|| anyhow::anyhow!("unknown tool: {}", call.name))?;
-        let effect = tool.spec().effect;
+        let effect = tool.effect(&call.arguments);
         self.authorize(tool.as_ref(), effect, &call, &scope)?;
         // Lock order is a load-bearing invariant: the mutation mutex is always
         // acquired before goal.read()/steps.read() in check_stale, never the other
@@ -170,7 +176,7 @@ impl ToolHost {
         // its whole run — its verdict is only meaningful if no writer interleaves.
         // Services are allowed to overlap: their OS profile forbids source writes
         // and only permits a separate, owned build-output directory.
-        let _owner = if matches!(effect, Effect::Write | Effect::Check) {
+        let _owner = if matches!(effect, Effect::Write | Effect::Check | Effect::Unknown) {
             Some(tokio::select! {
                 biased;
                 _ = cancel.cancelled() => anyhow::bail!("tool cancelled before mutation ownership"),
@@ -182,9 +188,26 @@ impl ToolHost {
         if !effect.readonly() && effect != Effect::Control {
             self.check_stale(&scope).await?;
         }
+        if call.name == "apply_patch" {
+            if let Some(knowledge) = &self.knowledge {
+                let paths = call.arguments["edits"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|edit| edit["path"].as_str().map(str::to_owned))
+                    .collect::<Vec<_>>();
+                for entry in knowledge.instructions.for_paths(&paths)? {
+                    anyhow::ensure!(
+                        scope.observed.get(&entry.path) == Some(&entry.hash),
+                        "read project_instructions before editing this directory: {}",
+                        entry.path
+                    );
+                }
+            }
+        }
         anyhow::ensure!(!cancel.is_cancelled(), "tool cancelled before dispatch");
         let mut result = self.dispatch(tool, call, scope, cancel, events).await?;
-        if effect == Effect::Write {
+        if matches!(effect, Effect::Write | Effect::Unknown) {
             let snapshot = self.workspace.fingerprints()?;
             let aggregate = snapshot
                 .get(WORKSPACE_FINGERPRINT_KEY)

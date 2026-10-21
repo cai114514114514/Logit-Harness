@@ -1,7 +1,7 @@
+use loh::tools::web::{WebClient, WebUsage};
 use serde_json::json;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
-use weft::tools::web::{WebClient, WebUsage};
 
 #[tokio::test]
 async fn web_api_returns_real_response_and_enforces_shared_limit() {

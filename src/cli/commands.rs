@@ -14,12 +14,12 @@ use std::{io::Write, path::PathBuf};
 pub async fn run(args: Args) -> anyhow::Result<()> {
     let home = args
         .home
-        .or_else(|| std::env::var_os("WEFT_HOME").map(PathBuf::from))
+        .or_else(|| std::env::var_os("LOH_HOME").map(PathBuf::from))
         .unwrap_or_else(|| {
             directories::BaseDirs::new()
                 .expect("home directory")
                 .home_dir()
-                .join(".weft")
+                .join(".loh")
         });
     let home = if home.is_absolute() {
         home
@@ -62,7 +62,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
                 println!("{result}");
             } else {
                 println!(
-                    "Weft · {}\nAPI key: {}\nChrome: {}\nState: {}",
+                    "Logit- Harness · {}\nAPI key: {}\nChrome: {}\nState: {}",
                     config.model,
                     if result["api_key_present"] == true {
                         "configured"

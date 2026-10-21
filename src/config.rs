@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    pub mcp: std::collections::BTreeMap<String, crate::extensions::mcp::Server>,
     pub campaign: Option<crate::runtime::state::Campaign>,
     pub model: String,
     pub base_url: String,
@@ -18,6 +19,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            mcp: Default::default(),
             campaign: None,
             model: "deepseek-flash".into(),
             base_url: "https://api.deepseek.com".into(),
@@ -76,7 +78,7 @@ impl Paths {
         }
         let hash = blake3::hash(format!("{}:{id}", self.home.display()).as_bytes());
         Ok(PathBuf::from(format!(
-            "/tmp/weft-{}-{}.sock",
+            "/tmp/loh-{}-{}.sock",
             unsafe { libc::geteuid() },
             &hash.to_hex()[..24]
         )))

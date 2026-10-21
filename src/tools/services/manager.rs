@@ -74,14 +74,14 @@ impl Services {
         anyhow::ensure!(!cancel.is_cancelled(), "service launch cancelled");
         std::fs::create_dir_all(&self.logs)?;
         let id = uuid::Uuid::new_v4().simple().to_string();
-        let output = self.workspace.resolve(&format!(".weft-build/{id}"))?;
+        let output = self.workspace.resolve(&format!(".loh-build/{id}"))?;
         std::fs::create_dir_all(&output)?;
         let log = self.logs.join(format!("{id}.log"));
         let token = CancellationToken::new();
         let launch_guard = token.clone().drop_guard();
         let spec = ProcessSpec {
             command: format!(
-                "export WEFT_OUTPUT_DIR={}; {command}",
+                "export LOH_OUTPUT_DIR={}; {command}",
                 quote(&output.to_string_lossy())
             ),
             cwd: self.workspace.root.clone(),

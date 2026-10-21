@@ -3,9 +3,9 @@ use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "weft",
+    name = "loh",
     version,
-    about = "A persistent coding agent with dynamic steering",
+    about = "Logit- Harness — a persistent coding agent with dynamic steering",
     subcommand_precedence_over_arg = true
 )]
 pub struct Args {

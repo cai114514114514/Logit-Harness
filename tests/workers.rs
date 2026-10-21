@@ -1,3 +1,13 @@
+use loh::{
+    domain::{Status, Usage},
+    model::{ModelEvent, Provider, Request, Response},
+    runtime::{
+        runner::{Runner, Settings},
+        state::Session,
+    },
+    store::Store,
+    tools::{ToolHost, files::Workspace},
+};
 use serde_json::{Value, json};
 use std::{
     sync::{
@@ -11,16 +21,6 @@ use tokio::{
     time::timeout,
 };
 use tokio_util::sync::CancellationToken;
-use weft::{
-    domain::{Status, Usage},
-    model::{ModelEvent, Provider, Request, Response},
-    runtime::{
-        runner::{Runner, Settings},
-        state::Session,
-    },
-    store::Store,
-    tools::{ToolHost, files::Workspace},
-};
 
 fn response(name: &str, args: Value) -> Response {
     Response {
@@ -263,7 +263,7 @@ async fn steering_has_a_reserved_lane_when_all_work_requests_are_busy() {
 }
 
 async fn steering_case(hold_main: bool) {
-    use weft::runtime::state::Control;
+    use loh::runtime::state::Control;
     let root = tempfile::tempdir().unwrap();
     let state = tempfile::tempdir().unwrap();
     let session = Session::new(
@@ -320,7 +320,7 @@ async fn steering_case(hold_main: bool) {
         loop {
             if matches!(
                 events.recv().await.unwrap().data,
-                weft::domain::EventData::Revised { .. }
+                loh::domain::EventData::Revised { .. }
             ) {
                 break;
             }

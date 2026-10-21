@@ -1,5 +1,5 @@
-use weft::domain::Usage;
-use weft::runtime::money::{Money, Prices, RMB};
+use loh::domain::Usage;
+use loh::runtime::money::{Money, Prices, RMB};
 
 fn prices() -> Prices {
     Prices {
@@ -46,14 +46,14 @@ fn concurrent_runners_share_one_persistent_campaign_cap() {
 
 struct UsageProvider;
 #[async_trait::async_trait]
-impl weft::model::Provider for UsageProvider {
+impl loh::model::Provider for UsageProvider {
     async fn respond(
         &self,
-        _request: weft::model::Request,
+        _request: loh::model::Request,
         _cancel: tokio_util::sync::CancellationToken,
-        _events: tokio::sync::mpsc::UnboundedSender<weft::model::ModelEvent>,
-    ) -> anyhow::Result<weft::model::Response> {
-        Ok(weft::model::Response {
+        _events: tokio::sync::mpsc::UnboundedSender<loh::model::ModelEvent>,
+    ) -> anyhow::Result<loh::model::Response> {
+        Ok(loh::model::Response {
             output: vec![],
             usage: Usage {
                 input: 100,
@@ -67,7 +67,7 @@ impl weft::model::Provider for UsageProvider {
 
 #[tokio::test]
 async fn all_provider_roles_are_charged_through_the_same_wrapper() {
-    use weft::model::Provider;
+    use loh::model::Provider;
     let temp = tempfile::tempdir().unwrap();
     let money = std::sync::Arc::new(
         Money::open(
@@ -78,7 +78,7 @@ async fn all_provider_roles_are_charged_through_the_same_wrapper() {
         )
         .unwrap(),
     );
-    let provider = weft::runtime::meter::Metered::new(
+    let provider = loh::runtime::meter::Metered::new(
         std::sync::Arc::new(UsageProvider),
         money.clone(),
         prices(),
@@ -86,7 +86,7 @@ async fn all_provider_roles_are_charged_through_the_same_wrapper() {
     let (events, _) = tokio::sync::mpsc::unbounded_channel();
     provider
         .respond(
-            weft::model::Request {
+            loh::model::Request {
                 instructions: "verify".into(),
                 input: vec![],
                 tools: vec![],
@@ -103,9 +103,9 @@ async fn all_provider_roles_are_charged_through_the_same_wrapper() {
 
 #[tokio::test]
 async fn exhausted_money_prevents_contacting_the_provider() {
-    use weft::model::Provider;
+    use loh::model::Provider;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let inner = weft::model::DeepSeek::new(
+    let inner = loh::model::DeepSeek::new(
         format!("http://{}", listener.local_addr().unwrap()),
         "deepseek-flash".into(),
         "fixture".into(),
@@ -115,12 +115,12 @@ async fn exhausted_money_prevents_contacting_the_provider() {
     let money = std::sync::Arc::new(
         Money::open(&temp.path().join("money.db"), "campaign", 1, &prices()).unwrap(),
     );
-    let provider = weft::runtime::meter::Metered::new(std::sync::Arc::new(inner), money, prices());
+    let provider = loh::runtime::meter::Metered::new(std::sync::Arc::new(inner), money, prices());
     let (events, _) = tokio::sync::mpsc::unbounded_channel();
     let result = tokio::time::timeout(
         std::time::Duration::from_millis(100),
         provider.respond(
-            weft::model::Request {
+            loh::model::Request {
                 instructions: "work".into(),
                 input: vec![],
                 tools: vec![],
@@ -139,7 +139,7 @@ async fn exhausted_money_prevents_contacting_the_provider() {
         result
             .unwrap()
             .unwrap_err()
-            .is::<weft::runtime::meter::BudgetReached>()
+            .is::<loh::runtime::meter::BudgetReached>()
     );
     assert!(
         tokio::time::timeout(std::time::Duration::from_millis(20), listener.accept())
@@ -149,13 +149,13 @@ async fn exhausted_money_prevents_contacting_the_provider() {
 }
 struct SlowProvider;
 #[async_trait::async_trait]
-impl weft::model::Provider for SlowProvider {
+impl loh::model::Provider for SlowProvider {
     async fn respond(
         &self,
-        request: weft::model::Request,
+        request: loh::model::Request,
         cancel: tokio_util::sync::CancellationToken,
-        events: tokio::sync::mpsc::UnboundedSender<weft::model::ModelEvent>,
-    ) -> anyhow::Result<weft::model::Response> {
+        events: tokio::sync::mpsc::UnboundedSender<loh::model::ModelEvent>,
+    ) -> anyhow::Result<loh::model::Response> {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         UsageProvider.respond(request, cancel, events).await
     }
@@ -163,7 +163,7 @@ impl weft::model::Provider for SlowProvider {
 
 #[tokio::test]
 async fn temporary_reservations_wait_instead_of_exhausting_shared_campaign() {
-    use weft::model::Provider;
+    use loh::model::Provider;
     let temp = tempfile::tempdir().unwrap();
     let money = std::sync::Arc::new(
         Money::open(
@@ -174,12 +174,12 @@ async fn temporary_reservations_wait_instead_of_exhausting_shared_campaign() {
         )
         .unwrap(),
     );
-    let provider = weft::runtime::meter::Metered::new(
+    let provider = loh::runtime::meter::Metered::new(
         std::sync::Arc::new(SlowProvider),
         money.clone(),
         prices(),
     );
-    let request = || weft::model::Request {
+    let request = || loh::model::Request {
         instructions: "work".into(),
         input: vec![],
         tools: vec![],
@@ -205,7 +205,7 @@ async fn temporary_reservations_wait_instead_of_exhausting_shared_campaign() {
 
 #[tokio::test]
 async fn dropping_a_paid_request_keeps_its_unknown_cost_accounted() {
-    use weft::model::Provider;
+    use loh::model::Provider;
     let temp = tempfile::tempdir().unwrap();
     let money = std::sync::Arc::new(
         Money::open(
@@ -216,14 +216,14 @@ async fn dropping_a_paid_request_keeps_its_unknown_cost_accounted() {
         )
         .unwrap(),
     );
-    let provider = weft::runtime::meter::Metered::new(
+    let provider = loh::runtime::meter::Metered::new(
         std::sync::Arc::new(SlowProvider),
         money.clone(),
         prices(),
     );
     let (events, _) = tokio::sync::mpsc::unbounded_channel();
     let request = provider.respond(
-        weft::model::Request {
+        loh::model::Request {
             instructions: "work".into(),
             input: vec![],
             tools: vec![],
@@ -251,7 +251,7 @@ fn dead_request_owners_become_uncertain_without_resetting_the_campaign() {
         .arg("30")
         .spawn()
         .unwrap();
-    let identity = weft::tools::identity::Identity::capture(child.id())
+    let identity = loh::tools::identity::Identity::capture(child.id())
         .unwrap()
         .unwrap();
     rusqlite::Connection::open(&path)

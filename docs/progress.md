@@ -1,4 +1,4 @@
-# Weft implementation ledger
+# Logit- Harness implementation ledger
 
 Plan: docs/superpowers/plans/2026-10-21-weft.md
 Spec: docs/spec.md
@@ -121,13 +121,43 @@ Spec: docs/spec.md
   detached daemon/SIGKILL recovery, saturated steering and stale-worker rejection. No holdout evaluation
   has run; the frozen corpus and all four experimental conditions still need implementation.
 
+## Product naming
+
+- User correction: product name **Logit- Harness**, command/crate **`loh`**. Current source, CLI,
+  configuration (`LOH_HOME`, `~/.loh`), service output (`LOH_OUTPUT_DIR`, `.loh-build`), tests and
+  user-facing docs use the new name. Historical artifacts and the `weft-first-evaluation` money
+  account retain their original identifiers so the 50 RMB cap and audit trail remain continuous.
+
+## Extensions checkpoint
+
+- `loh --help` displays Logit- Harness; CLI, detached-session, recovery and service tests use the
+  new binary name and paths. Current implementation and fixtures contain no old product identifiers.
+- Official RMCP 3.6 now provides actual stdio child and Streamable HTTP calls, lazy schema discovery,
+  locally configured effects, native image results and process ownership. Readonly workers cannot
+  invoke a configured writer. Local cancellation confirms group exit before returning. Remote
+  uncertain writes stay journaled across restart and require scoped reconciliation authorization.
+  A regression test reproduced inspection accidentally clearing that record; corrected RED→GREEN.
+- Skills metadata/body/resources and directory-scoped AGENTS.md are loaded with path/hash provenance.
+  Tests cover project/user discovery, YAML folded descriptions, dependency exclusions, changed
+  metadata, escaped/symlinked resources, subtree rules and guarded first edits in a new directory.
+  Explicit user requirements remain above skill guidance; metadata cannot grant tool permissions.
+- Ruling: use SDK discovery lifecycle `2026-07-28` without a custom legacy fallback; optional MCP
+  task/input continuations are reported incomplete, never completed or blindly replayed. This keeps
+  one implementation; servers limited to older handshakes or optional continuations need adjustment.
+- Ruling: Rust minimum is 1.89 because the maintained YAML parser used for skill frontmatter requires
+  it. Local Rust 1.95 builds it. Users with older Rust must update their compiler or use the binary.
+- Full `cargo test`: **81/81** integration tests passed after rename and extension integration.
+  This includes actual Chrome, both MCP transports and interrupted remote-mutation recovery.
+  Campaign ledger remains **0.19371520 RMB** accounted, zero uncertain/reserved, 50 RMB cap unchanged.
+  No additional paid provider calls were made in this checkpoint.
+
 ## Implementation watch list
 
 - Model/tool fixtures live in tests only. Real validation reads the ignored `.env` key into subprocess
   environment; ordinary shell sessions still do not automatically inherit it.
 - Keep the existing 50 RMB account at artifacts/campaign/money.sqlite across every real run.
 - Current application-layer command policy is not an adversarial shell sandbox.
-- Remaining: durable web quotas, browser authorization/recovery refinements, MCP/Skills,
+- Remaining: durable web quotas, browser authorization/recovery refinements,
   full TUI, frozen 36-task corpus/comparisons/ablations, macOS packaging and fresh final review.
 - Also verify paused side questions, clarification cancellation and stale evidence; add explicit
   assumption/acceptance-note storage without letting model notes replace user requirements.

@@ -1,11 +1,5 @@
 //! A real CLI/daemon/socket test. The only double is the remote model's HTTP response.
-use serde_json::{Value, json};
-use std::{sync::Arc, time::Duration};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    sync::Semaphore,
-};
-use weft::{
+use loh::{
     config::Paths,
     domain::Status,
     runtime::{
@@ -13,6 +7,12 @@ use weft::{
         state::{Control, Session},
     },
     store::Store,
+};
+use serde_json::{Value, json};
+use std::{sync::Arc, time::Duration};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    sync::Semaphore,
 };
 
 fn model_response(request: &Value) -> Value {
@@ -74,7 +74,7 @@ async fn crashed_daemon_reconciles_command_and_preserves_concurrent_user_edit() 
     });
     // The fixture verifier reads this independent delivered file after recovery.
     std::fs::write(workspace.path().join("result.txt"), "user-owned result").unwrap();
-    let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_weft"))
+    let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_loh"))
         .args([
             "--home",
             paths.home.to_str().unwrap(),
@@ -133,7 +133,7 @@ async fn crashed_daemon_reconciles_command_and_preserves_concurrent_user_edit() 
     })
     .await
     .unwrap();
-    let resumed = tokio::process::Command::new(env!("CARGO_BIN_EXE_weft"))
+    let resumed = tokio::process::Command::new(env!("CARGO_BIN_EXE_loh"))
         .args(["--home", paths.home.to_str().unwrap(), "resume", id])
         .env("DEEPSEEK_API_KEY", "fixture")
         .output()
@@ -164,7 +164,7 @@ async fn crashed_daemon_reconciles_command_and_preserves_concurrent_user_edit() 
             .into_iter()
             .filter(|e| matches!(
                 e.data,
-                weft::domain::EventData::Status { .. } | weft::domain::EventData::Diagnostic { .. }
+                loh::domain::EventData::Status { .. } | loh::domain::EventData::Diagnostic { .. }
             ))
             .collect::<Vec<_>>()
     );
@@ -172,7 +172,7 @@ async fn crashed_daemon_reconciles_command_and_preserves_concurrent_user_edit() 
         std::fs::read_to_string(workspace.path().join("marker.txt")).unwrap(),
         "user retained x"
     );
-    assert!(store.events(id, 0).unwrap().iter().any(|e| matches!(&e.data, weft::domain::EventData::Diagnostic { message } if message.contains("Recovery reconciled"))));
+    assert!(store.events(id, 0).unwrap().iter().any(|e| matches!(&e.data, loh::domain::EventData::Diagnostic { message } if message.contains("Recovery reconciled"))));
     server.abort();
 }
 
@@ -233,7 +233,7 @@ impl Drop for Cleanup {
         }
         if let Ok(store) = Store::open(&self.paths.database()) {
             for (id, _) in store.snapshots().unwrap_or_default() {
-                let _ = std::process::Command::new(env!("CARGO_BIN_EXE_weft"))
+                let _ = std::process::Command::new(env!("CARGO_BIN_EXE_loh"))
                     .args(["--home", self.paths.home.to_str().unwrap(), "stop", &id])
                     .output();
             }
@@ -267,7 +267,7 @@ async fn detached_cli_exits_while_daemon_finishes_and_accepts_reattach() {
             tokio::spawn(respond(socket, server_gate.clone()));
         }
     });
-    let child = tokio::process::Command::new(env!("CARGO_BIN_EXE_weft"))
+    let child = tokio::process::Command::new(env!("CARGO_BIN_EXE_loh"))
         .args([
             "--home",
             paths.home.to_str().unwrap(),

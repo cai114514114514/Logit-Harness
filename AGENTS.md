@@ -1,4 +1,4 @@
-# Weft development
+# Logit- Harness development
 
 - 注意代码可读性，按职责拆分模块，必要处写清楚原因的注释。
 - 在本工作树直接修改，不创建 worktree，不使用 sed。

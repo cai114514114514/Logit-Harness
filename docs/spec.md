@@ -1,4 +1,4 @@
-# Weft — approved design
+# Logit- Harness — approved design
 
 ## Intent
 
@@ -40,7 +40,7 @@ work only. Completion requires fresh evidence for active requirements and a sepa
 
 ## Interfaces
 
-CLI: `weft`, `run <prompt> --json`, `sessions`, `attach <id>`, `pause <id>`, `resume <id>`,
+CLI: `loh`, `run <prompt> --json`, `sessions`, `attach <id>`, `pause <id>`, `resume <id>`,
 `stop <id>`, `doctor`, `eval`. Interactive commands: `/status`, `/diff`, `/budget`, `/pause`,
 `/resume`, `/stop`, `/detach`.
 
@@ -58,7 +58,7 @@ Unknown MCP effects are not automatically authorized. Retrieved content is data,
 
 ## Defaults and delivery
 
-Working name: weft. One Cargo project with responsibility-focused modules. Work directly in the
+Product name: Logit- Harness. Command: `loh`. One Cargo project with responsibility-focused modules. Work directly in the
 original tree; no sed, worktrees, V2/next names, or overwriting unrelated user edits.
 Official `deepseek-flash`, thinking high, same model across roles. Task limit: 6 hours and 5 million
 combined input/output tokens, shared/reserved across concurrent calls. Search has a separate limit.

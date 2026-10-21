@@ -75,6 +75,27 @@ pub async fn serve(paths: Paths, id: &str) -> anyhow::Result<()> {
     for tool in crate::tools::browser::tools(browser.clone()) {
         tools.register(tool)?;
     }
+    let mcp = Arc::new(crate::extensions::mcp::Registry::new(
+        config.mcp.clone(),
+        session.workspace.clone(),
+        paths.logs(id)?.join("mcp"),
+    ));
+    mcp.recover().await?;
+    for tool in crate::extensions::mcp::tools(mcp.clone()) {
+        tools.register(tool)?;
+    }
+    let mut skill_roots = vec![paths.home.join("skills")];
+    if let Some(user) = directories::BaseDirs::new() {
+        skill_roots.push(user.home_dir().join(".agents/skills"));
+    }
+    let knowledge = Arc::new(crate::extensions::knowledge::Knowledge::new(
+        session.workspace.clone(),
+        skill_roots,
+    )?);
+    for tool in crate::extensions::skills::tools(knowledge.clone()) {
+        tools.register(tool)?;
+    }
+    tools.knowledge = Some(knowledge);
     let mut web = WebClient::new(
         config.base_url.clone(),
         key,
@@ -121,6 +142,7 @@ pub async fn serve(paths: Paths, id: &str) -> anyhow::Result<()> {
     cancel.cancel();
     services.shutdown().await?;
     browser.close().await?;
+    mcp.close().await?;
     let _ = server_task.await;
     if let Err(error) = result {
         let mut state: Session = store.load(id)?;
@@ -211,7 +233,7 @@ fn workspace_lock(workspace: &Path, id: &str) -> anyhow::Result<std::fs::File> {
     let path = workspace.canonicalize()?;
     let hash = blake3::hash(path.as_os_str().as_encoded_bytes());
     let file = std::path::PathBuf::from(format!(
-        "/tmp/weft-owner-{}-{}.lock",
+        "/tmp/loh-owner-{}-{}.lock",
         unsafe { libc::geteuid() },
         &hash.to_hex()[..24]
     ));

@@ -23,15 +23,15 @@ const HASH_CHUNK: usize = 65536;
 /// Components that must never be reached through file tools: edit admission
 /// control. Deliberately narrower than SNAPSHOT_NOISE — inspecting build output
 /// is legitimate, mutating internal state is not.
-const EDIT_DENIED: [&str; 2] = [".git", ".weft"];
+const EDIT_DENIED: [&str; 2] = [".git", ".loh"];
 
 /// Entries excluded from workspace fingerprints: snapshot noise. Build caches and
 /// OS droppings change constantly and would mark every observation stale without
 /// carrying signal. Unlike EDIT_DENIED these stay reachable through file tools.
 const SNAPSHOT_NOISE: [&str; 8] = [
-    ".weft-build",
+    ".loh-build",
     ".git",
-    ".weft",
+    ".loh",
     "target",
     "node_modules",
     ".venv",

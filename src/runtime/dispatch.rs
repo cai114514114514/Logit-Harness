@@ -139,6 +139,11 @@ impl Runner {
                 actor.scope.requirements = self.session.goal.active_versions();
             }
         }
+        let guidance = if let Some(knowledge) = &self.tools.knowledge {
+            knowledge.prompt(&mut actor.scope)?
+        } else {
+            String::new()
+        };
         let mut tools = self.tools.definitions();
         let actor = &self.session.actors[actor_id];
         if matches!(
@@ -190,7 +195,7 @@ impl Runner {
                 "ROLE: compact\nSummarize verified progress, failed attempts, unresolved requirements and source pointers. Do not invent completion or discard constraints.".into()
             } else {
                 format!(
-                    "{}\nActor task: {}\nActor dependency scope: {}",
+                    "{}{guidance}\nActor task: {}\nActor dependency scope: {}",
                     prompts::instructions(&actor.role, &self.session),
                     actor.task,
                     serde_json::to_string(&actor.scope)?

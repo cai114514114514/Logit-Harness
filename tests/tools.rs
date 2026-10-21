@@ -1,14 +1,14 @@
+use loh::domain::{Change, Goal};
+use loh::model::ToolCall;
+use loh::tools::files::{EditOperation, FileEdit, MISSING, Workspace};
+use loh::tools::policy::{self, Decision};
+use loh::tools::process::{self, ProcessEvent, ProcessSpec};
+use loh::tools::{Scope, ToolHost};
 use serde_json::json;
 use std::time::Duration;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use weft::domain::{Change, Goal};
-use weft::model::ToolCall;
-use weft::tools::files::{EditOperation, FileEdit, MISSING, Workspace};
-use weft::tools::policy::{self, Decision};
-use weft::tools::process::{self, ProcessEvent, ProcessSpec};
-use weft::tools::{Scope, ToolHost};
 
 #[test]
 fn stale_patch_never_overwrites_an_external_edit() {
@@ -267,7 +267,7 @@ async fn service_can_write_build_output_but_not_source() {
     let root = dir.path().canonicalize().unwrap();
     std::fs::write(root.join("source.rs"), "protected").unwrap();
     std::fs::create_dir(root.join("generated")).unwrap();
-    let profile = weft::tools::service::profile(&root, &[root.join("generated")]).unwrap();
+    let profile = loh::tools::service::profile(&root, &[root.join("generated")]).unwrap();
     let mut process = spec(
         &root,
         "printf nope > source.rs; printf allowed > generated/result",
@@ -358,9 +358,9 @@ async fn agents_own_edits_refresh_prior_workspace_observations() {
 }
 #[tokio::test]
 async fn independent_checks_can_execute_but_cannot_modify_source() {
+    use loh::tools::{Scope, ToolHost};
+    use loh::{domain::Goal, model::ToolCall};
     use std::sync::Arc;
-    use weft::tools::{Scope, ToolHost};
-    use weft::{domain::Goal, model::ToolCall};
     let root = tempfile::tempdir().unwrap();
     let logs = tempfile::tempdir().unwrap();
     std::fs::write(root.path().join("answer.py"), "value = 42\n").unwrap();

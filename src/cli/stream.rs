@@ -23,7 +23,7 @@ pub async fn attach(paths: &Paths, id: &str, after: u64, json: bool) -> anyhow::
         } else {
             match &message {
                 ServerMessage::Snapshot { state, .. } => println!(
-                    "Weft {} · {:?}\n{}",
+                    "Logit- Harness {} · {:?}\n{}",
                     state.id, state.status, state.goal.original
                 ),
                 ServerMessage::Event { event } => match &event.data {

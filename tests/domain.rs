@@ -1,7 +1,7 @@
+use loh::domain::{Budget, EventData, Evidence, EvidenceKind, Usage};
+use loh::domain::{Change, Goal};
+use loh::store::Store;
 use std::collections::BTreeMap;
-use weft::domain::{Budget, EventData, Evidence, EvidenceKind, Usage};
-use weft::domain::{Change, Goal};
-use weft::store::Store;
 
 #[test]
 fn initial_request_cannot_disappear_from_acceptance() {
@@ -188,7 +188,7 @@ fn deletion_evidence_expires_if_the_file_returns() {
 }
 #[test]
 fn decomposition_retains_original_and_requires_exact_user_provenance() {
-    let mut goal = weft::domain::Goal::new("Use JSON storage. Render a blue interface.");
+    let mut goal = loh::domain::Goal::new("Use JSON storage. Render a blue interface.");
     let ids = goal
         .extract(&[
             "Use JSON storage.".into(),
@@ -199,7 +199,7 @@ fn decomposition_retains_original_and_requires_exact_user_provenance() {
     assert!(goal.active_versions().contains_key("r1"));
     assert!(goal.extract(&["Publish the application".into()]).is_err());
     let first = ids[0].clone();
-    goal.revise(weft::domain::Change {
+    goal.revise(loh::domain::Change {
         source: "Use SQLite instead".into(),
         updates: std::collections::BTreeMap::from([(first.clone(), "Use SQLite storage.".into())]),
         additions: vec![],

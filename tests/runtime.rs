@@ -1,6 +1,6 @@
+use loh::domain::{Change, Goal};
+use loh::runtime::graph::{Graph, Step, StepStatus};
 use std::collections::{BTreeMap, BTreeSet};
-use weft::domain::{Change, Goal};
-use weft::runtime::graph::{Graph, Step, StepStatus};
 
 fn set(values: &[&str]) -> BTreeSet<String> {
     values.iter().map(|s| s.to_string()).collect()
@@ -68,15 +68,15 @@ fn cyclic_or_incomplete_plan_is_rejected_atomically() {
 }
 #[test]
 fn delegated_step_inherits_all_dependency_versions() {
-    let mut goal = weft::domain::Goal::new("root");
-    goal.revise(weft::domain::Change {
+    let mut goal = loh::domain::Goal::new("root");
+    goal.revise(loh::domain::Change {
         source: "more".into(),
         updates: Default::default(),
         additions: vec!["storage".into(), "ui".into()],
         replacement: false,
     })
     .unwrap();
-    let mut graph = weft::runtime::graph::Graph::default();
+    let mut graph = loh::runtime::graph::Graph::default();
     let steps = serde_json::from_value(serde_json::json!([
         {"id":"storage","description":"storage","requirements":["r1","r2"],"dependencies":[],"files":[],"revision":1,"status":"pending"},
         {"id":"ui","description":"ui","requirements":["r3"],"dependencies":["storage"],"files":[],"revision":1,"status":"pending"}

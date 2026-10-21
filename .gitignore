@@ -1,6 +1,6 @@
 /target/
 /.superpowers/
-/.weft/
+/.loh/
 /artifacts/
 .DS_Store
 .env

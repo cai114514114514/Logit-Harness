@@ -34,7 +34,7 @@ impl Tool for ServiceTool {
         let (name, description, properties, required, effect) = match self.operation {
             Operation::Start => (
                 "service_start",
-                "Start a development server and wait for loopback HTTP readiness. Source writes are denied; write build output only to $WEFT_OUTPUT_DIR. It stays alive independently of foreground edits.",
+                "Start a development server and wait for loopback HTTP readiness. Source writes are denied; write build output only to $LOH_OUTPUT_DIR. It stays alive independently of foreground edits.",
                 json!({"command":{"type":"string"},"ready_url":{"type":"string"}}),
                 json!(["command", "ready_url"]),
                 Effect::Service,

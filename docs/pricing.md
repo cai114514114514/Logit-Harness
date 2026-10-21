@@ -17,4 +17,4 @@ Do not claim the temporary free server-side search promotion for our independent
 Count uncertain calls at their reserved upper bound. Report conservative accounted cost separately
 from confirmed usage; do not label this estimate as the provider's actual invoice. Reverify this
 snapshot before starting a later campaign. The model alias currently serves DeepSeek-V4.1-Flash-1017;
-the provider advertises 1M context and maximum 384K output. Weft may use smaller operational limits.
+the provider advertises 1M context and maximum 384K output. Logit- Harness may use smaller operational limits.

@@ -1,11 +1,11 @@
-use serde_json::json;
-use std::{sync::Arc, time::Duration};
-use tokio_util::sync::CancellationToken;
-use weft::{
+use loh::{
     domain::Goal,
     model::ToolCall,
     tools::{Scope, ToolHost, files::Workspace, services::Services},
 };
+use serde_json::json;
+use std::{sync::Arc, time::Duration};
+use tokio_util::sync::CancellationToken;
 
 #[tokio::test]
 async fn a_live_service_allows_source_edits_but_cannot_write_source_itself() {
@@ -25,7 +25,7 @@ try:
     Path('source.txt').write_text('bad')
 except PermissionError:
     pass
-Path(os.environ['WEFT_OUTPUT_DIR'], 'built.txt').write_text('ready')
+Path(os.environ['LOH_OUTPUT_DIR'], 'built.txt').write_text('ready')
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)

@@ -1,3 +1,13 @@
+use loh::{
+    domain::{EventData, Goal, Status, Usage},
+    model::{ModelEvent, Provider, Request, Response},
+    runtime::{
+        runner::{Runner, Settings},
+        state::{Control, Session},
+    },
+    store::Store,
+    tools::{ToolHost, files::Workspace},
+};
 use serde_json::{Value, json};
 use std::{
     sync::{
@@ -8,16 +18,6 @@ use std::{
 };
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use weft::{
-    domain::{EventData, Goal, Status, Usage},
-    model::{ModelEvent, Provider, Request, Response},
-    runtime::{
-        runner::{Runner, Settings},
-        state::{Control, Session},
-    },
-    store::Store,
-    tools::{ToolHost, files::Workspace},
-};
 
 struct Script {
     main: AtomicUsize,
@@ -117,7 +117,7 @@ fn setup(
 ) -> (
     Runner,
     mpsc::Sender<Control>,
-    tokio::sync::broadcast::Receiver<weft::domain::SessionEvent>,
+    tokio::sync::broadcast::Receiver<loh::domain::SessionEvent>,
 ) {
     let session = Session::new(workspace.to_path_buf(), "Write result.txt", 1_000_000, 60);
     let store = Arc::new(Store::open(&state.join("state.db")).unwrap());
@@ -295,7 +295,7 @@ async fn a_question_after_completion_restores_the_completed_status() {
         },
     );
     let running = tokio::spawn(runner.run());
-    async fn complete(events: &mut tokio::sync::broadcast::Receiver<weft::domain::SessionEvent>) {
+    async fn complete(events: &mut tokio::sync::broadcast::Receiver<loh::domain::SessionEvent>) {
         loop {
             let event = events.recv().await.unwrap();
             if matches!(
@@ -406,7 +406,7 @@ async fn malformed_planning_arguments_are_feedback_not_a_runner_crash() {
 
 #[tokio::test]
 async fn campaign_refusal_is_exhaustion_without_unknown_token_charges() {
-    use weft::runtime::{
+    use loh::runtime::{
         meter::Metered,
         money::{Money, Prices},
     };

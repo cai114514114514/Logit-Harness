@@ -1,3 +1,13 @@
+use loh::{
+    domain::{Status, Usage},
+    model::{ModelEvent, Provider, Request, Response},
+    runtime::{
+        runner::{Runner, Settings},
+        state::Session,
+    },
+    store::Store,
+    tools::{ToolHost, files::Workspace},
+};
 use serde_json::{Value, json};
 use std::{
     sync::{
@@ -8,16 +18,6 @@ use std::{
 };
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use weft::{
-    domain::{Status, Usage},
-    model::{ModelEvent, Provider, Request, Response},
-    runtime::{
-        runner::{Runner, Settings},
-        state::Session,
-    },
-    store::Store,
-    tools::{ToolHost, files::Workspace},
-};
 
 fn call(name: &str, args: Value) -> Response {
     Response {
@@ -122,7 +122,7 @@ async fn repeated_no_information_failures_trigger_fresh_diagnosis_and_continue()
 
 #[test]
 fn progress_uses_observed_information_not_transient_identifiers() {
-    use weft::runtime::progress::Progress;
+    use loh::runtime::progress::Progress;
     let mut progress = Progress::default();
     assert!(!progress.observe(&json!({"error":"same"})));
     assert!(!progress.observe(&json!({"error":"same"})));

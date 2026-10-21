@@ -1,9 +1,9 @@
 [package]
-name = "weft"
+name = "loh"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.88"
-description = "A persistent coding agent with revision-aware execution"
+rust-version = "1.89"
+description = "Logit- Harness: a persistent coding agent with revision-aware execution"
 license = "MIT"
 
 [dependencies]
@@ -18,11 +18,13 @@ directories = "6"
 futures = "0.3"
 libc = "0.2"
 portable-pty = "0.9"
-reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls"] }
+rmcp = { version = "3.6", default-features = false, features = ["client", "transport-child-process", "transport-streamable-http-client-reqwest", "reqwest"] }
 regex = "1"
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+serde-saphyr = { version = "2", default-features = false, features = ["deserialize"] }
 thiserror = "2"
 tempfile = "3"
 tokio = { version = "1", features = ["full"] }
@@ -30,6 +32,10 @@ tokio-util = "0.7"
 toml = "0.9"
 uuid = { version = "1", features = ["v4", "serde"] }
 walkdir = "2"
+
+[dev-dependencies]
+axum = "0.8"
+rmcp = { version = "3.6", default-features = false, features = ["server", "transport-streamable-http-server"] }
 
 [profile.release]
 lto = "thin"

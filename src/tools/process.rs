@@ -173,7 +173,7 @@ fn build_command(spec: &ProcessSpec, gate: &Path) -> CommandBuilder {
         command.args(["-f", "-c", GATE_BARRIER]);
         command
     };
-    command.arg("weft-gate");
+    command.arg("loh-gate");
     command.arg(gate);
     command.arg(&spec.command);
     command.cwd(&spec.cwd);
