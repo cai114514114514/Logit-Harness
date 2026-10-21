@@ -15,6 +15,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, default=Path("target/release/loh"))
     parser.add_argument("--output", type=Path, default=Path("dist"))
+    parser.add_argument("--replay", type=Path, help="include a selected synthetic smoke event export")
     args = parser.parse_args()
     if platform.system() != "Darwin":
         parser.error("this package requires a macOS build")
@@ -28,6 +29,16 @@ def main():
     shutil.copy2(binary, directory / "loh")
     shutil.copy2("README.md", directory / "README.md")
     shutil.copytree("docs", directory / "docs")
+    (directory / "scripts").mkdir()
+    shutil.copy2("scripts/replay.py", directory / "scripts/replay.py")
+    if args.replay:
+        replay = args.replay.resolve(strict=True)
+        destination = directory / "artifacts" / replay.name
+        destination.mkdir(parents=True)
+        # Explicit allowlist: never copy the credential, campaign database or
+        # arbitrary provider logs into a distributable replay example.
+        for filename in ("events.json", "summary.json", "acceptance.json", "initial-acceptance.json"):
+            shutil.copy2(replay / filename, destination / filename)
     # Only executable provenance is exported; doctor environment/config details
     # and the caller's API key are deliberately absent from the distributable.
     record = {

@@ -53,3 +53,25 @@ its denominator even if funding stops earlier. Reports retain task counts, missi
 errors, scripted interventions, conservative costs and uncertainty. Missing human review remains
 empty. A partial study cannot establish the registered research gate; an isolated successful
 storage-migration example cannot establish general superiority either.
+
+## Final pre-holdout pin
+
+The second probe exposed a separate acceptance-scope defect: `replace` combined with updates could
+deactivate the just-updated core requirement. That defect is preserved and documented in progress.md.
+Commit `b4b4099` rejects this contradictory delta atomically and preserves the verbatim new objective
+for valid whole-task replacements. The previous two candidate hashes above are historical, not the
+held-out executable.
+
+The final candidate passed 130 development tests, 36 release-mode tests, strict Clippy and a default
+release build. Real session `e2cb3548e7ef441d` then passed the corrected storage acceptance: initial
+JSON behavior verified; a live old check cancelled; core requirement retained at revision 2; SQLite
+data migration and caller-file preservation verified; independent completion reached. Its records
+are in `artifacts/storage-acceptance`. It used 261,397 tokens / 134 active seconds and 0.33823928 RMB
+at configured rates. This is one engineering example, not comparative effectiveness evidence.
+
+- Source hash: `1c16dc63d232a4e91ed4cefb06dd68dbc61b237d817c4c5ace32f9e068cd3ba7`.
+- Executable SHA-256: `41242b0b92eae3a9c3103099e088cebfd86cb27922781020f60134ad4827533d`.
+- Ledger immediately before held-out execution: 11.89430656 RMB accounted, 25.952256 RMB uncertain,
+  zero reserved; 12.15343744 RMB remains before maximum-request admission reserves.
+- No model receipt supplies billing evidence for the uncertain calls; no allowance is refunded.
+- No held-out trajectory had run when this pin and allocation were recorded.

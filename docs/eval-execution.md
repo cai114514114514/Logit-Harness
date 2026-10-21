@@ -15,6 +15,17 @@ Real runs require `DEEPSEEK_API_KEY` and the existing campaign configuration. Th
 account is `weft-first-evaluation` in `artifacts/campaign/money.sqlite`; the historical account name
 is immutable. All probes and study stages share its 50 RMB cap. Never create a replacement account.
 
+Saved event exports can be replayed offline without a key, daemon or paid request:
+
+```sh
+python3 scripts/replay.py artifacts/storage-acceptance/events.json
+python3 scripts/replay.py artifacts/storage-acceptance/events.json --speed 10
+```
+
+Use `--json` for the full event payload, or `--after <sequence>` to continue from a cursor. Ordinary
+`loh attach` connects to a live session endpoint; this offline reader also works after a daemon has
+been stopped. Never resume a model task merely to inspect its saved transcript.
+
 Each output directory pins its executable and source hash in `study.json`. Resume with **that pinned
 executable**, the original home, corpus, split and output directory. `--limit` counts unfinished trials
 for this invocation; completed trials are skipped. A driver lock prevents two schedulers from running

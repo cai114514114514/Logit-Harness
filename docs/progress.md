@@ -375,3 +375,21 @@ Spec: docs/spec.md
   alongside real initial/final storage, old-process cancellation and preservation of caller edits.
 - No held-out trajectory has started. Old binaries and trajectories remain distinct; none of these
   fixes or examples can be represented as a held-out research improvement.
+
+## Final storage acceptance and held-out freeze
+
+- Session `e2cb3548e7ef441d` passed the complete engineering example on the installed release:
+  real initial JSON persistence, mid-command correction, cancelled old test, retained active core
+  requirement, SQLite migration, repeated-process persistence and unchanged caller files. It reached
+  independent Completed status before the driver stopped the daemon. No rescue prompt was sent.
+- User-input to applied revision: 3.76391 seconds; to confirmed cancellation: 3.88944 seconds.
+  Total: 134 active seconds, 261,397 tokens, 0.33823928 RMB configured-rate cost. These are single-run
+  observations, not a controlled speed or reliability comparison. Replay: `artifacts/storage-acceptance`.
+- Current release source: `1c16dc63d232a4e91ed4cefb06dd68dbc61b237d817c4c5ace32f9e068cd3ba7`;
+  binary SHA-256: `41242b0b92eae3a9c3103099e088cebfd86cb27922781020f60134ad4827533d`.
+  Strict Clippy, **130/130** full tests, **36/36** release-mode tests, default release build and
+  installed signature/hash verification pass. Logs are in `artifacts/correction-scope`.
+- The pre-holdout allocation and exact pin are in `docs/study-allocation.md`. Development remains
+  incomplete at 20/180; the remaining admissible account balance is allocated to the fixed held-out
+  schedule. No further tuning based on held-out outcomes is permitted; missing research and human
+  reviews will remain explicit.
