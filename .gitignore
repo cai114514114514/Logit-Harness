@@ -1,0 +1,8 @@
+/target/
+/.superpowers/
+/.weft/
+/artifacts/
+.DS_Store
+.env
+*.sqlite-wal
+*.sqlite-shm
