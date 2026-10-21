@@ -1,0 +1,5037 @@
+{
+  "created": "2026-10-21T16:37:41.009915+00:00",
+  "digest": "c19d6137492f5401bba7a8223d5045d94da620e4755537c32034f27c2851fd4c",
+  "files": {
+    "accept.py": "3818beccd0ea7d10803a58d6bb435bf1291dfa9b419c9597004a0a486ff22ab8",
+    "fixtures/dev-acl/core.ts": "a2bb5a2a8e002c11f61743d20a3f416f653150e47afd7e11e6137b6527073218",
+    "fixtures/dev-acl/main.ts": "d8a359e288560a45dd9a46beade79384448c5eeaf52e443ce1d8310530b4dfde",
+    "fixtures/dev-cache/core.py": "d0d5cc12b3e8247cdf6d14325f8ea972b72599e37045261324a4ae7f5ed70eb6",
+    "fixtures/dev-cache/main.py": "adeb4b766cafeea066a5150d01bd9add135c8bb6c1dab6b8b1a5d13c4cdbefad",
+    "fixtures/dev-decoder/Cargo.toml": "214266a3852f777fba8b5fb4599b60b4f1a6ac4f13b532a1fd918230e49c2603",
+    "fixtures/dev-decoder/src/core.rs": "708d40c039bc9a29a1004ede36516833b31b38ec59ef895d5cd8dbb388277505",
+    "fixtures/dev-decoder/src/main.rs": "065f9f93bea5900ff798ccdb1c198724496bd83239d13f41a801c24b06610669",
+    "fixtures/dev-pages/core.ts": "c283ae36a643afd555a8b39c23c1fbe1454f04697b86b01a7e79b38df34d7437",
+    "fixtures/dev-pages/main.ts": "c077dab3fbdae262b6f01491ff5e498f40d64ad06b841cf65352401f457b71d5",
+    "fixtures/dev-priority/Cargo.toml": "214266a3852f777fba8b5fb4599b60b4f1a6ac4f13b532a1fd918230e49c2603",
+    "fixtures/dev-priority/src/core.rs": "1a7dd4d6b035b06d0592d86799cb0db8cdbc90dc8cde002f9b517ea406521e7b",
+    "fixtures/dev-priority/src/main.rs": "665e70818583c5adfe2d9a3c65377e6f39abe1305e4a3064210140b78f983c3b",
+    "fixtures/dev-slug/core.py": "8f045b4d3c7b7c18fe43581eb524cbd37c64659d2a66ff80e239064080acc087",
+    "fixtures/dev-slug/main.py": "b4cc98a4aed4ad94e891d636cebad504f33931ece6dc12fc6f53c0f5890ec955",
+    "fixtures/hold-backoff/core.py": "5d0ccaa677d1facbeb900683623c2ceec322edb59c5ea5e3867a7bf6741c5923",
+    "fixtures/hold-backoff/main.py": "4ccd826e6a8a6edc84c229b7d35191b0c32fee83fc11d7b451b8dc79f152d2d7",
+    "fixtures/hold-batches/core.ts": "5633a614409f6633c127dd6e642ce5e5810f801cb4590d805f8702c565e02250",
+    "fixtures/hold-batches/main.ts": "d8548741d6b0bd87d14051ec1f4afd5a46def9b62f9786cf06261a71146b6bc7",
+    "fixtures/hold-brackets/core.py": "360033e37708956f0af5e782d85a8337b31e46495eace671051f10f2a13d305b",
+    "fixtures/hold-brackets/main.py": "a1b93475f1a94b2b8bb190558f44ac242ba5f705d616a37777044d4bb4bd096c",
+    "fixtures/hold-dates/Cargo.toml": "214266a3852f777fba8b5fb4599b60b4f1a6ac4f13b532a1fd918230e49c2603",
+    "fixtures/hold-dates/src/core.rs": "7d25a77ee8e94898947a81a9d623952a84330608e92ddd37bd9abd3f15a17efd",
+    "fixtures/hold-dates/src/main.rs": "12f6d3c1fa8975f13c60f994742e497ce0c6648bd8e46f6c3c068c686ed5bcbe",
+    "fixtures/hold-glob/Cargo.toml": "214266a3852f777fba8b5fb4599b60b4f1a6ac4f13b532a1fd918230e49c2603",
+    "fixtures/hold-glob/src/core.rs": "8e5d43e91ac7ab96caf5f7fcfb7a91929f0e42b5c09487f5f0368fa23aaedd9d",
+    "fixtures/hold-glob/src/main.rs": "49ecce37358484cfd6b12fcafe7d3835ad8fbc1ab406ccb6eb5cac1ea11f9b94",
+    "fixtures/hold-history/core.ts": "512941f46db9b6b9851da9e65ab1298a90dc2d8dc086de509263caf9599e7821",
+    "fixtures/hold-history/main.ts": "45d058469c060f80979b717c8b621dd3e60b3f0818bc760dd621564f1604c6fe",
+    "fixtures/hold-join/core.py": "c3865e04ea6b7064b6d81f145aff3d5fd807563b1f2fb6ae26b59baf2ed349fe",
+    "fixtures/hold-join/main.py": "4ef4a677ebd7a85551ffab3397c53c96d3c2af01b67b88f045ede9e4de8e79b2",
+    "fixtures/hold-median/core.ts": "9a7b676e5a53fcd5cdb1187036c6d4b9e46e15a02b4b25ae9723663dc893781b",
+    "fixtures/hold-median/main.ts": "47fd407f2e2cb31e6130e39c2634b4e5c24e5aff03e60454208be9f37f245cd3",
+    "fixtures/hold-paths/core.py": "6859f27321fec7bbce8940487994314eddff0f9346da1c2125b28886790f3111",
+    "fixtures/hold-paths/main.py": "b33840c6f02840c91120f6727e78880db12d46ed95e8c43e1a062a6bf1a1e410",
+    "fixtures/hold-reservations/Cargo.toml": "214266a3852f777fba8b5fb4599b60b4f1a6ac4f13b532a1fd918230e49c2603",
+    "fixtures/hold-reservations/src/core.rs": "a08644cc2068639b2253d612c628f38e48f32ccf7cc1a37709807880ce1baa2f",
+    "fixtures/hold-reservations/src/main.rs": "9db06154c9ffb423804c04d6b1a7958662fb2b91e69ddb659bfb2a8610570a69",
+    "fixtures/hold-router/core.ts": "041264024330dee5c8912906d21963a86de25d96f5fa374a25f5db1de4cf5903",
+    "fixtures/hold-router/main.ts": "3e13321f7c3ae346d2976c5f1f538e4c6ce01aac588fd5e2823f4e6040ff0ef4",
+    "fixtures/hold-versions/Cargo.toml": "214266a3852f777fba8b5fb4599b60b4f1a6ac4f13b532a1fd918230e49c2603",
+    "fixtures/hold-versions/src/core.rs": "27a7dc4e4d3074c3dcc93154c720aff3ce80db6d6581c18ca911edcb460988bb",
+    "fixtures/hold-versions/src/main.rs": "0c6df82b6e5ae93361bd70e09252e65e2b5c25fc11e63f8673b92e2b528f9adb",
+    "protocol.json": "9e2a33b37c7b3fda7a324a6085e32125d1089494ca50d875a561a6ea13b3b865",
+    "protocol.md": "2dd4c1365ec82ef59afc623fd67495f061b9a1abc72d97aff56a3f41fa85c3f1",
+    "tasks/dev-acl.json": "8a0eda8f31ac6354c347e08724adfefcd708b189c18a763a845d42433fb8bdd9",
+    "tasks/dev-cache.json": "60b20d227e3102263c364b1ea008e83386147266fead533db085d96e93617271",
+    "tasks/dev-checkout.json": "3fd41fedbae8bcde7cf51a4636763b2ebc51694391627ed7fdb9a4547c467bfd",
+    "tasks/dev-decoder.json": "2ade0f9592f76d56631cfb8ccaf451e800679d261baf662b8143764a98f3b70f",
+    "tasks/dev-intervals.json": "c4c6c250d4168079262a7884886703b5687d9745cf1a7a469dc2e5eb717b6a90",
+    "tasks/dev-ledger.json": "7796e40d4af23ccc3167ec00066bdb02d31c70d650b0ff980bf80f1043d2df40",
+    "tasks/dev-pages.json": "572fb4723a6534389b0fd9688c2df16ee95aa82fea6dc8341e6461a9ca60ab47",
+    "tasks/dev-priority.json": "2c399b39852c2e73e050808f1298a6a1161267a4152869363fc64e8c4f605736",
+    "tasks/dev-sales.json": "4f6515caddcbabd1b751c763a2e53446577bfc9c8074dca30f5d94460538baa7",
+    "tasks/dev-schedule.json": "b7f44522d9f7e17e6b1f573b3bf5e079ed9ab328f6b81d0f956c232daf6ea5f7",
+    "tasks/dev-slug.json": "a9bf857aa9426ef7ddcbd735263be8d8dfb10e99d50824edec29fabbdff427b7",
+    "tasks/dev-todos.json": "984b9447500cce3c6f3b8c35bee5ce5a7179be16c71d73ba095f04bbe0043d84",
+    "tasks/hold-allocation.json": "c417b10a23fce7f9cd7c1729800fe48ef98962b7992d8dcbb76fb91aa636054d",
+    "tasks/hold-backoff.json": "0ac517e83ab97555fefb2a13eae8a6be055abfb485074a2919d7ae12f135e255",
+    "tasks/hold-batches.json": "3350a2f649dec0ca5a3df9e3824335ad43a5f739e690fe41d22798c012720f11",
+    "tasks/hold-brackets.json": "f5f507b2c7b7dd6aea7cf3d64e945ba36c2676dcc74f5daa0617ac293e5d3a00",
+    "tasks/hold-buckets.json": "f095e50033f1194141c2652635a3febcf4cf173fd1d48187539d3ece1013bdcd",
+    "tasks/hold-dates.json": "7c1ef6b37f8ffee0906a7593353335525736ea92a559d67565e4103bfd2eecee",
+    "tasks/hold-dedup.json": "f1eb8d852aec8479fdbbb11c87a69ec2fa5c947b0df2155c072c0f7de8852208",
+    "tasks/hold-distance.json": "adfc250507c3f8da1b9a5431c6e1a2ad6d637c96067bcef06aba81d3851c83ce",
+    "tasks/hold-glob.json": "25599aaa24fa34bf4056b22d611bcc263a86ac3aaa0e8763acca3ab79500eede",
+    "tasks/hold-history.json": "4a9f8d4f1603cda5b9f3816014d5b0fa308c27dbe25c0489d0c7dad47eb0a94e",
+    "tasks/hold-join.json": "15e32ab6c8c23ac57722d569194464d75d0eb1aa845d6043047b0461819730e3",
+    "tasks/hold-layers.json": "f9149d073d310dff7a168dea8e526c81642a4557eea5d5fb533b3eab88dcae74",
+    "tasks/hold-limit.json": "f46a0f1ebb18c0c7e2f3cd381f8b65ffffe46fa8a22857ca56a966d2b006cf99",
+    "tasks/hold-lines.json": "54e6487401c12145090af9c32f4ab2d218b8eb9f86b78eb70963948669d65d75",
+    "tasks/hold-median.json": "22b231c6031b0f5f77cbb367cac55274bbb9a747572c23d69efe44fe1f0da7ac",
+    "tasks/hold-paths.json": "46e3a556942e5d910ce7c623483415e9fed593d3a61bb43a3e62dc9473609103",
+    "tasks/hold-reach.json": "247869599da5b4a673e4cca9e951e479f0666667bd130079b2f4cf8b6fda80df",
+    "tasks/hold-reservations.json": "fa2fab65636aa719488c7becc6b14dfa6bc47d4a6f071dc8d49d7925a5c4b4c1",
+    "tasks/hold-rotate.json": "a656472c42f515409e029ed9d31d4fe8e163dca6f4b71f1092fe959f8f5a5e63",
+    "tasks/hold-router.json": "37ba067aa404fa5c5ca10e426a5606ae390dfaf3a6d7e9dd8ee3883ccc565b0d",
+    "tasks/hold-runs.json": "ec7d5a0166a867fc7fe7503f157114e92901c887b97839c05af5e5c0b6d6625a",
+    "tasks/hold-slice.json": "120c18683de463543faff2394e5079f4c86a84b1b15ae1c58c4de8e9b25c49bd",
+    "tasks/hold-tree.json": "9711d74a5662476fdd4e78f01006090c210f1bb2110a75e48935adb8d191a020",
+    "tasks/hold-versions.json": "cf1aad6b28d3b41025b2fc2298592bdde0053e3da4ab27ca1cf00b2f39c9eadb"
+  },
+  "protocol": {
+    "name": "loh-steering-study",
+    "schema": 1,
+    "development_tasks": 12,
+    "holdout_tasks": 24,
+    "repetitions": 3,
+    "conditions": [
+      "prompt",
+      "replan",
+      "tracking",
+      "dynamic"
+    ],
+    "ablations": [
+      "no_stagnation"
+    ],
+    "selective_repair_ablation": "replan",
+    "seed": 20261022,
+    "model": "deepseek-flash",
+    "thinking": "high",
+    "workers": 2,
+    "tokens": 100000,
+    "seconds": 180,
+    "max_output": 4096,
+    "context_bytes": 262144,
+    "search_limit": 3,
+    "user_skills": false,
+    "rescue_limit": 2,
+    "stall_seconds": 30,
+    "ci_delay_seconds": 3,
+    "fidelity_margin": 0.05,
+    "reduction_target": 0.25,
+    "bootstrap_samples": 10000
+  },
+  "tasks": [
+    {
+      "id": "dev-acl",
+      "language": "typescript",
+      "kind": "existing",
+      "split": "development",
+      "title": "Access-rule precedence",
+      "trigger": "active_check",
+      "requirements": [
+        "data 含 path 字符串和 rules 数组，每条规则含 prefix 和 allow 布尔值。匹配前缀；初始采用第一条匹配规则，缺省拒绝。",
+        "修复当前实现总是允许没有匹配规则的请求。"
+      ],
+      "correction": "改为最长匹配前缀优先，长度相同时仍采用输入中第一条。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for dev-acl: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "single",
+          "group": "core",
+          "input": {
+            "data": {
+              "path": "/a/x",
+              "rules": [
+                {
+                  "allow": true,
+                  "prefix": "/a"
+                }
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": true,
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "missing",
+          "group": "core",
+          "input": {
+            "data": {
+              "path": "/x",
+              "rules": []
+            },
+            "op": "solve"
+          },
+          "expected": false,
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "specific",
+          "group": "correction",
+          "input": {
+            "data": {
+              "path": "/a/private/x",
+              "rules": [
+                {
+                  "allow": true,
+                  "prefix": "/a"
+                },
+                {
+                  "allow": false,
+                  "prefix": "/a/private"
+                }
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": false,
+          "before": true,
+          "public": true
+        },
+        {
+          "id": "specific-allow",
+          "group": "correction",
+          "input": {
+            "data": {
+              "path": "/a/b",
+              "rules": [
+                {
+                  "allow": false,
+                  "prefix": "/"
+                },
+                {
+                  "allow": true,
+                  "prefix": "/a"
+                }
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": true,
+          "before": false,
+          "public": false
+        },
+        {
+          "id": "tie",
+          "group": "edge",
+          "input": {
+            "data": {
+              "path": "x",
+              "rules": [
+                {
+                  "allow": false,
+                  "prefix": "x"
+                },
+                {
+                  "allow": true,
+                  "prefix": "x"
+                }
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": false,
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "empty-prefix",
+          "group": "edge",
+          "input": {
+            "data": {
+              "path": "abc",
+              "rules": [
+                {
+                  "allow": false,
+                  "prefix": ""
+                }
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": false,
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "dev-cache",
+      "language": "python",
+      "kind": "existing",
+      "split": "development",
+      "title": "TTL cache simulation",
+      "trigger": "active_check",
+      "requirements": [
+        "data 含 ttl 非负整数和 ops 数组。操作为 [set,key,value,time] 或 [get,key,time]。仅 get 产生输出；缺失返回 null。每条输入独立从空缓存开始。",
+        "修复键缺失时抛异常的问题。初始规则 age > ttl 才过期。"
+      ],
+      "correction": "过期边界改为 age >= ttl；设置值不会产生输出，其他行为不变。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for dev-cache: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "hit",
+          "group": "core",
+          "input": {
+            "data": {
+              "ops": [
+                [
+                  "set",
+                  "a",
+                  7,
+                  0
+                ],
+                [
+                  "get",
+                  "a",
+                  4
+                ]
+              ],
+              "ttl": 5
+            },
+            "op": "solve"
+          },
+          "expected": [
+            7
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "missing",
+          "group": "core",
+          "input": {
+            "data": {
+              "ops": [
+                [
+                  "get",
+                  "x",
+                  0
+                ]
+              ],
+              "ttl": 5
+            },
+            "op": "solve"
+          },
+          "expected": [
+            null
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "boundary",
+          "group": "correction",
+          "input": {
+            "data": {
+              "ops": [
+                [
+                  "set",
+                  "a",
+                  1,
+                  0
+                ],
+                [
+                  "get",
+                  "a",
+                  5
+                ]
+              ],
+              "ttl": 5
+            },
+            "op": "solve"
+          },
+          "expected": [
+            null
+          ],
+          "before": [
+            1
+          ],
+          "public": true
+        },
+        {
+          "id": "zero-ttl",
+          "group": "correction",
+          "input": {
+            "data": {
+              "ops": [
+                [
+                  "set",
+                  "a",
+                  2,
+                  3
+                ],
+                [
+                  "get",
+                  "a",
+                  3
+                ]
+              ],
+              "ttl": 0
+            },
+            "op": "solve"
+          },
+          "expected": [
+            null
+          ],
+          "before": [
+            2
+          ],
+          "public": false
+        },
+        {
+          "id": "overwrite",
+          "group": "edge",
+          "input": {
+            "data": {
+              "ops": [
+                [
+                  "set",
+                  "a",
+                  1,
+                  0
+                ],
+                [
+                  "set",
+                  "a",
+                  3,
+                  4
+                ],
+                [
+                  "get",
+                  "a",
+                  6
+                ]
+              ],
+              "ttl": 4
+            },
+            "op": "solve"
+          },
+          "expected": [
+            3
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": {
+              "ops": [],
+              "ttl": 3
+            },
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "dev-checkout",
+      "language": "rust",
+      "kind": "new",
+      "split": "development",
+      "title": "Integer checkout",
+      "trigger": "first_write",
+      "requirements": [
+        "data 含 cents、discount、tax，均为非负整数，discount 不超过 cents，tax 是整数百分比。税额用整数运算向下取整。",
+        "初始规则：先按原价计税，再减固定折扣，返回最终 cents 整数。"
+      ],
+      "correction": "改为先减固定折扣，再对折后金额计税。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for dev-checkout: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "no-tax",
+          "group": "core",
+          "input": {
+            "data": {
+              "cents": 100,
+              "discount": 20,
+              "tax": 0
+            },
+            "op": "solve"
+          },
+          "expected": 80,
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "no-discount",
+          "group": "core",
+          "input": {
+            "data": {
+              "cents": 100,
+              "discount": 0,
+              "tax": 10
+            },
+            "op": "solve"
+          },
+          "expected": 110,
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "discount-tax",
+          "group": "correction",
+          "input": {
+            "data": {
+              "cents": 1000,
+              "discount": 200,
+              "tax": 10
+            },
+            "op": "solve"
+          },
+          "expected": 880,
+          "before": 900,
+          "public": true
+        },
+        {
+          "id": "round",
+          "group": "correction",
+          "input": {
+            "data": {
+              "cents": 101,
+              "discount": 50,
+              "tax": 10
+            },
+            "op": "solve"
+          },
+          "expected": 56,
+          "before": 61,
+          "public": false
+        },
+        {
+          "id": "zero",
+          "group": "edge",
+          "input": {
+            "data": {
+              "cents": 0,
+              "discount": 0,
+              "tax": 10
+            },
+            "op": "solve"
+          },
+          "expected": 0,
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "free",
+          "group": "edge",
+          "input": {
+            "data": {
+              "cents": 99,
+              "discount": 99,
+              "tax": 0
+            },
+            "op": "solve"
+          },
+          "expected": 0,
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "dev-decoder",
+      "language": "rust",
+      "kind": "existing",
+      "split": "development",
+      "title": "Percent decoding",
+      "trigger": "active_check",
+      "requirements": [
+        "data 是 ASCII 字符串。把合法 %HH 十六进制字节解码，输出有效 UTF-8 字符串；无效转义或无效 UTF-8 返回 {error:invalid}。",
+        "初始规则把 + 转为空格；修复无效转义被当成普通文本保留的问题。"
+      ],
+      "correction": "+ 改为保持字面加号，其余解码规则不变。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for dev-decoder: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "encoded",
+          "group": "core",
+          "input": {
+            "data": "A%20B",
+            "op": "solve"
+          },
+          "expected": "A B",
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "utf8",
+          "group": "core",
+          "input": {
+            "data": "%E4%B8%AD",
+            "op": "solve"
+          },
+          "expected": "中",
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "plus",
+          "group": "correction",
+          "input": {
+            "data": "A+B",
+            "op": "solve"
+          },
+          "expected": "A+B",
+          "before": "A B",
+          "public": true
+        },
+        {
+          "id": "mixed",
+          "group": "correction",
+          "input": {
+            "data": "%2B+",
+            "op": "solve"
+          },
+          "expected": "++",
+          "before": "+ ",
+          "public": false
+        },
+        {
+          "id": "invalid",
+          "group": "edge",
+          "input": {
+            "data": "%Q0",
+            "op": "solve"
+          },
+          "expected": {
+            "error": "invalid"
+          },
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "short",
+          "group": "edge",
+          "input": {
+            "data": "%",
+            "op": "solve"
+          },
+          "expected": {
+            "error": "invalid"
+          },
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "dev-intervals",
+      "language": "rust",
+      "kind": "new",
+      "split": "development",
+      "title": "Interval union",
+      "trigger": "first_write",
+      "requirements": [
+        "data 是 [start,end] 整数闭区间数组，start <= end。按起点终点排序并合并重叠区间，返回区间数组。",
+        "初始规则也合并端点恰好相接的区间。"
+      ],
+      "correction": "只合并真正重叠的区间；前一区间 end 等于后一区间 start 时保持分开。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for dev-intervals: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "overlap",
+          "group": "core",
+          "input": {
+            "data": [
+              [
+                3,
+                8
+              ],
+              [
+                1,
+                5
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            [
+              1,
+              8
+            ]
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "disjoint",
+          "group": "core",
+          "input": {
+            "data": [
+              [
+                8,
+                9
+              ],
+              [
+                1,
+                2
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            [
+              1,
+              2
+            ],
+            [
+              8,
+              9
+            ]
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "touch",
+          "group": "correction",
+          "input": {
+            "data": [
+              [
+                1,
+                3
+              ],
+              [
+                3,
+                5
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            [
+              1,
+              3
+            ],
+            [
+              3,
+              5
+            ]
+          ],
+          "before": [
+            [
+              1,
+              5
+            ]
+          ],
+          "public": true
+        },
+        {
+          "id": "chain",
+          "group": "correction",
+          "input": {
+            "data": [
+              [
+                0,
+                2
+              ],
+              [
+                1,
+                3
+              ],
+              [
+                3,
+                8
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            [
+              0,
+              3
+            ],
+            [
+              3,
+              8
+            ]
+          ],
+          "before": [
+            [
+              0,
+              8
+            ]
+          ],
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": [],
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "negative",
+          "group": "edge",
+          "input": {
+            "data": [
+              [
+                -4,
+                -1
+              ],
+              [
+                -3,
+                0
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            [
+              -4,
+              0
+            ]
+          ],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "dev-ledger",
+      "language": "python",
+      "kind": "new",
+      "split": "development",
+      "title": "Inventory ledger",
+      "trigger": "first_write",
+      "requirements": [
+        "data 是整数数组，按顺序求库存余额，返回每步余额数组。初始余额为 0。",
+        "初始规则允许余额为负数；空数组返回空数组。"
+      ],
+      "correction": "改为拒绝会使余额为负数的单笔变动：该步返回字符串 rejected，余额保持不变，继续处理后续变动。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for dev-ledger: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "deposits",
+          "group": "core",
+          "input": {
+            "data": [
+              3,
+              4
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            3,
+            7
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "withdraw",
+          "group": "core",
+          "input": {
+            "data": [
+              5,
+              -2
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            5,
+            3
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "overdraw",
+          "group": "correction",
+          "input": {
+            "data": [
+              2,
+              -3,
+              4
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            2,
+            "rejected",
+            6
+          ],
+          "before": [
+            2,
+            -1,
+            3
+          ],
+          "public": true
+        },
+        {
+          "id": "negative-first",
+          "group": "correction",
+          "input": {
+            "data": [
+              -1,
+              2
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            "rejected",
+            2
+          ],
+          "before": [
+            -1,
+            1
+          ],
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": [],
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "zero",
+          "group": "edge",
+          "input": {
+            "data": [
+              0,
+              1,
+              -1
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            0,
+            1,
+            0
+          ],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "dev-pages",
+      "language": "typescript",
+      "kind": "existing",
+      "split": "development",
+      "title": "Cursor pagination",
+      "trigger": "active_check",
+      "requirements": [
+        "data 含升序唯一整数 items、整数 cursor 和非负整数 limit。初始选 items 中 >= cursor 的前 limit 项。",
+        "修复 limit=0 时返回全部数据的问题。"
+      ],
+      "correction": "cursor 改为排他边界，仅选择 > cursor 的项目。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for dev-pages: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "between",
+          "group": "core",
+          "input": {
+            "data": {
+              "cursor": 2,
+              "items": [
+                1,
+                3,
+                5
+              ],
+              "limit": 2
+            },
+            "op": "solve"
+          },
+          "expected": [
+            3,
+            5
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "zero",
+          "group": "core",
+          "input": {
+            "data": {
+              "cursor": 0,
+              "items": [
+                1,
+                2
+              ],
+              "limit": 0
+            },
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "boundary",
+          "group": "correction",
+          "input": {
+            "data": {
+              "cursor": 2,
+              "items": [
+                1,
+                2,
+                3
+              ],
+              "limit": 2
+            },
+            "op": "solve"
+          },
+          "expected": [
+            3
+          ],
+          "before": [
+            2,
+            3
+          ],
+          "public": true
+        },
+        {
+          "id": "last",
+          "group": "correction",
+          "input": {
+            "data": {
+              "cursor": 2,
+              "items": [
+                1,
+                2
+              ],
+              "limit": 4
+            },
+            "op": "solve"
+          },
+          "expected": [],
+          "before": [
+            2
+          ],
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": {
+              "cursor": 0,
+              "items": [],
+              "limit": 1
+            },
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "negative",
+          "group": "edge",
+          "input": {
+            "data": {
+              "cursor": -3,
+              "items": [
+                -4,
+                -2,
+                0
+              ],
+              "limit": 9
+            },
+            "op": "solve"
+          },
+          "expected": [
+            -2,
+            0
+          ],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "dev-priority",
+      "language": "rust",
+      "kind": "existing",
+      "split": "development",
+      "title": "Stable priority ordering",
+      "trigger": "active_check",
+      "requirements": [
+        "data 是 {id,priority} 记录数组。初始按 priority 从大到小排序并返回 id 数组，相同优先级保持输入次序。",
+        "修复当前实现把同优先级项目按 id 排序的问题。"
+      ],
+      "correction": "优先级方向改为从小到大，相同优先级仍保持输入次序。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for dev-priority: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "ties",
+          "group": "core",
+          "input": {
+            "data": [
+              {
+                "id": "z",
+                "priority": 2
+              },
+              {
+                "id": "a",
+                "priority": 2
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            "z",
+            "a"
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "one",
+          "group": "core",
+          "input": {
+            "data": [
+              {
+                "id": "x",
+                "priority": 1
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            "x"
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "order",
+          "group": "correction",
+          "input": {
+            "data": [
+              {
+                "id": "a",
+                "priority": 3
+              },
+              {
+                "id": "b",
+                "priority": 1
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            "b",
+            "a"
+          ],
+          "before": [
+            "a",
+            "b"
+          ],
+          "public": true
+        },
+        {
+          "id": "negative",
+          "group": "correction",
+          "input": {
+            "data": [
+              {
+                "id": "a",
+                "priority": 0
+              },
+              {
+                "id": "b",
+                "priority": -1
+              },
+              {
+                "id": "c",
+                "priority": 2
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            "b",
+            "a",
+            "c"
+          ],
+          "before": [
+            "c",
+            "a",
+            "b"
+          ],
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": [],
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "zero-ties",
+          "group": "edge",
+          "input": {
+            "data": [
+              {
+                "id": "b",
+                "priority": 0
+              },
+              {
+                "id": "a",
+                "priority": 0
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            "b",
+            "a"
+          ],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "dev-sales",
+      "language": "python",
+      "kind": "new",
+      "split": "development",
+      "title": "Daily sales totals",
+      "trigger": "first_write",
+      "requirements": [
+        "data 是含 day 字符串和 amount 整数的记录数组；按 day 汇总 amount，返回按 day 升序排列的 [day,total] 数组。",
+        "初始规则保留汇总为零的日期；空输入返回空数组。"
+      ],
+      "correction": "删除汇总金额恰为零的日期，负数汇总仍保留。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for dev-sales: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "sum",
+          "group": "core",
+          "input": {
+            "data": [
+              {
+                "amount": 2,
+                "day": "b"
+              },
+              {
+                "amount": 3,
+                "day": "a"
+              },
+              {
+                "amount": 4,
+                "day": "b"
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            [
+              "a",
+              3
+            ],
+            [
+              "b",
+              6
+            ]
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "negative",
+          "group": "core",
+          "input": {
+            "data": [
+              {
+                "amount": -2,
+                "day": "a"
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            [
+              "a",
+              -2
+            ]
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "cancel",
+          "group": "correction",
+          "input": {
+            "data": [
+              {
+                "amount": 3,
+                "day": "a"
+              },
+              {
+                "amount": -3,
+                "day": "a"
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": [],
+          "before": [
+            [
+              "a",
+              0
+            ]
+          ],
+          "public": true
+        },
+        {
+          "id": "mixed",
+          "group": "correction",
+          "input": {
+            "data": [
+              {
+                "amount": 0,
+                "day": "b"
+              },
+              {
+                "amount": 1,
+                "day": "a"
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            [
+              "a",
+              1
+            ]
+          ],
+          "before": [
+            [
+              "a",
+              1
+            ],
+            [
+              "b",
+              0
+            ]
+          ],
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": [],
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "large",
+          "group": "edge",
+          "input": {
+            "data": [
+              {
+                "amount": 1000000,
+                "day": "a"
+              },
+              {
+                "amount": 1,
+                "day": "a"
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            [
+              "a",
+              1000001
+            ]
+          ],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "dev-schedule",
+      "language": "typescript",
+      "kind": "new",
+      "split": "development",
+      "title": "Dependency ordering",
+      "trigger": "first_write",
+      "requirements": [
+        "data 是 {id,deps} 数组，deps 引用输入中的 id。返回拓扑序；每次从就绪节点选 id 字典序最小者。循环返回 {error:cycle}。",
+        "输入 id 唯一，空图返回空数组。"
+      ],
+      "correction": "同时就绪的节点改为选输入次序最靠前者，不再按 id 排序。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for dev-schedule: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "chain",
+          "group": "core",
+          "input": {
+            "data": [
+              {
+                "deps": [],
+                "id": "a"
+              },
+              {
+                "deps": [
+                  "a"
+                ],
+                "id": "b"
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            "a",
+            "b"
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "cycle",
+          "group": "core",
+          "input": {
+            "data": [
+              {
+                "deps": [
+                  "b"
+                ],
+                "id": "a"
+              },
+              {
+                "deps": [
+                  "a"
+                ],
+                "id": "b"
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": {
+            "error": "cycle"
+          },
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "ties",
+          "group": "correction",
+          "input": {
+            "data": [
+              {
+                "deps": [],
+                "id": "z"
+              },
+              {
+                "deps": [],
+                "id": "a"
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            "z",
+            "a"
+          ],
+          "before": [
+            "a",
+            "z"
+          ],
+          "public": true
+        },
+        {
+          "id": "unlock",
+          "group": "correction",
+          "input": {
+            "data": [
+              {
+                "deps": [
+                  "a"
+                ],
+                "id": "z"
+              },
+              {
+                "deps": [],
+                "id": "b"
+              },
+              {
+                "deps": [],
+                "id": "a"
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            "b",
+            "a",
+            "z"
+          ],
+          "before": [
+            "a",
+            "b",
+            "z"
+          ],
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": [],
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "self",
+          "group": "edge",
+          "input": {
+            "data": [
+              {
+                "deps": [
+                  "a"
+                ],
+                "id": "a"
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": {
+            "error": "cycle"
+          },
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "dev-slug",
+      "language": "python",
+      "kind": "existing",
+      "split": "development",
+      "title": "Slug normalization",
+      "trigger": "active_check",
+      "requirements": [
+        "data 是字符串：转为小写，把非 ASCII 字母或数字的连续片段替换成一个下划线，去掉首尾分隔符。",
+        "返回 slug 字符串，允许空结果。修复当前实现的连续分隔符问题。"
+      ],
+      "correction": "分隔符从下划线改为连字符，其余规范化规则不变。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for dev-slug: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "plain",
+          "group": "core",
+          "input": {
+            "data": "ABC123",
+            "op": "solve"
+          },
+          "expected": "abc123",
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "digits",
+          "group": "core",
+          "input": {
+            "data": "42",
+            "op": "solve"
+          },
+          "expected": "42",
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "spaces",
+          "group": "correction",
+          "input": {
+            "data": "  Hi!!! World  ",
+            "op": "solve"
+          },
+          "expected": "hi-world",
+          "before": "hi_world",
+          "public": true
+        },
+        {
+          "id": "unicode",
+          "group": "correction",
+          "input": {
+            "data": "你好Hello_世界X",
+            "op": "solve"
+          },
+          "expected": "hello-x",
+          "before": "hello_x",
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": "",
+            "op": "solve"
+          },
+          "expected": "",
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "punctuation",
+          "group": "edge",
+          "input": {
+            "data": "!!!",
+            "op": "solve"
+          },
+          "expected": "",
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "dev-todos",
+      "language": "typescript",
+      "kind": "new",
+      "split": "development",
+      "title": "Todo command interpreter",
+      "trigger": "first_write",
+      "requirements": [
+        "data 是操作数组：[add,title] 添加未完成任务，[toggle,id] 切换已有任务，[list] 输出当前任务数组。仅 list 产生结果，任务含 id、title、done。",
+        "初始 id 是从 1 递增的整数；不存在的 toggle 忽略。每条输入从空列表开始。"
+      ],
+      "correction": "id 改为字符串 t1、t2…，toggle 也用字符串 id。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for dev-todos: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "empty-list",
+          "group": "core",
+          "input": {
+            "data": [
+              [
+                "list"
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            []
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "no-list",
+          "group": "core",
+          "input": {
+            "data": [
+              [
+                "add",
+                "x"
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "add",
+          "group": "correction",
+          "input": {
+            "data": [
+              [
+                "add",
+                "A"
+              ],
+              [
+                "list"
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            [
+              {
+                "done": false,
+                "id": "t1",
+                "title": "A"
+              }
+            ]
+          ],
+          "before": [
+            [
+              {
+                "done": false,
+                "id": 1,
+                "title": "A"
+              }
+            ]
+          ],
+          "public": true
+        },
+        {
+          "id": "toggle",
+          "group": "correction",
+          "input": {
+            "data": [
+              [
+                "add",
+                "A"
+              ],
+              [
+                "toggle",
+                "t1"
+              ],
+              [
+                "list"
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            [
+              {
+                "done": true,
+                "id": "t1",
+                "title": "A"
+              }
+            ]
+          ],
+          "before": [
+            [
+              {
+                "done": false,
+                "id": 1,
+                "title": "A"
+              }
+            ]
+          ],
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": [],
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "unknown",
+          "group": "edge",
+          "input": {
+            "data": [
+              [
+                "toggle",
+                "none"
+              ],
+              [
+                "list"
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            []
+          ],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-allocation",
+      "language": "python",
+      "kind": "new",
+      "split": "holdout",
+      "title": "Weighted integer allocation",
+      "trigger": "active_check",
+      "requirements": [
+        "data 含非负整数 total 和正整数 weights 数组；按比例分配整数，先向下取整，剩余单位初始按索引从小到大轮流分配。",
+        "返回分配数组，总和等于 total；weights 非空。"
+      ],
+      "correction": "剩余单位改为按分数余数从大到小分配，余数相同按索引升序。每个位置最多补一单位。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-allocation: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "exact",
+          "group": "core",
+          "input": {
+            "data": {
+              "total": 10,
+              "weights": [
+                1,
+                1
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": [
+            5,
+            5
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "one",
+          "group": "core",
+          "input": {
+            "data": {
+              "total": 7,
+              "weights": [
+                9
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": [
+            7
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "remainder",
+          "group": "correction",
+          "input": {
+            "data": {
+              "total": 2,
+              "weights": [
+                1,
+                2
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": [
+            1,
+            1
+          ],
+          "before": [
+            1,
+            1
+          ],
+          "public": false
+        },
+        {
+          "id": "priority",
+          "group": "correction",
+          "input": {
+            "data": {
+              "total": 1,
+              "weights": [
+                1,
+                3
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": [
+            0,
+            1
+          ],
+          "before": [
+            1,
+            0
+          ],
+          "public": true
+        },
+        {
+          "id": "zero",
+          "group": "edge",
+          "input": {
+            "data": {
+              "total": 0,
+              "weights": [
+                1,
+                2
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": [
+            0,
+            0
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "tie",
+          "group": "edge",
+          "input": {
+            "data": {
+              "total": 1,
+              "weights": [
+                1,
+                1
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": [
+            1,
+            0
+          ],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-backoff",
+      "language": "python",
+      "kind": "existing",
+      "split": "holdout",
+      "title": "Retry delay schedule",
+      "trigger": "active_check",
+      "requirements": [
+        "data 含非负整数 base、cap、attempts。输出 attempts 个延迟，公式 min(cap, base*2**i)，i 从 0 开始。",
+        "修复 attempts=0 的结果应为空数组，而不是一项。"
+      ],
+      "correction": "指数因子从 2 改为 3，cap 和 attempts 语义不变。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-backoff: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "one",
+          "group": "core",
+          "input": {
+            "data": {
+              "attempts": 1,
+              "base": 2,
+              "cap": 100
+            },
+            "op": "solve"
+          },
+          "expected": [
+            2
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "zero-attempts",
+          "group": "core",
+          "input": {
+            "data": {
+              "attempts": 0,
+              "base": 2,
+              "cap": 10
+            },
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "growth",
+          "group": "correction",
+          "input": {
+            "data": {
+              "attempts": 4,
+              "base": 2,
+              "cap": 100
+            },
+            "op": "solve"
+          },
+          "expected": [
+            2,
+            6,
+            18,
+            54
+          ],
+          "before": [
+            2,
+            4,
+            8,
+            16
+          ],
+          "public": true
+        },
+        {
+          "id": "cap",
+          "group": "correction",
+          "input": {
+            "data": {
+              "attempts": 4,
+              "base": 3,
+              "cap": 10
+            },
+            "op": "solve"
+          },
+          "expected": [
+            3,
+            9,
+            10,
+            10
+          ],
+          "before": [
+            3,
+            6,
+            10,
+            10
+          ],
+          "public": false
+        },
+        {
+          "id": "zero-base",
+          "group": "edge",
+          "input": {
+            "data": {
+              "attempts": 3,
+              "base": 0,
+              "cap": 10
+            },
+            "op": "solve"
+          },
+          "expected": [
+            0,
+            0,
+            0
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "below-base",
+          "group": "edge",
+          "input": {
+            "data": {
+              "attempts": 2,
+              "base": 10,
+              "cap": 2
+            },
+            "op": "solve"
+          },
+          "expected": [
+            2,
+            2
+          ],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-batches",
+      "language": "typescript",
+      "kind": "existing",
+      "split": "holdout",
+      "title": "Ordered capacity batches",
+      "trigger": "first_write",
+      "requirements": [
+        "data 含非负整数 weights 数组和正整数 capacity。保持输入顺序贪心分批，批内总重不能超过 capacity；初始超大单项单独成批。",
+        "返回二维 weight 数组；修复空输入产生一个空批的问题。"
+      ],
+      "correction": "只要存在大于 capacity 的单项，整个请求返回 {error:oversize}，不返回部分批次。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-batches: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "normal",
+          "group": "core",
+          "input": {
+            "data": {
+              "capacity": 5,
+              "weights": [
+                2,
+                3,
+                1
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": [
+            [
+              2,
+              3
+            ],
+            [
+              1
+            ]
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "empty",
+          "group": "core",
+          "input": {
+            "data": {
+              "capacity": 3,
+              "weights": []
+            },
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "oversize",
+          "group": "correction",
+          "input": {
+            "data": {
+              "capacity": 5,
+              "weights": [
+                1,
+                9,
+                2
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": {
+            "error": "oversize"
+          },
+          "before": [
+            [
+              1
+            ],
+            [
+              9
+            ],
+            [
+              2
+            ]
+          ],
+          "public": true
+        },
+        {
+          "id": "only-big",
+          "group": "correction",
+          "input": {
+            "data": {
+              "capacity": 5,
+              "weights": [
+                6
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": {
+            "error": "oversize"
+          },
+          "before": [
+            [
+              6
+            ]
+          ],
+          "public": false
+        },
+        {
+          "id": "zeros",
+          "group": "edge",
+          "input": {
+            "data": {
+              "capacity": 1,
+              "weights": [
+                0,
+                0
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": [
+            [
+              0,
+              0
+            ]
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "exact",
+          "group": "edge",
+          "input": {
+            "data": {
+              "capacity": 5,
+              "weights": [
+                5,
+                5
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": [
+            [
+              5
+            ],
+            [
+              5
+            ]
+          ],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-brackets",
+      "language": "python",
+      "kind": "existing",
+      "split": "holdout",
+      "title": "Delimiter validation",
+      "trigger": "active_check",
+      "requirements": [
+        "data 是字符串，检查 () [] {} 是否正确嵌套。初始忽略双引号字符串内的括号，支持反斜杠转义；未闭合字符串返回 false。",
+        "修复当前实现不区分括号种类的问题。"
+      ],
+      "correction": "增加忽略 // 行注释；注释在换行结束。字符串中的 // 不是注释。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-brackets: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "balanced",
+          "group": "core",
+          "input": {
+            "data": "[{}()]",
+            "op": "solve"
+          },
+          "expected": true,
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "mismatch",
+          "group": "core",
+          "input": {
+            "data": "([)]",
+            "op": "solve"
+          },
+          "expected": false,
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "comment",
+          "group": "correction",
+          "input": {
+            "data": "() // [",
+            "op": "solve"
+          },
+          "expected": true,
+          "before": false,
+          "public": true
+        },
+        {
+          "id": "next-line",
+          "group": "correction",
+          "input": {
+            "data": "// }\n[]",
+            "op": "solve"
+          },
+          "expected": true,
+          "before": false,
+          "public": false
+        },
+        {
+          "id": "quoted",
+          "group": "edge",
+          "input": {
+            "data": "\"[//]\"{}",
+            "op": "solve"
+          },
+          "expected": true,
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "unclosed",
+          "group": "edge",
+          "input": {
+            "data": "\"abc",
+            "op": "solve"
+          },
+          "expected": false,
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-buckets",
+      "language": "typescript",
+      "kind": "new",
+      "split": "holdout",
+      "title": "Time-bucket aggregation",
+      "trigger": "active_check",
+      "requirements": [
+        "data 含 events 数组（每项 {time,value} 整数）和正整数 width。按 floor(time/width)*width 桶起点汇总 value，返回按桶起点升序的 [start,sum] 数组。",
+        "初始计算忽略 data.offset（可缺省）；负时间必须使用向负无穷取整。"
+      ],
+      "correction": "加入 offset（缺省 0）：桶起点变为 floor((time-offset)/width)*width+offset。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-buckets: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "normal",
+          "group": "core",
+          "input": {
+            "data": {
+              "events": [
+                {
+                  "time": 1,
+                  "value": 2
+                },
+                {
+                  "time": 9,
+                  "value": 3
+                }
+              ],
+              "width": 10
+            },
+            "op": "solve"
+          },
+          "expected": [
+            [
+              0,
+              5
+            ]
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "negative",
+          "group": "core",
+          "input": {
+            "data": {
+              "events": [
+                {
+                  "time": -1,
+                  "value": 1
+                }
+              ],
+              "width": 10
+            },
+            "op": "solve"
+          },
+          "expected": [
+            [
+              -10,
+              1
+            ]
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "offset",
+          "group": "correction",
+          "input": {
+            "data": {
+              "events": [
+                {
+                  "time": 1,
+                  "value": 2
+                },
+                {
+                  "time": 9,
+                  "value": 3
+                }
+              ],
+              "offset": 5,
+              "width": 10
+            },
+            "op": "solve"
+          },
+          "expected": [
+            [
+              -5,
+              2
+            ],
+            [
+              5,
+              3
+            ]
+          ],
+          "before": [
+            [
+              0,
+              5
+            ]
+          ],
+          "public": true
+        },
+        {
+          "id": "edge-offset",
+          "group": "correction",
+          "input": {
+            "data": {
+              "events": [
+                {
+                  "time": 2,
+                  "value": 1
+                }
+              ],
+              "offset": 2,
+              "width": 4
+            },
+            "op": "solve"
+          },
+          "expected": [
+            [
+              2,
+              1
+            ]
+          ],
+          "before": [
+            [
+              0,
+              1
+            ]
+          ],
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": {
+              "events": [],
+              "width": 1
+            },
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "zero",
+          "group": "edge",
+          "input": {
+            "data": {
+              "events": [
+                {
+                  "time": 0,
+                  "value": 0
+                }
+              ],
+              "width": 1
+            },
+            "op": "solve"
+          },
+          "expected": [
+            [
+              0,
+              0
+            ]
+          ],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-dates",
+      "language": "rust",
+      "kind": "existing",
+      "split": "holdout",
+      "title": "Civil date validation",
+      "trigger": "first_write",
+      "requirements": [
+        "data 是 YYYY-MM-DD 字符串，年份范围 0001..9999；严格验证格式和公历闰年。无效输入返回 null。",
+        "有效输入初始原样返回，修复把所有能被 4 整除的年份当作闰年的问题。"
+      ],
+      "correction": "有效日期改为返回 DD/MM/YYYY，验证规则不变。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-dates: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "invalid-century",
+          "group": "core",
+          "input": {
+            "data": "1900-02-29",
+            "op": "solve"
+          },
+          "expected": null,
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "invalid-day",
+          "group": "core",
+          "input": {
+            "data": "2026-04-31",
+            "op": "solve"
+          },
+          "expected": null,
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "ordinary",
+          "group": "correction",
+          "input": {
+            "data": "2026-10-22",
+            "op": "solve"
+          },
+          "expected": "22/10/2026",
+          "before": "2026-10-22",
+          "public": true
+        },
+        {
+          "id": "leap",
+          "group": "correction",
+          "input": {
+            "data": "2000-02-29",
+            "op": "solve"
+          },
+          "expected": "29/02/2000",
+          "before": "2000-02-29",
+          "public": false
+        },
+        {
+          "id": "format",
+          "group": "edge",
+          "input": {
+            "data": "2026-1-01",
+            "op": "solve"
+          },
+          "expected": null,
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "year-zero",
+          "group": "edge",
+          "input": {
+            "data": "0000-01-01",
+            "op": "solve"
+          },
+          "expected": null,
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-dedup",
+      "language": "python",
+      "kind": "new",
+      "split": "holdout",
+      "title": "Record deduplication",
+      "trigger": "active_check",
+      "requirements": [
+        "data 是含字符串 key 和任意 JSON value 的记录数组；key 用 Python casefold 规范化后去重。初始保留每组第一条记录。",
+        "输出原始记录；各组顺序由规范化 key 首次出现位置决定。"
+      ],
+      "correction": "每组改为保留最后一条记录，但各组的输出顺序仍由首次出现位置决定。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-dedup: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "distinct",
+          "group": "core",
+          "input": {
+            "data": [
+              {
+                "key": "A",
+                "value": 1
+              },
+              {
+                "key": "B",
+                "value": 2
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            {
+              "key": "A",
+              "value": 1
+            },
+            {
+              "key": "B",
+              "value": 2
+            }
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "one",
+          "group": "core",
+          "input": {
+            "data": [
+              {
+                "key": "x",
+                "value": null
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            {
+              "key": "x",
+              "value": null
+            }
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "duplicate",
+          "group": "correction",
+          "input": {
+            "data": [
+              {
+                "key": "A",
+                "value": 1
+              },
+              {
+                "key": "a",
+                "value": 2
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            {
+              "key": "a",
+              "value": 2
+            }
+          ],
+          "before": [
+            {
+              "key": "A",
+              "value": 1
+            }
+          ],
+          "public": true
+        },
+        {
+          "id": "ordering",
+          "group": "correction",
+          "input": {
+            "data": [
+              {
+                "key": "B",
+                "value": 1
+              },
+              {
+                "key": "A",
+                "value": 2
+              },
+              {
+                "key": "b",
+                "value": 3
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            {
+              "key": "b",
+              "value": 3
+            },
+            {
+              "key": "A",
+              "value": 2
+            }
+          ],
+          "before": [
+            {
+              "key": "B",
+              "value": 1
+            },
+            {
+              "key": "A",
+              "value": 2
+            }
+          ],
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": [],
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "unicode",
+          "group": "edge",
+          "input": {
+            "data": [
+              {
+                "key": "Straße",
+                "value": 1
+              },
+              {
+                "key": "STRASSE",
+                "value": 1
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            {
+              "key": "STRASSE",
+              "value": 1
+            }
+          ],
+          "before": [
+            {
+              "key": "Straße",
+              "value": 1
+            }
+          ],
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-distance",
+      "language": "typescript",
+      "kind": "new",
+      "split": "holdout",
+      "title": "Weighted edit distance",
+      "trigger": "first_write",
+      "requirements": [
+        "data 是两个 ASCII 字符串。插入和删除成本为 1，初始替换成本为 2；返回最小编辑成本整数。",
+        "必须处理空字符串和重复字符。"
+      ],
+      "correction": "替换成本改为 1，其余成本不变。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-distance: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "same",
+          "group": "core",
+          "input": {
+            "data": [
+              "abc",
+              "abc"
+            ],
+            "op": "solve"
+          },
+          "expected": 0,
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "insert",
+          "group": "core",
+          "input": {
+            "data": [
+              "a",
+              "ab"
+            ],
+            "op": "solve"
+          },
+          "expected": 1,
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "replace",
+          "group": "correction",
+          "input": {
+            "data": [
+              "a",
+              "b"
+            ],
+            "op": "solve"
+          },
+          "expected": 1,
+          "before": 2,
+          "public": true
+        },
+        {
+          "id": "classic",
+          "group": "correction",
+          "input": {
+            "data": [
+              "kitten",
+              "sitting"
+            ],
+            "op": "solve"
+          },
+          "expected": 3,
+          "before": 5,
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": [
+              "",
+              "abc"
+            ],
+            "op": "solve"
+          },
+          "expected": 3,
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "repeat",
+          "group": "edge",
+          "input": {
+            "data": [
+              "aaa",
+              "aa"
+            ],
+            "op": "solve"
+          },
+          "expected": 1,
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-glob",
+      "language": "rust",
+      "kind": "existing",
+      "split": "holdout",
+      "title": "Wildcard matching",
+      "trigger": "active_check",
+      "requirements": [
+        "data 含 pattern 和 text，仅含 ASCII；? 匹配任意一个字符，* 匹配任意长度（含零）的字符序列，全串匹配。",
+        "初始大小写敏感。修复当前实现不支持 * 的问题；没有转义语法。"
+      ],
+      "correction": "ASCII 字母改为忽略大小写比较，? 和 * 的语义不变。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-glob: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "star",
+          "group": "core",
+          "input": {
+            "data": {
+              "pattern": "a*c",
+              "text": "abbbc"
+            },
+            "op": "solve"
+          },
+          "expected": true,
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "question",
+          "group": "core",
+          "input": {
+            "data": {
+              "pattern": "a?c",
+              "text": "abc"
+            },
+            "op": "solve"
+          },
+          "expected": true,
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "case",
+          "group": "correction",
+          "input": {
+            "data": {
+              "pattern": "HELLO",
+              "text": "hello"
+            },
+            "op": "solve"
+          },
+          "expected": true,
+          "before": false,
+          "public": true
+        },
+        {
+          "id": "mixed",
+          "group": "correction",
+          "input": {
+            "data": {
+              "pattern": "A*Z",
+              "text": "abz"
+            },
+            "op": "solve"
+          },
+          "expected": true,
+          "before": false,
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": {
+              "pattern": "*",
+              "text": ""
+            },
+            "op": "solve"
+          },
+          "expected": true,
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "mismatch",
+          "group": "edge",
+          "input": {
+            "data": {
+              "pattern": "a?",
+              "text": "a"
+            },
+            "op": "solve"
+          },
+          "expected": false,
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-history",
+      "language": "typescript",
+      "kind": "existing",
+      "split": "holdout",
+      "title": "Undo and redo journal",
+      "trigger": "active_check",
+      "requirements": [
+        "data 是操作数组：[set,value]、[undo]、[redo]、[get]；初值 0，只有 get 产生输出，空 undo/redo 无操作。",
+        "初始 set 保留 redo 栈；修复空 undo 把当前值变成 undefined 的问题。"
+      ],
+      "correction": "新的 set 必须清空 redo 栈，其他行为不变。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-history: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "roundtrip",
+          "group": "core",
+          "input": {
+            "data": [
+              [
+                "set",
+                1
+              ],
+              [
+                "undo"
+              ],
+              [
+                "redo"
+              ],
+              [
+                "get"
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            1
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "empty-undo",
+          "group": "core",
+          "input": {
+            "data": [
+              [
+                "undo"
+              ],
+              [
+                "get"
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            0
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "branch",
+          "group": "correction",
+          "input": {
+            "data": [
+              [
+                "set",
+                1
+              ],
+              [
+                "undo"
+              ],
+              [
+                "set",
+                2
+              ],
+              [
+                "redo"
+              ],
+              [
+                "get"
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            2
+          ],
+          "before": [
+            1
+          ],
+          "public": true
+        },
+        {
+          "id": "twice",
+          "group": "correction",
+          "input": {
+            "data": [
+              [
+                "set",
+                1
+              ],
+              [
+                "set",
+                2
+              ],
+              [
+                "undo"
+              ],
+              [
+                "set",
+                3
+              ],
+              [
+                "redo"
+              ],
+              [
+                "get"
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            3
+          ],
+          "before": [
+            2
+          ],
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": [],
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "empty-redo",
+          "group": "edge",
+          "input": {
+            "data": [
+              [
+                "redo"
+              ],
+              [
+                "get"
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            0
+          ],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-join",
+      "language": "python",
+      "kind": "existing",
+      "split": "holdout",
+      "title": "Stable keyed join",
+      "trigger": "first_write",
+      "requirements": [
+        "data 含 left 和 right 记录数组，每项含 key 和 value。初始执行内连接，返回 [key,leftValue,rightValue] 数组，左侧顺序优先，右侧顺序次之。",
+        "修复重复右键只保留一条的问题，重复键必须形成笛卡尔积。"
+      ],
+      "correction": "改为左连接：没有匹配的左项也输出一条，其 rightValue 为 null。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-join: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "match",
+          "group": "core",
+          "input": {
+            "data": {
+              "left": [
+                {
+                  "key": "a",
+                  "value": 1
+                }
+              ],
+              "right": [
+                {
+                  "key": "a",
+                  "value": 2
+                }
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": [
+            [
+              "a",
+              1,
+              2
+            ]
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "duplicates",
+          "group": "core",
+          "input": {
+            "data": {
+              "left": [
+                {
+                  "key": "a",
+                  "value": 1
+                }
+              ],
+              "right": [
+                {
+                  "key": "a",
+                  "value": 2
+                },
+                {
+                  "key": "a",
+                  "value": 3
+                }
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": [
+            [
+              "a",
+              1,
+              2
+            ],
+            [
+              "a",
+              1,
+              3
+            ]
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "missing",
+          "group": "correction",
+          "input": {
+            "data": {
+              "left": [
+                {
+                  "key": "x",
+                  "value": 1
+                }
+              ],
+              "right": []
+            },
+            "op": "solve"
+          },
+          "expected": [
+            [
+              "x",
+              1,
+              null
+            ]
+          ],
+          "before": [],
+          "public": true
+        },
+        {
+          "id": "mixed",
+          "group": "correction",
+          "input": {
+            "data": {
+              "left": [
+                {
+                  "key": "b",
+                  "value": 1
+                },
+                {
+                  "key": "a",
+                  "value": 2
+                }
+              ],
+              "right": [
+                {
+                  "key": "a",
+                  "value": 3
+                }
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": [
+            [
+              "b",
+              1,
+              null
+            ],
+            [
+              "a",
+              2,
+              3
+            ]
+          ],
+          "before": [
+            [
+              "a",
+              2,
+              3
+            ]
+          ],
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": {
+              "left": [],
+              "right": []
+            },
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "null-value",
+          "group": "edge",
+          "input": {
+            "data": {
+              "left": [
+                {
+                  "key": 1,
+                  "value": null
+                }
+              ],
+              "right": [
+                {
+                  "key": 1,
+                  "value": null
+                }
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": [
+            [
+              1,
+              null,
+              null
+            ]
+          ],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-layers",
+      "language": "python",
+      "kind": "new",
+      "split": "holdout",
+      "title": "Layered configuration",
+      "trigger": "first_write",
+      "requirements": [
+        "data 是对象数组，依次递归合并对象。非对象值覆盖旧值，数组整体覆盖。初始规则 null 删除该键。",
+        "返回合并后的对象，不修改输入对象。"
+      ],
+      "correction": "null 不再删除键，而是作为普通值保留。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-layers: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "nested",
+          "group": "core",
+          "input": {
+            "data": [
+              {
+                "a": {
+                  "x": 1
+                }
+              },
+              {
+                "a": {
+                  "y": 2
+                }
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": {
+            "a": {
+              "x": 1,
+              "y": 2
+            }
+          },
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "array",
+          "group": "core",
+          "input": {
+            "data": [
+              {
+                "a": [
+                  1
+                ]
+              },
+              {
+                "a": [
+                  2,
+                  3
+                ]
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": {
+            "a": [
+              2,
+              3
+            ]
+          },
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "null",
+          "group": "correction",
+          "input": {
+            "data": [
+              {
+                "a": 1
+              },
+              {
+                "a": null
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": {
+            "a": null
+          },
+          "before": {},
+          "public": true
+        },
+        {
+          "id": "nested-null",
+          "group": "correction",
+          "input": {
+            "data": [
+              {
+                "a": {
+                  "x": 1
+                }
+              },
+              {
+                "a": {
+                  "x": null
+                }
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": {
+            "a": {
+              "x": null
+            }
+          },
+          "before": {
+            "a": {}
+          },
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": [],
+            "op": "solve"
+          },
+          "expected": {},
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "replace",
+          "group": "edge",
+          "input": {
+            "data": [
+              {
+                "a": 1
+              },
+              {
+                "a": {
+                  "x": 2
+                }
+              }
+            ],
+            "op": "solve"
+          },
+          "expected": {
+            "a": {
+              "x": 2
+            }
+          },
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-limit",
+      "language": "python",
+      "kind": "new",
+      "split": "holdout",
+      "title": "Sliding-window admission",
+      "trigger": "first_write",
+      "requirements": [
+        "data 含递增 times 整数数组、正整数 window 和正整数 limit。依次决定每次请求是否接纳，返回布尔数组；只有获准请求占额度。",
+        "初始窗口保留 age <= window 的历史请求。"
+      ],
+      "correction": "窗口改为只保留 age < window 的历史请求，恰好到边界的请求释放额度。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-limit: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "within",
+          "group": "core",
+          "input": {
+            "data": {
+              "limit": 2,
+              "times": [
+                0,
+                1,
+                2
+              ],
+              "window": 10
+            },
+            "op": "solve"
+          },
+          "expected": [
+            true,
+            true,
+            false
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "gap",
+          "group": "core",
+          "input": {
+            "data": {
+              "limit": 1,
+              "times": [
+                0,
+                20
+              ],
+              "window": 10
+            },
+            "op": "solve"
+          },
+          "expected": [
+            true,
+            true
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "boundary",
+          "group": "correction",
+          "input": {
+            "data": {
+              "limit": 1,
+              "times": [
+                0,
+                10
+              ],
+              "window": 10
+            },
+            "op": "solve"
+          },
+          "expected": [
+            true,
+            true
+          ],
+          "before": [
+            true,
+            false
+          ],
+          "public": true
+        },
+        {
+          "id": "repeat-boundary",
+          "group": "correction",
+          "input": {
+            "data": {
+              "limit": 1,
+              "times": [
+                0,
+                5,
+                10
+              ],
+              "window": 5
+            },
+            "op": "solve"
+          },
+          "expected": [
+            true,
+            true,
+            true
+          ],
+          "before": [
+            true,
+            false,
+            true
+          ],
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": {
+              "limit": 1,
+              "times": [],
+              "window": 2
+            },
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "same",
+          "group": "edge",
+          "input": {
+            "data": {
+              "limit": 2,
+              "times": [
+                0,
+                0,
+                0
+              ],
+              "window": 1
+            },
+            "op": "solve"
+          },
+          "expected": [
+            true,
+            true,
+            false
+          ],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-lines",
+      "language": "typescript",
+      "kind": "new",
+      "split": "holdout",
+      "title": "Chunked line splitting",
+      "trigger": "active_check",
+      "requirements": [
+        "data 是字符串分块数组，拼接后按 LF 或 CRLF 拆行；CRLF 可以跨分块，孤立 CR 保留。",
+        "初始规则保留尾部空行，空输入等价于空字符串，返回 [\"\"]。"
+      ],
+      "correction": "只删除由最后一个换行分隔符产生的那一个尾部空字符串；空输入仍返回 [\"\"]，中间空行保留。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-lines: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "plain",
+          "group": "core",
+          "input": {
+            "data": [
+              "ab",
+              "cd"
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            "abcd"
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "middle",
+          "group": "core",
+          "input": {
+            "data": [
+              "a\n\nb"
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            "a",
+            "",
+            "b"
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "tail",
+          "group": "correction",
+          "input": {
+            "data": [
+              "a\n"
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            "a"
+          ],
+          "before": [
+            "a",
+            ""
+          ],
+          "public": true
+        },
+        {
+          "id": "crlf",
+          "group": "correction",
+          "input": {
+            "data": [
+              "a\r",
+              "\nb\r\n"
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            "a",
+            "b"
+          ],
+          "before": [
+            "a",
+            "b",
+            ""
+          ],
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": [],
+            "op": "solve"
+          },
+          "expected": [
+            ""
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "lone-cr",
+          "group": "edge",
+          "input": {
+            "data": [
+              "a\rb"
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            "a\rb"
+          ],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-median",
+      "language": "typescript",
+      "kind": "existing",
+      "split": "holdout",
+      "title": "Median with nullable data",
+      "trigger": "first_write",
+      "requirements": [
+        "data 是数字或 null 的数组，初始把 null 当作 0；返回中位数，偶数长度取中间两项的均值。",
+        "空数组返回 null；修复当前实现排序时按字符串排序的问题。"
+      ],
+      "correction": "null 改为忽略；忽略后没有数字时返回 null。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-median: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "numeric-sort",
+          "group": "core",
+          "input": {
+            "data": [
+              2,
+              10,
+              3
+            ],
+            "op": "solve"
+          },
+          "expected": 3,
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "even",
+          "group": "core",
+          "input": {
+            "data": [
+              1,
+              4
+            ],
+            "op": "solve"
+          },
+          "expected": 2.5,
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "nullable",
+          "group": "correction",
+          "input": {
+            "data": [
+              null,
+              4,
+              8
+            ],
+            "op": "solve"
+          },
+          "expected": 6,
+          "before": 4,
+          "public": true
+        },
+        {
+          "id": "all-null",
+          "group": "correction",
+          "input": {
+            "data": [
+              null,
+              null
+            ],
+            "op": "solve"
+          },
+          "expected": null,
+          "before": 0,
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": [],
+            "op": "solve"
+          },
+          "expected": null,
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "negative",
+          "group": "edge",
+          "input": {
+            "data": [
+              -5,
+              -1,
+              -3
+            ],
+            "op": "solve"
+          },
+          "expected": -3,
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-paths",
+      "language": "python",
+      "kind": "existing",
+      "split": "holdout",
+      "title": "Root-relative path normalization",
+      "trigger": "first_write",
+      "requirements": [
+        "data 是路径字符串，忽略重复 / 和 .，处理 ..，返回以 / 开头的规范化路径。",
+        "初始规则遇到越过根的 .. 时忽略该段；修复空路径应返回 / 的问题。"
+      ],
+      "correction": "任何试图越过根的 .. 都返回 {error:escape}，不能继续归一化。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-paths: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "normal",
+          "group": "core",
+          "input": {
+            "data": "a//b/../c",
+            "op": "solve"
+          },
+          "expected": "/a/c",
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "empty",
+          "group": "core",
+          "input": {
+            "data": "",
+            "op": "solve"
+          },
+          "expected": "/",
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "escape",
+          "group": "correction",
+          "input": {
+            "data": "../a",
+            "op": "solve"
+          },
+          "expected": {
+            "error": "escape"
+          },
+          "before": "/a",
+          "public": true
+        },
+        {
+          "id": "later",
+          "group": "correction",
+          "input": {
+            "data": "a/../../b",
+            "op": "solve"
+          },
+          "expected": {
+            "error": "escape"
+          },
+          "before": "/b",
+          "public": false
+        },
+        {
+          "id": "root",
+          "group": "edge",
+          "input": {
+            "data": "/./",
+            "op": "solve"
+          },
+          "expected": "/",
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "literal",
+          "group": "edge",
+          "input": {
+            "data": ".../x",
+            "op": "solve"
+          },
+          "expected": "/.../x",
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-reach",
+      "language": "rust",
+      "kind": "new",
+      "split": "holdout",
+      "title": "Graph reachability",
+      "trigger": "active_check",
+      "requirements": [
+        "data 含 edges 有向边数组和 start 字符串。返回可达节点的广度优先访问顺序，含 start；邻居初始按字典序遍历。",
+        "重复边和环不能导致重复输出。"
+      ],
+      "correction": "邻居改为按边首次出现在输入中的次序遍历，其余 BFS 规则不变。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-reach: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "chain",
+          "group": "core",
+          "input": {
+            "data": {
+              "edges": [
+                [
+                  "a",
+                  "b"
+                ],
+                [
+                  "b",
+                  "c"
+                ]
+              ],
+              "start": "a"
+            },
+            "op": "solve"
+          },
+          "expected": [
+            "a",
+            "b",
+            "c"
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "cycle",
+          "group": "core",
+          "input": {
+            "data": {
+              "edges": [
+                [
+                  "a",
+                  "b"
+                ],
+                [
+                  "b",
+                  "a"
+                ]
+              ],
+              "start": "a"
+            },
+            "op": "solve"
+          },
+          "expected": [
+            "a",
+            "b"
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "neighbors",
+          "group": "correction",
+          "input": {
+            "data": {
+              "edges": [
+                [
+                  "a",
+                  "z"
+                ],
+                [
+                  "a",
+                  "b"
+                ]
+              ],
+              "start": "a"
+            },
+            "op": "solve"
+          },
+          "expected": [
+            "a",
+            "z",
+            "b"
+          ],
+          "before": [
+            "a",
+            "b",
+            "z"
+          ],
+          "public": true
+        },
+        {
+          "id": "layers",
+          "group": "correction",
+          "input": {
+            "data": {
+              "edges": [
+                [
+                  "a",
+                  "z"
+                ],
+                [
+                  "a",
+                  "b"
+                ],
+                [
+                  "z",
+                  "x"
+                ],
+                [
+                  "b",
+                  "y"
+                ]
+              ],
+              "start": "a"
+            },
+            "op": "solve"
+          },
+          "expected": [
+            "a",
+            "z",
+            "b",
+            "x",
+            "y"
+          ],
+          "before": [
+            "a",
+            "b",
+            "z",
+            "y",
+            "x"
+          ],
+          "public": false
+        },
+        {
+          "id": "alone",
+          "group": "edge",
+          "input": {
+            "data": {
+              "edges": [],
+              "start": "a"
+            },
+            "op": "solve"
+          },
+          "expected": [
+            "a"
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "duplicate",
+          "group": "edge",
+          "input": {
+            "data": {
+              "edges": [
+                [
+                  "a",
+                  "b"
+                ],
+                [
+                  "a",
+                  "b"
+                ]
+              ],
+              "start": "a"
+            },
+            "op": "solve"
+          },
+          "expected": [
+            "a",
+            "b"
+          ],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-reservations",
+      "language": "rust",
+      "kind": "existing",
+      "split": "holdout",
+      "title": "Atomic reservation batches",
+      "trigger": "first_write",
+      "requirements": [
+        "data 含 stock 非负整数和 batches 二维非负整数数组。每批申请依次扣库存；有一项不足则整批回滚并输出 rejected，否则输出剩余库存。",
+        "修复当前实现在拒绝批次后仍保留部分扣减的问题。"
+      ],
+      "correction": "拒绝后不再回滚整批，而是跳过不足的单项、继续批内其余项；每批始终输出剩余库存，不再输出 rejected。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-reservations: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "enough",
+          "group": "core",
+          "input": {
+            "data": {
+              "batches": [
+                [
+                  2,
+                  3
+                ],
+                [
+                  1
+                ]
+              ],
+              "stock": 10
+            },
+            "op": "solve"
+          },
+          "expected": [
+            5,
+            4
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "empty-batch",
+          "group": "core",
+          "input": {
+            "data": {
+              "batches": [
+                []
+              ],
+              "stock": 4
+            },
+            "op": "solve"
+          },
+          "expected": [
+            4
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "partial",
+          "group": "correction",
+          "input": {
+            "data": {
+              "batches": [
+                [
+                  2,
+                  9,
+                  1
+                ]
+              ],
+              "stock": 5
+            },
+            "op": "solve"
+          },
+          "expected": [
+            2
+          ],
+          "before": [
+            "rejected"
+          ],
+          "public": true
+        },
+        {
+          "id": "continue",
+          "group": "correction",
+          "input": {
+            "data": {
+              "batches": [
+                [
+                  2,
+                  8
+                ],
+                [
+                  3
+                ]
+              ],
+              "stock": 5
+            },
+            "op": "solve"
+          },
+          "expected": [
+            3,
+            0
+          ],
+          "before": [
+            "rejected",
+            2
+          ],
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": {
+              "batches": [],
+              "stock": 0
+            },
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "zero",
+          "group": "edge",
+          "input": {
+            "data": {
+              "batches": [
+                [
+                  0
+                ]
+              ],
+              "stock": 0
+            },
+            "op": "solve"
+          },
+          "expected": [
+            0
+          ],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-rotate",
+      "language": "rust",
+      "kind": "new",
+      "split": "holdout",
+      "title": "Rectangular matrix rotation",
+      "trigger": "active_check",
+      "requirements": [
+        "data 是矩形二维整数数组。初始顺时针旋转 90 度并返回新矩阵。",
+        "空矩阵返回空数组，非空矩阵每行至少一项。"
+      ],
+      "correction": "方向改为逆时针旋转 90 度；仍支持非正方形矩阵。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-rotate: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "single",
+          "group": "core",
+          "input": {
+            "data": [
+              [
+                7
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            [
+              7
+            ]
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "equal",
+          "group": "core",
+          "input": {
+            "data": [
+              [
+                1,
+                1
+              ],
+              [
+                1,
+                1
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "square",
+          "group": "correction",
+          "input": {
+            "data": [
+              [
+                1,
+                2
+              ],
+              [
+                3,
+                4
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            [
+              2,
+              4
+            ],
+            [
+              1,
+              3
+            ]
+          ],
+          "before": [
+            [
+              3,
+              1
+            ],
+            [
+              4,
+              2
+            ]
+          ],
+          "public": true
+        },
+        {
+          "id": "rectangle",
+          "group": "correction",
+          "input": {
+            "data": [
+              [
+                1,
+                2,
+                3
+              ],
+              [
+                4,
+                5,
+                6
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            [
+              3,
+              6
+            ],
+            [
+              2,
+              5
+            ],
+            [
+              1,
+              4
+            ]
+          ],
+          "before": [
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              2
+            ],
+            [
+              6,
+              3
+            ]
+          ],
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": [],
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "column",
+          "group": "edge",
+          "input": {
+            "data": [
+              [
+                1
+              ],
+              [
+                2
+              ]
+            ],
+            "op": "solve"
+          },
+          "expected": [
+            [
+              1,
+              2
+            ]
+          ],
+          "before": [
+            [
+              2,
+              1
+            ]
+          ],
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-router",
+      "language": "typescript",
+      "kind": "existing",
+      "split": "holdout",
+      "title": "Static and parameter routes",
+      "trigger": "active_check",
+      "requirements": [
+        "data 含 routes 字符串数组和 path；路径按 / 分段，:name 匹配一个非空段，静态段必须相等。初始采用第一条匹配路由。",
+        "返回 {route,params}，无匹配返回 null；修复只比较段数而不比较静态段的问题。"
+      ],
+      "correction": "匹配路由中静态段更多者优先，静态段数相同仍按输入顺序。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-router: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "parameter",
+          "group": "core",
+          "input": {
+            "data": {
+              "path": "/users/42",
+              "routes": [
+                "/users/:id"
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": {
+            "params": {
+              "id": "42"
+            },
+            "route": "/users/:id"
+          },
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "missing",
+          "group": "core",
+          "input": {
+            "data": {
+              "path": "/b",
+              "routes": [
+                "/a"
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": null,
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "specific",
+          "group": "correction",
+          "input": {
+            "data": {
+              "path": "/new",
+              "routes": [
+                "/:id",
+                "/new"
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": {
+            "params": {},
+            "route": "/new"
+          },
+          "before": {
+            "params": {
+              "id": "new"
+            },
+            "route": "/:id"
+          },
+          "public": true
+        },
+        {
+          "id": "two-segments",
+          "group": "correction",
+          "input": {
+            "data": {
+              "path": "/x/y",
+              "routes": [
+                "/:a/:b",
+                "/x/:id"
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": {
+            "params": {
+              "id": "y"
+            },
+            "route": "/x/:id"
+          },
+          "before": {
+            "params": {
+              "a": "x",
+              "b": "y"
+            },
+            "route": "/:a/:b"
+          },
+          "public": false
+        },
+        {
+          "id": "no-routes",
+          "group": "edge",
+          "input": {
+            "data": {
+              "path": "/",
+              "routes": []
+            },
+            "op": "solve"
+          },
+          "expected": null,
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "root",
+          "group": "edge",
+          "input": {
+            "data": {
+              "path": "/",
+              "routes": [
+                "/"
+              ]
+            },
+            "op": "solve"
+          },
+          "expected": {
+            "params": {},
+            "route": "/"
+          },
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-runs",
+      "language": "rust",
+      "kind": "new",
+      "split": "holdout",
+      "title": "Unicode run encoding",
+      "trigger": "first_write",
+      "requirements": [
+        "data 是字符串，按 Unicode 标量值进行游程编码，返回 [字符,次数] 数组。初始每个连续游程只输出一项。",
+        "空字符串返回空数组，不能按 UTF-8 字节拆分字符。"
+      ],
+      "correction": "单项次数最多为 3；更长的游程拆为相邻的多项，前面的项尽量填满。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-runs: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "short",
+          "group": "core",
+          "input": {
+            "data": "aab",
+            "op": "solve"
+          },
+          "expected": [
+            [
+              "a",
+              2
+            ],
+            [
+              "b",
+              1
+            ]
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "unicode",
+          "group": "core",
+          "input": {
+            "data": "中中a",
+            "op": "solve"
+          },
+          "expected": [
+            [
+              "中",
+              2
+            ],
+            [
+              "a",
+              1
+            ]
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "split",
+          "group": "correction",
+          "input": {
+            "data": "aaaa",
+            "op": "solve"
+          },
+          "expected": [
+            [
+              "a",
+              3
+            ],
+            [
+              "a",
+              1
+            ]
+          ],
+          "before": [
+            [
+              "a",
+              4
+            ]
+          ],
+          "public": true
+        },
+        {
+          "id": "six",
+          "group": "correction",
+          "input": {
+            "data": "xxxxxx",
+            "op": "solve"
+          },
+          "expected": [
+            [
+              "x",
+              3
+            ],
+            [
+              "x",
+              3
+            ]
+          ],
+          "before": [
+            [
+              "x",
+              6
+            ]
+          ],
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": "",
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "emoji",
+          "group": "edge",
+          "input": {
+            "data": "😀😀",
+            "op": "solve"
+          },
+          "expected": [
+            [
+              "😀",
+              2
+            ]
+          ],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-slice",
+      "language": "rust",
+      "kind": "new",
+      "split": "holdout",
+      "title": "Offset slicing",
+      "trigger": "first_write",
+      "requirements": [
+        "data 含 items 数组、整数 offset 和非负整数 limit。返回从 offset 起最多 limit 个元素；初始负 offset 按 0 处理。",
+        "offset 超出长度或 limit=0 返回空数组，不得整数溢出。"
+      ],
+      "correction": "负 offset 不再截断到 0，而是返回 {error:offset}。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-slice: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "normal",
+          "group": "core",
+          "input": {
+            "data": {
+              "items": [
+                1,
+                2,
+                3
+              ],
+              "limit": 2,
+              "offset": 1
+            },
+            "op": "solve"
+          },
+          "expected": [
+            2,
+            3
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "zero-limit",
+          "group": "core",
+          "input": {
+            "data": {
+              "items": [
+                1
+              ],
+              "limit": 0,
+              "offset": 0
+            },
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "negative",
+          "group": "correction",
+          "input": {
+            "data": {
+              "items": [
+                1,
+                2
+              ],
+              "limit": 1,
+              "offset": -1
+            },
+            "op": "solve"
+          },
+          "expected": {
+            "error": "offset"
+          },
+          "before": [
+            1
+          ],
+          "public": true
+        },
+        {
+          "id": "negative-empty",
+          "group": "correction",
+          "input": {
+            "data": {
+              "items": [],
+              "limit": 3,
+              "offset": -9
+            },
+            "op": "solve"
+          },
+          "expected": {
+            "error": "offset"
+          },
+          "before": [],
+          "public": false
+        },
+        {
+          "id": "beyond",
+          "group": "edge",
+          "input": {
+            "data": {
+              "items": [
+                1
+              ],
+              "limit": 999999,
+              "offset": 999999
+            },
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "empty",
+          "group": "edge",
+          "input": {
+            "data": {
+              "items": [],
+              "limit": 2,
+              "offset": 0
+            },
+            "op": "solve"
+          },
+          "expected": [],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-tree",
+      "language": "typescript",
+      "kind": "new",
+      "split": "holdout",
+      "title": "Tree flattening",
+      "trigger": "first_write",
+      "requirements": [
+        "data 是 {name,children?} 树。按前序遍历输出每个节点的路径字符串数组，名称用 / 连接。",
+        "初始输出全部节点，名称不含 /，缺少 children 视为空数组。"
+      ],
+      "correction": "改为只输出叶节点路径；路径仍包含所有祖先名称。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-tree: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "leaf",
+          "group": "core",
+          "input": {
+            "data": {
+              "name": "x"
+            },
+            "op": "solve"
+          },
+          "expected": [
+            "x"
+          ],
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "empty-child",
+          "group": "core",
+          "input": {
+            "data": {
+              "children": [],
+              "name": "x"
+            },
+            "op": "solve"
+          },
+          "expected": [
+            "x"
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "branch",
+          "group": "correction",
+          "input": {
+            "data": {
+              "children": [
+                {
+                  "name": "b"
+                },
+                {
+                  "name": "c"
+                }
+              ],
+              "name": "a"
+            },
+            "op": "solve"
+          },
+          "expected": [
+            "a/b",
+            "a/c"
+          ],
+          "before": [
+            "a",
+            "a/b",
+            "a/c"
+          ],
+          "public": true
+        },
+        {
+          "id": "deep",
+          "group": "correction",
+          "input": {
+            "data": {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "name": "c"
+                    }
+                  ],
+                  "name": "b"
+                }
+              ],
+              "name": "a"
+            },
+            "op": "solve"
+          },
+          "expected": [
+            "a/b/c"
+          ],
+          "before": [
+            "a",
+            "a/b",
+            "a/b/c"
+          ],
+          "public": false
+        },
+        {
+          "id": "unicode",
+          "group": "edge",
+          "input": {
+            "data": {
+              "name": "中"
+            },
+            "op": "solve"
+          },
+          "expected": [
+            "中"
+          ],
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "empty-name",
+          "group": "edge",
+          "input": {
+            "data": {
+              "name": ""
+            },
+            "op": "solve"
+          },
+          "expected": [
+            ""
+          ],
+          "before": null,
+          "public": false
+        }
+      ]
+    },
+    {
+      "id": "hold-versions",
+      "language": "rust",
+      "kind": "existing",
+      "split": "holdout",
+      "title": "Numeric version comparison",
+      "trigger": "active_check",
+      "requirements": [
+        "data 是两个点分非负整数版本字符串数组。比较数字段，返回 -1、0 或 1；初始相同前缀时较短版本更小。",
+        "修复按字符串比较数字段的问题，不包含 prerelease 或 metadata。"
+      ],
+      "correction": "末尾缺省段视为 0，因此 1、1.0、1.0.0 等价。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+      "notes": "Caller notes for hold-versions: preserve this file byte for byte.\n",
+      "checks": [
+        {
+          "id": "numeric",
+          "group": "core",
+          "input": {
+            "data": [
+              "1.10",
+              "1.2"
+            ],
+            "op": "solve"
+          },
+          "expected": 1,
+          "before": null,
+          "public": true
+        },
+        {
+          "id": "different",
+          "group": "core",
+          "input": {
+            "data": [
+              "2",
+              "3"
+            ],
+            "op": "solve"
+          },
+          "expected": -1,
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "zero-tail",
+          "group": "correction",
+          "input": {
+            "data": [
+              "1",
+              "1.0"
+            ],
+            "op": "solve"
+          },
+          "expected": 0,
+          "before": -1,
+          "public": true
+        },
+        {
+          "id": "long-zero",
+          "group": "correction",
+          "input": {
+            "data": [
+              "2.0.0",
+              "2"
+            ],
+            "op": "solve"
+          },
+          "expected": 0,
+          "before": 1,
+          "public": false
+        },
+        {
+          "id": "equal",
+          "group": "edge",
+          "input": {
+            "data": [
+              "0",
+              "0"
+            ],
+            "op": "solve"
+          },
+          "expected": 0,
+          "before": null,
+          "public": false
+        },
+        {
+          "id": "nonzero-tail",
+          "group": "edge",
+          "input": {
+            "data": [
+              "1",
+              "1.0.1"
+            ],
+            "op": "solve"
+          },
+          "expected": -1,
+          "before": null,
+          "public": false
+        }
+      ]
+    }
+  ]
+}

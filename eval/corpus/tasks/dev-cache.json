@@ -1,0 +1,170 @@
+{
+  "id": "dev-cache",
+  "language": "python",
+  "kind": "existing",
+  "split": "development",
+  "title": "TTL cache simulation",
+  "trigger": "active_check",
+  "requirements": [
+    "data 含 ttl 非负整数和 ops 数组。操作为 [set,key,value,time] 或 [get,key,time]。仅 get 产生输出；缺失返回 null。每条输入独立从空缓存开始。",
+    "修复键缺失时抛异常的问题。初始规则 age > ttl 才过期。"
+  ],
+  "correction": "过期边界改为 age >= ttl；设置值不会产生输出，其他行为不变。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for dev-cache: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "hit",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "ttl": 5,
+          "ops": [
+            [
+              "set",
+              "a",
+              7,
+              0
+            ],
+            [
+              "get",
+              "a",
+              4
+            ]
+          ]
+        }
+      },
+      "expected": [
+        7
+      ],
+      "public": true
+    },
+    {
+      "id": "missing",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "ttl": 5,
+          "ops": [
+            [
+              "get",
+              "x",
+              0
+            ]
+          ]
+        }
+      },
+      "expected": [
+        null
+      ],
+      "public": false
+    },
+    {
+      "id": "boundary",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "ttl": 5,
+          "ops": [
+            [
+              "set",
+              "a",
+              1,
+              0
+            ],
+            [
+              "get",
+              "a",
+              5
+            ]
+          ]
+        }
+      },
+      "expected": [
+        null
+      ],
+      "public": true,
+      "before": [
+        1
+      ]
+    },
+    {
+      "id": "zero-ttl",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "ttl": 0,
+          "ops": [
+            [
+              "set",
+              "a",
+              2,
+              3
+            ],
+            [
+              "get",
+              "a",
+              3
+            ]
+          ]
+        }
+      },
+      "expected": [
+        null
+      ],
+      "public": false,
+      "before": [
+        2
+      ]
+    },
+    {
+      "id": "overwrite",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "ttl": 4,
+          "ops": [
+            [
+              "set",
+              "a",
+              1,
+              0
+            ],
+            [
+              "set",
+              "a",
+              3,
+              4
+            ],
+            [
+              "get",
+              "a",
+              6
+            ]
+          ]
+        }
+      },
+      "expected": [
+        3
+      ],
+      "public": false
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "ttl": 3,
+          "ops": []
+        }
+      },
+      "expected": [],
+      "public": false
+    }
+  ]
+}

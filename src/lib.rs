@@ -2,6 +2,7 @@
 pub mod cli;
 pub mod config;
 pub mod domain;
+pub mod eval;
 pub mod extensions;
 pub mod model;
 pub mod runtime;

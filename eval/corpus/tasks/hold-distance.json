@@ -1,0 +1,96 @@
+{
+  "id": "hold-distance",
+  "language": "typescript",
+  "kind": "new",
+  "split": "holdout",
+  "title": "Weighted edit distance",
+  "trigger": "first_write",
+  "requirements": [
+    "data 是两个 ASCII 字符串。插入和删除成本为 1，初始替换成本为 2；返回最小编辑成本整数。",
+    "必须处理空字符串和重复字符。"
+  ],
+  "correction": "替换成本改为 1，其余成本不变。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-distance: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "same",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          "abc",
+          "abc"
+        ]
+      },
+      "expected": 0,
+      "public": true
+    },
+    {
+      "id": "insert",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          "a",
+          "ab"
+        ]
+      },
+      "expected": 1,
+      "public": false
+    },
+    {
+      "id": "replace",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          "a",
+          "b"
+        ]
+      },
+      "expected": 1,
+      "public": true,
+      "before": 2
+    },
+    {
+      "id": "classic",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          "kitten",
+          "sitting"
+        ]
+      },
+      "expected": 3,
+      "public": false,
+      "before": 5
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": [
+          "",
+          "abc"
+        ]
+      },
+      "expected": 3,
+      "public": false
+    },
+    {
+      "id": "repeat",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": [
+          "aaa",
+          "aa"
+        ]
+      },
+      "expected": 1,
+      "public": false
+    }
+  ]
+}

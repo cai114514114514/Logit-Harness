@@ -1,0 +1,136 @@
+{
+  "id": "hold-allocation",
+  "language": "python",
+  "kind": "new",
+  "split": "holdout",
+  "title": "Weighted integer allocation",
+  "trigger": "active_check",
+  "requirements": [
+    "data 含非负整数 total 和正整数 weights 数组；按比例分配整数，先向下取整，剩余单位初始按索引从小到大轮流分配。",
+    "返回分配数组，总和等于 total；weights 非空。"
+  ],
+  "correction": "剩余单位改为按分数余数从大到小分配，余数相同按索引升序。每个位置最多补一单位。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-allocation: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "exact",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "total": 10,
+          "weights": [
+            1,
+            1
+          ]
+        }
+      },
+      "expected": [
+        5,
+        5
+      ],
+      "public": true
+    },
+    {
+      "id": "one",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "total": 7,
+          "weights": [
+            9
+          ]
+        }
+      },
+      "expected": [
+        7
+      ],
+      "public": false
+    },
+    {
+      "id": "remainder",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "total": 2,
+          "weights": [
+            1,
+            2
+          ]
+        }
+      },
+      "expected": [
+        1,
+        1
+      ],
+      "public": false,
+      "before": [
+        1,
+        1
+      ]
+    },
+    {
+      "id": "priority",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "total": 1,
+          "weights": [
+            1,
+            3
+          ]
+        }
+      },
+      "expected": [
+        0,
+        1
+      ],
+      "public": true,
+      "before": [
+        1,
+        0
+      ]
+    },
+    {
+      "id": "zero",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "total": 0,
+          "weights": [
+            1,
+            2
+          ]
+        }
+      },
+      "expected": [
+        0,
+        0
+      ],
+      "public": false
+    },
+    {
+      "id": "tie",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "total": 1,
+          "weights": [
+            1,
+            1
+          ]
+        }
+      },
+      "expected": [
+        1,
+        0
+      ],
+      "public": false
+    }
+  ]
+}

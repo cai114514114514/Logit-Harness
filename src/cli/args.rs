@@ -51,8 +51,8 @@ pub enum Command {
         json: bool,
     },
     Eval {
-        #[arg(default_value = "status")]
-        action: String,
+        #[command(subcommand)]
+        command: Option<crate::eval::cli::Command>,
     },
     #[command(name = "_serve", hide = true)]
     Serve {

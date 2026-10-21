@@ -1,0 +1,129 @@
+{
+  "id": "hold-runs",
+  "language": "rust",
+  "kind": "new",
+  "split": "holdout",
+  "title": "Unicode run encoding",
+  "trigger": "first_write",
+  "requirements": [
+    "data 是字符串，按 Unicode 标量值进行游程编码，返回 [字符,次数] 数组。初始每个连续游程只输出一项。",
+    "空字符串返回空数组，不能按 UTF-8 字节拆分字符。"
+  ],
+  "correction": "单项次数最多为 3；更长的游程拆为相邻的多项，前面的项尽量填满。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-runs: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "short",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": "aab"
+      },
+      "expected": [
+        [
+          "a",
+          2
+        ],
+        [
+          "b",
+          1
+        ]
+      ],
+      "public": true
+    },
+    {
+      "id": "unicode",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": "中中a"
+      },
+      "expected": [
+        [
+          "中",
+          2
+        ],
+        [
+          "a",
+          1
+        ]
+      ],
+      "public": false
+    },
+    {
+      "id": "split",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": "aaaa"
+      },
+      "expected": [
+        [
+          "a",
+          3
+        ],
+        [
+          "a",
+          1
+        ]
+      ],
+      "public": true,
+      "before": [
+        [
+          "a",
+          4
+        ]
+      ]
+    },
+    {
+      "id": "six",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": "xxxxxx"
+      },
+      "expected": [
+        [
+          "x",
+          3
+        ],
+        [
+          "x",
+          3
+        ]
+      ],
+      "public": false,
+      "before": [
+        [
+          "x",
+          6
+        ]
+      ]
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": ""
+      },
+      "expected": [],
+      "public": false
+    },
+    {
+      "id": "emoji",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": "😀😀"
+      },
+      "expected": [
+        [
+          "😀",
+          2
+        ]
+      ],
+      "public": false
+    }
+  ]
+}

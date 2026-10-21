@@ -1,0 +1,176 @@
+{
+  "id": "hold-dedup",
+  "language": "python",
+  "kind": "new",
+  "split": "holdout",
+  "title": "Record deduplication",
+  "trigger": "active_check",
+  "requirements": [
+    "data 是含字符串 key 和任意 JSON value 的记录数组；key 用 Python casefold 规范化后去重。初始保留每组第一条记录。",
+    "输出原始记录；各组顺序由规范化 key 首次出现位置决定。"
+  ],
+  "correction": "每组改为保留最后一条记录，但各组的输出顺序仍由首次出现位置决定。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-dedup: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "distinct",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "key": "A",
+            "value": 1
+          },
+          {
+            "key": "B",
+            "value": 2
+          }
+        ]
+      },
+      "expected": [
+        {
+          "key": "A",
+          "value": 1
+        },
+        {
+          "key": "B",
+          "value": 2
+        }
+      ],
+      "public": true
+    },
+    {
+      "id": "one",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "key": "x",
+            "value": null
+          }
+        ]
+      },
+      "expected": [
+        {
+          "key": "x",
+          "value": null
+        }
+      ],
+      "public": false
+    },
+    {
+      "id": "duplicate",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "key": "A",
+            "value": 1
+          },
+          {
+            "key": "a",
+            "value": 2
+          }
+        ]
+      },
+      "expected": [
+        {
+          "key": "a",
+          "value": 2
+        }
+      ],
+      "public": true,
+      "before": [
+        {
+          "key": "A",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "id": "ordering",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "key": "B",
+            "value": 1
+          },
+          {
+            "key": "A",
+            "value": 2
+          },
+          {
+            "key": "b",
+            "value": 3
+          }
+        ]
+      },
+      "expected": [
+        {
+          "key": "b",
+          "value": 3
+        },
+        {
+          "key": "A",
+          "value": 2
+        }
+      ],
+      "public": false,
+      "before": [
+        {
+          "key": "B",
+          "value": 1
+        },
+        {
+          "key": "A",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": []
+      },
+      "expected": [],
+      "public": false
+    },
+    {
+      "id": "unicode",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "key": "Straße",
+            "value": 1
+          },
+          {
+            "key": "STRASSE",
+            "value": 1
+          }
+        ]
+      },
+      "expected": [
+        {
+          "key": "STRASSE",
+          "value": 1
+        }
+      ],
+      "public": false,
+      "before": [
+        {
+          "key": "Straße",
+          "value": 1
+        }
+      ]
+    }
+  ]
+}

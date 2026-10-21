@@ -1,0 +1,78 @@
+{
+  "id": "hold-brackets",
+  "language": "python",
+  "kind": "existing",
+  "split": "holdout",
+  "title": "Delimiter validation",
+  "trigger": "active_check",
+  "requirements": [
+    "data 是字符串，检查 () [] {} 是否正确嵌套。初始忽略双引号字符串内的括号，支持反斜杠转义；未闭合字符串返回 false。",
+    "修复当前实现不区分括号种类的问题。"
+  ],
+  "correction": "增加忽略 // 行注释；注释在换行结束。字符串中的 // 不是注释。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-brackets: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "balanced",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": "[{}()]"
+      },
+      "expected": true,
+      "public": true
+    },
+    {
+      "id": "mismatch",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": "([)]"
+      },
+      "expected": false,
+      "public": false
+    },
+    {
+      "id": "comment",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": "() // ["
+      },
+      "expected": true,
+      "public": true,
+      "before": false
+    },
+    {
+      "id": "next-line",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": "// }\n[]"
+      },
+      "expected": true,
+      "public": false,
+      "before": false
+    },
+    {
+      "id": "quoted",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": "\"[//]\"{}"
+      },
+      "expected": true,
+      "public": false
+    },
+    {
+      "id": "unclosed",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": "\"abc"
+      },
+      "expected": false,
+      "public": false
+    }
+  ]
+}

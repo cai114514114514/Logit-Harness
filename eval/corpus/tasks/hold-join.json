@@ -1,0 +1,195 @@
+{
+  "id": "hold-join",
+  "language": "python",
+  "kind": "existing",
+  "split": "holdout",
+  "title": "Stable keyed join",
+  "trigger": "first_write",
+  "requirements": [
+    "data 含 left 和 right 记录数组，每项含 key 和 value。初始执行内连接，返回 [key,leftValue,rightValue] 数组，左侧顺序优先，右侧顺序次之。",
+    "修复重复右键只保留一条的问题，重复键必须形成笛卡尔积。"
+  ],
+  "correction": "改为左连接：没有匹配的左项也输出一条，其 rightValue 为 null。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-join: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "match",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "left": [
+            {
+              "key": "a",
+              "value": 1
+            }
+          ],
+          "right": [
+            {
+              "key": "a",
+              "value": 2
+            }
+          ]
+        }
+      },
+      "expected": [
+        [
+          "a",
+          1,
+          2
+        ]
+      ],
+      "public": true
+    },
+    {
+      "id": "duplicates",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "left": [
+            {
+              "key": "a",
+              "value": 1
+            }
+          ],
+          "right": [
+            {
+              "key": "a",
+              "value": 2
+            },
+            {
+              "key": "a",
+              "value": 3
+            }
+          ]
+        }
+      },
+      "expected": [
+        [
+          "a",
+          1,
+          2
+        ],
+        [
+          "a",
+          1,
+          3
+        ]
+      ],
+      "public": false
+    },
+    {
+      "id": "missing",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "left": [
+            {
+              "key": "x",
+              "value": 1
+            }
+          ],
+          "right": []
+        }
+      },
+      "expected": [
+        [
+          "x",
+          1,
+          null
+        ]
+      ],
+      "public": true,
+      "before": []
+    },
+    {
+      "id": "mixed",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "left": [
+            {
+              "key": "b",
+              "value": 1
+            },
+            {
+              "key": "a",
+              "value": 2
+            }
+          ],
+          "right": [
+            {
+              "key": "a",
+              "value": 3
+            }
+          ]
+        }
+      },
+      "expected": [
+        [
+          "b",
+          1,
+          null
+        ],
+        [
+          "a",
+          2,
+          3
+        ]
+      ],
+      "public": false,
+      "before": [
+        [
+          "a",
+          2,
+          3
+        ]
+      ]
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "left": [],
+          "right": []
+        }
+      },
+      "expected": [],
+      "public": false
+    },
+    {
+      "id": "null-value",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "left": [
+            {
+              "key": 1,
+              "value": null
+            }
+          ],
+          "right": [
+            {
+              "key": 1,
+              "value": null
+            }
+          ]
+        }
+      },
+      "expected": [
+        [
+          1,
+          null,
+          null
+        ]
+      ],
+      "public": false
+    }
+  ]
+}

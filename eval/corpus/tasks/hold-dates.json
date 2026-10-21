@@ -1,0 +1,78 @@
+{
+  "id": "hold-dates",
+  "language": "rust",
+  "kind": "existing",
+  "split": "holdout",
+  "title": "Civil date validation",
+  "trigger": "first_write",
+  "requirements": [
+    "data 是 YYYY-MM-DD 字符串，年份范围 0001..9999；严格验证格式和公历闰年。无效输入返回 null。",
+    "有效输入初始原样返回，修复把所有能被 4 整除的年份当作闰年的问题。"
+  ],
+  "correction": "有效日期改为返回 DD/MM/YYYY，验证规则不变。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-dates: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "invalid-century",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": "1900-02-29"
+      },
+      "expected": null,
+      "public": true
+    },
+    {
+      "id": "invalid-day",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": "2026-04-31"
+      },
+      "expected": null,
+      "public": false
+    },
+    {
+      "id": "ordinary",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": "2026-10-22"
+      },
+      "expected": "22/10/2026",
+      "public": true,
+      "before": "2026-10-22"
+    },
+    {
+      "id": "leap",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": "2000-02-29"
+      },
+      "expected": "29/02/2000",
+      "public": false,
+      "before": "2000-02-29"
+    },
+    {
+      "id": "format",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": "2026-1-01"
+      },
+      "expected": null,
+      "public": false
+    },
+    {
+      "id": "year-zero",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": "0000-01-01"
+      },
+      "expected": null,
+      "public": false
+    }
+  ]
+}

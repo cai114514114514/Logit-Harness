@@ -1,0 +1,145 @@
+{
+  "id": "dev-priority",
+  "language": "rust",
+  "kind": "existing",
+  "split": "development",
+  "title": "Stable priority ordering",
+  "trigger": "active_check",
+  "requirements": [
+    "data 是 {id,priority} 记录数组。初始按 priority 从大到小排序并返回 id 数组，相同优先级保持输入次序。",
+    "修复当前实现把同优先级项目按 id 排序的问题。"
+  ],
+  "correction": "优先级方向改为从小到大，相同优先级仍保持输入次序。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for dev-priority: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "ties",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "id": "z",
+            "priority": 2
+          },
+          {
+            "id": "a",
+            "priority": 2
+          }
+        ]
+      },
+      "expected": [
+        "z",
+        "a"
+      ],
+      "public": true
+    },
+    {
+      "id": "one",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "id": "x",
+            "priority": 1
+          }
+        ]
+      },
+      "expected": [
+        "x"
+      ],
+      "public": false
+    },
+    {
+      "id": "order",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "id": "a",
+            "priority": 3
+          },
+          {
+            "id": "b",
+            "priority": 1
+          }
+        ]
+      },
+      "expected": [
+        "b",
+        "a"
+      ],
+      "public": true,
+      "before": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "id": "negative",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "id": "a",
+            "priority": 0
+          },
+          {
+            "id": "b",
+            "priority": -1
+          },
+          {
+            "id": "c",
+            "priority": 2
+          }
+        ]
+      },
+      "expected": [
+        "b",
+        "a",
+        "c"
+      ],
+      "public": false,
+      "before": [
+        "c",
+        "a",
+        "b"
+      ]
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": []
+      },
+      "expected": [],
+      "public": false
+    },
+    {
+      "id": "zero-ties",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "id": "b",
+            "priority": 0
+          },
+          {
+            "id": "a",
+            "priority": 0
+          }
+        ]
+      },
+      "expected": [
+        "b",
+        "a"
+      ],
+      "public": false
+    }
+  ]
+}

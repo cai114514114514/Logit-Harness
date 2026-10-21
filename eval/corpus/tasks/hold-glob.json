@@ -1,0 +1,96 @@
+{
+  "id": "hold-glob",
+  "language": "rust",
+  "kind": "existing",
+  "split": "holdout",
+  "title": "Wildcard matching",
+  "trigger": "active_check",
+  "requirements": [
+    "data 含 pattern 和 text，仅含 ASCII；? 匹配任意一个字符，* 匹配任意长度（含零）的字符序列，全串匹配。",
+    "初始大小写敏感。修复当前实现不支持 * 的问题；没有转义语法。"
+  ],
+  "correction": "ASCII 字母改为忽略大小写比较，? 和 * 的语义不变。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-glob: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "star",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "pattern": "a*c",
+          "text": "abbbc"
+        }
+      },
+      "expected": true,
+      "public": true
+    },
+    {
+      "id": "question",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "pattern": "a?c",
+          "text": "abc"
+        }
+      },
+      "expected": true,
+      "public": false
+    },
+    {
+      "id": "case",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "pattern": "HELLO",
+          "text": "hello"
+        }
+      },
+      "expected": true,
+      "public": true,
+      "before": false
+    },
+    {
+      "id": "mixed",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "pattern": "A*Z",
+          "text": "abz"
+        }
+      },
+      "expected": true,
+      "public": false,
+      "before": false
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "pattern": "*",
+          "text": ""
+        }
+      },
+      "expected": true,
+      "public": false
+    },
+    {
+      "id": "mismatch",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "pattern": "a?",
+          "text": "a"
+        }
+      },
+      "expected": false,
+      "public": false
+    }
+  ]
+}

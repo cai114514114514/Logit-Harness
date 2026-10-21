@@ -4,5 +4,7 @@
 /artifacts/
 .DS_Store
 .env
+__pycache__/
+*.pyc
 *.sqlite-wal
 *.sqlite-shm

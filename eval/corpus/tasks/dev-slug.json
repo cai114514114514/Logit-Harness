@@ -1,0 +1,78 @@
+{
+  "id": "dev-slug",
+  "language": "python",
+  "kind": "existing",
+  "split": "development",
+  "title": "Slug normalization",
+  "trigger": "active_check",
+  "requirements": [
+    "data 是字符串：转为小写，把非 ASCII 字母或数字的连续片段替换成一个下划线，去掉首尾分隔符。",
+    "返回 slug 字符串，允许空结果。修复当前实现的连续分隔符问题。"
+  ],
+  "correction": "分隔符从下划线改为连字符，其余规范化规则不变。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for dev-slug: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "plain",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": "ABC123"
+      },
+      "expected": "abc123",
+      "public": true
+    },
+    {
+      "id": "digits",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": "42"
+      },
+      "expected": "42",
+      "public": false
+    },
+    {
+      "id": "spaces",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": "  Hi!!! World  "
+      },
+      "expected": "hi-world",
+      "public": true,
+      "before": "hi_world"
+    },
+    {
+      "id": "unicode",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": "你好Hello_世界X"
+      },
+      "expected": "hello-x",
+      "public": false,
+      "before": "hello_x"
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": ""
+      },
+      "expected": "",
+      "public": false
+    },
+    {
+      "id": "punctuation",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": "!!!"
+      },
+      "expected": "",
+      "public": false
+    }
+  ]
+}

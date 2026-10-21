@@ -1,0 +1,150 @@
+{
+  "id": "hold-batches",
+  "language": "typescript",
+  "kind": "existing",
+  "split": "holdout",
+  "title": "Ordered capacity batches",
+  "trigger": "first_write",
+  "requirements": [
+    "data 含非负整数 weights 数组和正整数 capacity。保持输入顺序贪心分批，批内总重不能超过 capacity；初始超大单项单独成批。",
+    "返回二维 weight 数组；修复空输入产生一个空批的问题。"
+  ],
+  "correction": "只要存在大于 capacity 的单项，整个请求返回 {error:oversize}，不返回部分批次。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-batches: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "normal",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "weights": [
+            2,
+            3,
+            1
+          ],
+          "capacity": 5
+        }
+      },
+      "expected": [
+        [
+          2,
+          3
+        ],
+        [
+          1
+        ]
+      ],
+      "public": true
+    },
+    {
+      "id": "empty",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "weights": [],
+          "capacity": 3
+        }
+      },
+      "expected": [],
+      "public": false
+    },
+    {
+      "id": "oversize",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "weights": [
+            1,
+            9,
+            2
+          ],
+          "capacity": 5
+        }
+      },
+      "expected": {
+        "error": "oversize"
+      },
+      "public": true,
+      "before": [
+        [
+          1
+        ],
+        [
+          9
+        ],
+        [
+          2
+        ]
+      ]
+    },
+    {
+      "id": "only-big",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "weights": [
+            6
+          ],
+          "capacity": 5
+        }
+      },
+      "expected": {
+        "error": "oversize"
+      },
+      "public": false,
+      "before": [
+        [
+          6
+        ]
+      ]
+    },
+    {
+      "id": "zeros",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "weights": [
+            0,
+            0
+          ],
+          "capacity": 1
+        }
+      },
+      "expected": [
+        [
+          0,
+          0
+        ]
+      ],
+      "public": false
+    },
+    {
+      "id": "exact",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "weights": [
+            5,
+            5
+          ],
+          "capacity": 5
+        }
+      },
+      "expected": [
+        [
+          5
+        ],
+        [
+          5
+        ]
+      ],
+      "public": false
+    }
+  ]
+}

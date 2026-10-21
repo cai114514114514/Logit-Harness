@@ -1,0 +1,122 @@
+{
+  "id": "hold-slice",
+  "language": "rust",
+  "kind": "new",
+  "split": "holdout",
+  "title": "Offset slicing",
+  "trigger": "first_write",
+  "requirements": [
+    "data 含 items 数组、整数 offset 和非负整数 limit。返回从 offset 起最多 limit 个元素；初始负 offset 按 0 处理。",
+    "offset 超出长度或 limit=0 返回空数组，不得整数溢出。"
+  ],
+  "correction": "负 offset 不再截断到 0，而是返回 {error:offset}。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-slice: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "normal",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "items": [
+            1,
+            2,
+            3
+          ],
+          "offset": 1,
+          "limit": 2
+        }
+      },
+      "expected": [
+        2,
+        3
+      ],
+      "public": true
+    },
+    {
+      "id": "zero-limit",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "items": [
+            1
+          ],
+          "offset": 0,
+          "limit": 0
+        }
+      },
+      "expected": [],
+      "public": false
+    },
+    {
+      "id": "negative",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "items": [
+            1,
+            2
+          ],
+          "offset": -1,
+          "limit": 1
+        }
+      },
+      "expected": {
+        "error": "offset"
+      },
+      "public": true,
+      "before": [
+        1
+      ]
+    },
+    {
+      "id": "negative-empty",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "items": [],
+          "offset": -9,
+          "limit": 3
+        }
+      },
+      "expected": {
+        "error": "offset"
+      },
+      "public": false,
+      "before": []
+    },
+    {
+      "id": "beyond",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "items": [
+            1
+          ],
+          "offset": 999999,
+          "limit": 999999
+        }
+      },
+      "expected": [],
+      "public": false
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "items": [],
+          "offset": 0,
+          "limit": 2
+        }
+      },
+      "expected": [],
+      "public": false
+    }
+  ]
+}

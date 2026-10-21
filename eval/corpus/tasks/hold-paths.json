@@ -1,0 +1,82 @@
+{
+  "id": "hold-paths",
+  "language": "python",
+  "kind": "existing",
+  "split": "holdout",
+  "title": "Root-relative path normalization",
+  "trigger": "first_write",
+  "requirements": [
+    "data 是路径字符串，忽略重复 / 和 .，处理 ..，返回以 / 开头的规范化路径。",
+    "初始规则遇到越过根的 .. 时忽略该段；修复空路径应返回 / 的问题。"
+  ],
+  "correction": "任何试图越过根的 .. 都返回 {error:escape}，不能继续归一化。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-paths: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "normal",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": "a//b/../c"
+      },
+      "expected": "/a/c",
+      "public": true
+    },
+    {
+      "id": "empty",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": ""
+      },
+      "expected": "/",
+      "public": false
+    },
+    {
+      "id": "escape",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": "../a"
+      },
+      "expected": {
+        "error": "escape"
+      },
+      "public": true,
+      "before": "/a"
+    },
+    {
+      "id": "later",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": "a/../../b"
+      },
+      "expected": {
+        "error": "escape"
+      },
+      "public": false,
+      "before": "/b"
+    },
+    {
+      "id": "root",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": "/./"
+      },
+      "expected": "/",
+      "public": false
+    },
+    {
+      "id": "literal",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": ".../x"
+      },
+      "expected": "/.../x",
+      "public": false
+    }
+  ]
+}

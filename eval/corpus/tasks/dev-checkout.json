@@ -1,0 +1,102 @@
+{
+  "id": "dev-checkout",
+  "language": "rust",
+  "kind": "new",
+  "split": "development",
+  "title": "Integer checkout",
+  "trigger": "first_write",
+  "requirements": [
+    "data 含 cents、discount、tax，均为非负整数，discount 不超过 cents，tax 是整数百分比。税额用整数运算向下取整。",
+    "初始规则：先按原价计税，再减固定折扣，返回最终 cents 整数。"
+  ],
+  "correction": "改为先减固定折扣，再对折后金额计税。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for dev-checkout: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "no-tax",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "cents": 100,
+          "discount": 20,
+          "tax": 0
+        }
+      },
+      "expected": 80,
+      "public": true
+    },
+    {
+      "id": "no-discount",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "cents": 100,
+          "discount": 0,
+          "tax": 10
+        }
+      },
+      "expected": 110,
+      "public": false
+    },
+    {
+      "id": "discount-tax",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "cents": 1000,
+          "discount": 200,
+          "tax": 10
+        }
+      },
+      "expected": 880,
+      "public": true,
+      "before": 900
+    },
+    {
+      "id": "round",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "cents": 101,
+          "discount": 50,
+          "tax": 10
+        }
+      },
+      "expected": 56,
+      "public": false,
+      "before": 61
+    },
+    {
+      "id": "zero",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "cents": 0,
+          "discount": 0,
+          "tax": 10
+        }
+      },
+      "expected": 0,
+      "public": false
+    },
+    {
+      "id": "free",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "cents": 99,
+          "discount": 99,
+          "tax": 0
+        }
+      },
+      "expected": 0,
+      "public": false
+    }
+  ]
+}

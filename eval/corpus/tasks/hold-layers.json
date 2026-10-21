@@ -1,0 +1,150 @@
+{
+  "id": "hold-layers",
+  "language": "python",
+  "kind": "new",
+  "split": "holdout",
+  "title": "Layered configuration",
+  "trigger": "first_write",
+  "requirements": [
+    "data 是对象数组，依次递归合并对象。非对象值覆盖旧值，数组整体覆盖。初始规则 null 删除该键。",
+    "返回合并后的对象，不修改输入对象。"
+  ],
+  "correction": "null 不再删除键，而是作为普通值保留。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-layers: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "nested",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "a": {
+              "x": 1
+            }
+          },
+          {
+            "a": {
+              "y": 2
+            }
+          }
+        ]
+      },
+      "expected": {
+        "a": {
+          "x": 1,
+          "y": 2
+        }
+      },
+      "public": true
+    },
+    {
+      "id": "array",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "a": [
+              1
+            ]
+          },
+          {
+            "a": [
+              2,
+              3
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "a": [
+          2,
+          3
+        ]
+      },
+      "public": false
+    },
+    {
+      "id": "null",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "a": 1
+          },
+          {
+            "a": null
+          }
+        ]
+      },
+      "expected": {
+        "a": null
+      },
+      "public": true,
+      "before": {}
+    },
+    {
+      "id": "nested-null",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "a": {
+              "x": 1
+            }
+          },
+          {
+            "a": {
+              "x": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "a": {
+          "x": null
+        }
+      },
+      "public": false,
+      "before": {
+        "a": {}
+      }
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": []
+      },
+      "expected": {},
+      "public": false
+    },
+    {
+      "id": "replace",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "a": 1
+          },
+          {
+            "a": {
+              "x": 2
+            }
+          }
+        ]
+      },
+      "expected": {
+        "a": {
+          "x": 2
+        }
+      },
+      "public": false
+    }
+  ]
+}

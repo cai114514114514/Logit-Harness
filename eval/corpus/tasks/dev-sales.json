@@ -1,0 +1,161 @@
+{
+  "id": "dev-sales",
+  "language": "python",
+  "kind": "new",
+  "split": "development",
+  "title": "Daily sales totals",
+  "trigger": "first_write",
+  "requirements": [
+    "data 是含 day 字符串和 amount 整数的记录数组；按 day 汇总 amount，返回按 day 升序排列的 [day,total] 数组。",
+    "初始规则保留汇总为零的日期；空输入返回空数组。"
+  ],
+  "correction": "删除汇总金额恰为零的日期，负数汇总仍保留。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for dev-sales: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "sum",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "day": "b",
+            "amount": 2
+          },
+          {
+            "day": "a",
+            "amount": 3
+          },
+          {
+            "day": "b",
+            "amount": 4
+          }
+        ]
+      },
+      "expected": [
+        [
+          "a",
+          3
+        ],
+        [
+          "b",
+          6
+        ]
+      ],
+      "public": true
+    },
+    {
+      "id": "negative",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "day": "a",
+            "amount": -2
+          }
+        ]
+      },
+      "expected": [
+        [
+          "a",
+          -2
+        ]
+      ],
+      "public": false
+    },
+    {
+      "id": "cancel",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "day": "a",
+            "amount": 3
+          },
+          {
+            "day": "a",
+            "amount": -3
+          }
+        ]
+      },
+      "expected": [],
+      "public": true,
+      "before": [
+        [
+          "a",
+          0
+        ]
+      ]
+    },
+    {
+      "id": "mixed",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "day": "b",
+            "amount": 0
+          },
+          {
+            "day": "a",
+            "amount": 1
+          }
+        ]
+      },
+      "expected": [
+        [
+          "a",
+          1
+        ]
+      ],
+      "public": false,
+      "before": [
+        [
+          "a",
+          1
+        ],
+        [
+          "b",
+          0
+        ]
+      ]
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": []
+      },
+      "expected": [],
+      "public": false
+    },
+    {
+      "id": "large",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": [
+          {
+            "day": "a",
+            "amount": 1000000
+          },
+          {
+            "day": "a",
+            "amount": 1
+          }
+        ]
+      },
+      "expected": [
+        [
+          "a",
+          1000001
+        ]
+      ],
+      "public": false
+    }
+  ]
+}

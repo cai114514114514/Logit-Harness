@@ -1,0 +1,112 @@
+{
+  "id": "hold-lines",
+  "language": "typescript",
+  "kind": "new",
+  "split": "holdout",
+  "title": "Chunked line splitting",
+  "trigger": "active_check",
+  "requirements": [
+    "data 是字符串分块数组，拼接后按 LF 或 CRLF 拆行；CRLF 可以跨分块，孤立 CR 保留。",
+    "初始规则保留尾部空行，空输入等价于空字符串，返回 [\"\"]。"
+  ],
+  "correction": "只删除由最后一个换行分隔符产生的那一个尾部空字符串；空输入仍返回 [\"\"]，中间空行保留。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-lines: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "plain",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          "ab",
+          "cd"
+        ]
+      },
+      "expected": [
+        "abcd"
+      ],
+      "public": true
+    },
+    {
+      "id": "middle",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          "a\n\nb"
+        ]
+      },
+      "expected": [
+        "a",
+        "",
+        "b"
+      ],
+      "public": false
+    },
+    {
+      "id": "tail",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          "a\n"
+        ]
+      },
+      "expected": [
+        "a"
+      ],
+      "public": true,
+      "before": [
+        "a",
+        ""
+      ]
+    },
+    {
+      "id": "crlf",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          "a\r",
+          "\nb\r\n"
+        ]
+      },
+      "expected": [
+        "a",
+        "b"
+      ],
+      "public": false,
+      "before": [
+        "a",
+        "b",
+        ""
+      ]
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": []
+      },
+      "expected": [
+        ""
+      ],
+      "public": false
+    },
+    {
+      "id": "lone-cr",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": [
+          "a\rb"
+        ]
+      },
+      "expected": [
+        "a\rb"
+      ],
+      "public": false
+    }
+  ]
+}

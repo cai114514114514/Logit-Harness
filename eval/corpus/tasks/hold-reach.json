@@ -1,0 +1,181 @@
+{
+  "id": "hold-reach",
+  "language": "rust",
+  "kind": "new",
+  "split": "holdout",
+  "title": "Graph reachability",
+  "trigger": "active_check",
+  "requirements": [
+    "data 含 edges 有向边数组和 start 字符串。返回可达节点的广度优先访问顺序，含 start；邻居初始按字典序遍历。",
+    "重复边和环不能导致重复输出。"
+  ],
+  "correction": "邻居改为按边首次出现在输入中的次序遍历，其余 BFS 规则不变。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-reach: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "chain",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "edges": [
+            [
+              "a",
+              "b"
+            ],
+            [
+              "b",
+              "c"
+            ]
+          ],
+          "start": "a"
+        }
+      },
+      "expected": [
+        "a",
+        "b",
+        "c"
+      ],
+      "public": true
+    },
+    {
+      "id": "cycle",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "edges": [
+            [
+              "a",
+              "b"
+            ],
+            [
+              "b",
+              "a"
+            ]
+          ],
+          "start": "a"
+        }
+      },
+      "expected": [
+        "a",
+        "b"
+      ],
+      "public": false
+    },
+    {
+      "id": "neighbors",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "edges": [
+            [
+              "a",
+              "z"
+            ],
+            [
+              "a",
+              "b"
+            ]
+          ],
+          "start": "a"
+        }
+      },
+      "expected": [
+        "a",
+        "z",
+        "b"
+      ],
+      "public": true,
+      "before": [
+        "a",
+        "b",
+        "z"
+      ]
+    },
+    {
+      "id": "layers",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "edges": [
+            [
+              "a",
+              "z"
+            ],
+            [
+              "a",
+              "b"
+            ],
+            [
+              "z",
+              "x"
+            ],
+            [
+              "b",
+              "y"
+            ]
+          ],
+          "start": "a"
+        }
+      },
+      "expected": [
+        "a",
+        "z",
+        "b",
+        "x",
+        "y"
+      ],
+      "public": false,
+      "before": [
+        "a",
+        "b",
+        "z",
+        "y",
+        "x"
+      ]
+    },
+    {
+      "id": "alone",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "edges": [],
+          "start": "a"
+        }
+      },
+      "expected": [
+        "a"
+      ],
+      "public": false
+    },
+    {
+      "id": "duplicate",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "edges": [
+            [
+              "a",
+              "b"
+            ],
+            [
+              "a",
+              "b"
+            ]
+          ],
+          "start": "a"
+        }
+      },
+      "expected": [
+        "a",
+        "b"
+      ],
+      "public": false
+    }
+  ]
+}

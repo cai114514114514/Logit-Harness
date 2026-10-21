@@ -1,0 +1,174 @@
+{
+  "id": "dev-intervals",
+  "language": "rust",
+  "kind": "new",
+  "split": "development",
+  "title": "Interval union",
+  "trigger": "first_write",
+  "requirements": [
+    "data 是 [start,end] 整数闭区间数组，start <= end。按起点终点排序并合并重叠区间，返回区间数组。",
+    "初始规则也合并端点恰好相接的区间。"
+  ],
+  "correction": "只合并真正重叠的区间；前一区间 end 等于后一区间 start 时保持分开。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for dev-intervals: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "overlap",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          [
+            3,
+            8
+          ],
+          [
+            1,
+            5
+          ]
+        ]
+      },
+      "expected": [
+        [
+          1,
+          8
+        ]
+      ],
+      "public": true
+    },
+    {
+      "id": "disjoint",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          [
+            8,
+            9
+          ],
+          [
+            1,
+            2
+          ]
+        ]
+      },
+      "expected": [
+        [
+          1,
+          2
+        ],
+        [
+          8,
+          9
+        ]
+      ],
+      "public": false
+    },
+    {
+      "id": "touch",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          [
+            1,
+            3
+          ],
+          [
+            3,
+            5
+          ]
+        ]
+      },
+      "expected": [
+        [
+          1,
+          3
+        ],
+        [
+          3,
+          5
+        ]
+      ],
+      "public": true,
+      "before": [
+        [
+          1,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "chain",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          [
+            0,
+            2
+          ],
+          [
+            1,
+            3
+          ],
+          [
+            3,
+            8
+          ]
+        ]
+      },
+      "expected": [
+        [
+          0,
+          3
+        ],
+        [
+          3,
+          8
+        ]
+      ],
+      "public": false,
+      "before": [
+        [
+          0,
+          8
+        ]
+      ]
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": []
+      },
+      "expected": [],
+      "public": false
+    },
+    {
+      "id": "negative",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": [
+          [
+            -4,
+            -1
+          ],
+          [
+            -3,
+            0
+          ]
+        ]
+      },
+      "expected": [
+        [
+          -4,
+          0
+        ]
+      ],
+      "public": false
+    }
+  ]
+}

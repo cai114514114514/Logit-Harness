@@ -146,7 +146,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             daemon::command(&paths, &id, Control::Resume).await?;
             println!("resume requested: {id}");
         }
-        Command::Eval { .. } => anyhow::bail!("evaluation commands are not implemented yet"),
+        Command::Eval { command } => crate::eval::cli::run(command)?,
     }
     Ok(())
 }

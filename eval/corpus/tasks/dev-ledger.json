@@ -1,0 +1,119 @@
+{
+  "id": "dev-ledger",
+  "language": "python",
+  "kind": "new",
+  "split": "development",
+  "title": "Inventory ledger",
+  "trigger": "first_write",
+  "requirements": [
+    "data 是整数数组，按顺序求库存余额，返回每步余额数组。初始余额为 0。",
+    "初始规则允许余额为负数；空数组返回空数组。"
+  ],
+  "correction": "改为拒绝会使余额为负数的单笔变动：该步返回字符串 rejected，余额保持不变，继续处理后续变动。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for dev-ledger: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "deposits",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          3,
+          4
+        ]
+      },
+      "expected": [
+        3,
+        7
+      ],
+      "public": true
+    },
+    {
+      "id": "withdraw",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          5,
+          -2
+        ]
+      },
+      "expected": [
+        5,
+        3
+      ],
+      "public": false
+    },
+    {
+      "id": "overdraw",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          2,
+          -3,
+          4
+        ]
+      },
+      "expected": [
+        2,
+        "rejected",
+        6
+      ],
+      "public": true,
+      "before": [
+        2,
+        -1,
+        3
+      ]
+    },
+    {
+      "id": "negative-first",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          -1,
+          2
+        ]
+      },
+      "expected": [
+        "rejected",
+        2
+      ],
+      "public": false,
+      "before": [
+        -1,
+        1
+      ]
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": []
+      },
+      "expected": [],
+      "public": false
+    },
+    {
+      "id": "zero",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": [
+          0,
+          1,
+          -1
+        ]
+      },
+      "expected": [
+        0,
+        1,
+        0
+      ],
+      "public": false
+    }
+  ]
+}

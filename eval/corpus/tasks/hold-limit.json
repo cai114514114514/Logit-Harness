@@ -1,0 +1,145 @@
+{
+  "id": "hold-limit",
+  "language": "python",
+  "kind": "new",
+  "split": "holdout",
+  "title": "Sliding-window admission",
+  "trigger": "first_write",
+  "requirements": [
+    "data 含递增 times 整数数组、正整数 window 和正整数 limit。依次决定每次请求是否接纳，返回布尔数组；只有获准请求占额度。",
+    "初始窗口保留 age <= window 的历史请求。"
+  ],
+  "correction": "窗口改为只保留 age < window 的历史请求，恰好到边界的请求释放额度。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-limit: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "within",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "times": [
+            0,
+            1,
+            2
+          ],
+          "window": 10,
+          "limit": 2
+        }
+      },
+      "expected": [
+        true,
+        true,
+        false
+      ],
+      "public": true
+    },
+    {
+      "id": "gap",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "times": [
+            0,
+            20
+          ],
+          "window": 10,
+          "limit": 1
+        }
+      },
+      "expected": [
+        true,
+        true
+      ],
+      "public": false
+    },
+    {
+      "id": "boundary",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "times": [
+            0,
+            10
+          ],
+          "window": 10,
+          "limit": 1
+        }
+      },
+      "expected": [
+        true,
+        true
+      ],
+      "public": true,
+      "before": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "repeat-boundary",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "times": [
+            0,
+            5,
+            10
+          ],
+          "window": 5,
+          "limit": 1
+        }
+      },
+      "expected": [
+        true,
+        true,
+        true
+      ],
+      "public": false,
+      "before": [
+        true,
+        false,
+        true
+      ]
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "times": [],
+          "window": 2,
+          "limit": 1
+        }
+      },
+      "expected": [],
+      "public": false
+    },
+    {
+      "id": "same",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "times": [
+            0,
+            0,
+            0
+          ],
+          "window": 1,
+          "limit": 2
+        }
+      },
+      "expected": [
+        true,
+        true,
+        false
+      ],
+      "public": false
+    }
+  ]
+}

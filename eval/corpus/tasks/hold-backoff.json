@@ -1,0 +1,131 @@
+{
+  "id": "hold-backoff",
+  "language": "python",
+  "kind": "existing",
+  "split": "holdout",
+  "title": "Retry delay schedule",
+  "trigger": "active_check",
+  "requirements": [
+    "data 含非负整数 base、cap、attempts。输出 attempts 个延迟，公式 min(cap, base*2**i)，i 从 0 开始。",
+    "修复 attempts=0 的结果应为空数组，而不是一项。"
+  ],
+  "correction": "指数因子从 2 改为 3，cap 和 attempts 语义不变。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-backoff: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "one",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "base": 2,
+          "cap": 100,
+          "attempts": 1
+        }
+      },
+      "expected": [
+        2
+      ],
+      "public": true
+    },
+    {
+      "id": "zero-attempts",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "base": 2,
+          "cap": 10,
+          "attempts": 0
+        }
+      },
+      "expected": [],
+      "public": false
+    },
+    {
+      "id": "growth",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "base": 2,
+          "cap": 100,
+          "attempts": 4
+        }
+      },
+      "expected": [
+        2,
+        6,
+        18,
+        54
+      ],
+      "public": true,
+      "before": [
+        2,
+        4,
+        8,
+        16
+      ]
+    },
+    {
+      "id": "cap",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "base": 3,
+          "cap": 10,
+          "attempts": 4
+        }
+      },
+      "expected": [
+        3,
+        9,
+        10,
+        10
+      ],
+      "public": false,
+      "before": [
+        3,
+        6,
+        10,
+        10
+      ]
+    },
+    {
+      "id": "zero-base",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "base": 0,
+          "cap": 10,
+          "attempts": 3
+        }
+      },
+      "expected": [
+        0,
+        0,
+        0
+      ],
+      "public": false
+    },
+    {
+      "id": "below-base",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "base": 10,
+          "cap": 2,
+          "attempts": 2
+        }
+      },
+      "expected": [
+        2,
+        2
+      ],
+      "public": false
+    }
+  ]
+}

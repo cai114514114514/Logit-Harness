@@ -1,0 +1,82 @@
+{
+  "id": "dev-decoder",
+  "language": "rust",
+  "kind": "existing",
+  "split": "development",
+  "title": "Percent decoding",
+  "trigger": "active_check",
+  "requirements": [
+    "data 是 ASCII 字符串。把合法 %HH 十六进制字节解码，输出有效 UTF-8 字符串；无效转义或无效 UTF-8 返回 {error:invalid}。",
+    "初始规则把 + 转为空格；修复无效转义被当成普通文本保留的问题。"
+  ],
+  "correction": "+ 改为保持字面加号，其余解码规则不变。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for dev-decoder: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "encoded",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": "A%20B"
+      },
+      "expected": "A B",
+      "public": true
+    },
+    {
+      "id": "utf8",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": "%E4%B8%AD"
+      },
+      "expected": "中",
+      "public": false
+    },
+    {
+      "id": "plus",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": "A+B"
+      },
+      "expected": "A+B",
+      "public": true,
+      "before": "A B"
+    },
+    {
+      "id": "mixed",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": "%2B+"
+      },
+      "expected": "++",
+      "public": false,
+      "before": "+ "
+    },
+    {
+      "id": "invalid",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": "%Q0"
+      },
+      "expected": {
+        "error": "invalid"
+      },
+      "public": false
+    },
+    {
+      "id": "short",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": "%"
+      },
+      "expected": {
+        "error": "invalid"
+      },
+      "public": false
+    }
+  ]
+}

@@ -1,0 +1,170 @@
+{
+  "id": "hold-buckets",
+  "language": "typescript",
+  "kind": "new",
+  "split": "holdout",
+  "title": "Time-bucket aggregation",
+  "trigger": "active_check",
+  "requirements": [
+    "data 含 events 数组（每项 {time,value} 整数）和正整数 width。按 floor(time/width)*width 桶起点汇总 value，返回按桶起点升序的 [start,sum] 数组。",
+    "初始计算忽略 data.offset（可缺省）；负时间必须使用向负无穷取整。"
+  ],
+  "correction": "加入 offset（缺省 0）：桶起点变为 floor((time-offset)/width)*width+offset。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-buckets: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "normal",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "width": 10,
+          "events": [
+            {
+              "time": 1,
+              "value": 2
+            },
+            {
+              "time": 9,
+              "value": 3
+            }
+          ]
+        }
+      },
+      "expected": [
+        [
+          0,
+          5
+        ]
+      ],
+      "public": true
+    },
+    {
+      "id": "negative",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "width": 10,
+          "events": [
+            {
+              "time": -1,
+              "value": 1
+            }
+          ]
+        }
+      },
+      "expected": [
+        [
+          -10,
+          1
+        ]
+      ],
+      "public": false
+    },
+    {
+      "id": "offset",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "width": 10,
+          "offset": 5,
+          "events": [
+            {
+              "time": 1,
+              "value": 2
+            },
+            {
+              "time": 9,
+              "value": 3
+            }
+          ]
+        }
+      },
+      "expected": [
+        [
+          -5,
+          2
+        ],
+        [
+          5,
+          3
+        ]
+      ],
+      "public": true,
+      "before": [
+        [
+          0,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "edge-offset",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "width": 4,
+          "offset": 2,
+          "events": [
+            {
+              "time": 2,
+              "value": 1
+            }
+          ]
+        }
+      },
+      "expected": [
+        [
+          2,
+          1
+        ]
+      ],
+      "public": false,
+      "before": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "width": 1,
+          "events": []
+        }
+      },
+      "expected": [],
+      "public": false
+    },
+    {
+      "id": "zero",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "width": 1,
+          "events": [
+            {
+              "time": 0,
+              "value": 0
+            }
+          ]
+        }
+      },
+      "expected": [
+        [
+          0,
+          0
+        ]
+      ],
+      "public": false
+    }
+  ]
+}

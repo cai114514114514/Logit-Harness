@@ -1,0 +1,160 @@
+{
+  "id": "hold-history",
+  "language": "typescript",
+  "kind": "existing",
+  "split": "holdout",
+  "title": "Undo and redo journal",
+  "trigger": "active_check",
+  "requirements": [
+    "data 是操作数组：[set,value]、[undo]、[redo]、[get]；初值 0，只有 get 产生输出，空 undo/redo 无操作。",
+    "初始 set 保留 redo 栈；修复空 undo 把当前值变成 undefined 的问题。"
+  ],
+  "correction": "新的 set 必须清空 redo 栈，其他行为不变。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-history: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "roundtrip",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          [
+            "set",
+            1
+          ],
+          [
+            "undo"
+          ],
+          [
+            "redo"
+          ],
+          [
+            "get"
+          ]
+        ]
+      },
+      "expected": [
+        1
+      ],
+      "public": true
+    },
+    {
+      "id": "empty-undo",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          [
+            "undo"
+          ],
+          [
+            "get"
+          ]
+        ]
+      },
+      "expected": [
+        0
+      ],
+      "public": false
+    },
+    {
+      "id": "branch",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          [
+            "set",
+            1
+          ],
+          [
+            "undo"
+          ],
+          [
+            "set",
+            2
+          ],
+          [
+            "redo"
+          ],
+          [
+            "get"
+          ]
+        ]
+      },
+      "expected": [
+        2
+      ],
+      "public": true,
+      "before": [
+        1
+      ]
+    },
+    {
+      "id": "twice",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          [
+            "set",
+            1
+          ],
+          [
+            "set",
+            2
+          ],
+          [
+            "undo"
+          ],
+          [
+            "set",
+            3
+          ],
+          [
+            "redo"
+          ],
+          [
+            "get"
+          ]
+        ]
+      },
+      "expected": [
+        3
+      ],
+      "public": false,
+      "before": [
+        2
+      ]
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": []
+      },
+      "expected": [],
+      "public": false
+    },
+    {
+      "id": "empty-redo",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": [
+          [
+            "redo"
+          ],
+          [
+            "get"
+          ]
+        ]
+      },
+      "expected": [
+        0
+      ],
+      "public": false
+    }
+  ]
+}

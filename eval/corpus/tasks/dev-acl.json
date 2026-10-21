@@ -1,0 +1,133 @@
+{
+  "id": "dev-acl",
+  "language": "typescript",
+  "kind": "existing",
+  "split": "development",
+  "title": "Access-rule precedence",
+  "trigger": "active_check",
+  "requirements": [
+    "data 含 path 字符串和 rules 数组，每条规则含 prefix 和 allow 布尔值。匹配前缀；初始采用第一条匹配规则，缺省拒绝。",
+    "修复当前实现总是允许没有匹配规则的请求。"
+  ],
+  "correction": "改为最长匹配前缀优先，长度相同时仍采用输入中第一条。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for dev-acl: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "single",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "path": "/a/x",
+          "rules": [
+            {
+              "prefix": "/a",
+              "allow": true
+            }
+          ]
+        }
+      },
+      "expected": true,
+      "public": true
+    },
+    {
+      "id": "missing",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "path": "/x",
+          "rules": []
+        }
+      },
+      "expected": false,
+      "public": false
+    },
+    {
+      "id": "specific",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "path": "/a/private/x",
+          "rules": [
+            {
+              "prefix": "/a",
+              "allow": true
+            },
+            {
+              "prefix": "/a/private",
+              "allow": false
+            }
+          ]
+        }
+      },
+      "expected": false,
+      "public": true,
+      "before": true
+    },
+    {
+      "id": "specific-allow",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "path": "/a/b",
+          "rules": [
+            {
+              "prefix": "/",
+              "allow": false
+            },
+            {
+              "prefix": "/a",
+              "allow": true
+            }
+          ]
+        }
+      },
+      "expected": true,
+      "public": false,
+      "before": false
+    },
+    {
+      "id": "tie",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "path": "x",
+          "rules": [
+            {
+              "prefix": "x",
+              "allow": false
+            },
+            {
+              "prefix": "x",
+              "allow": true
+            }
+          ]
+        }
+      },
+      "expected": false,
+      "public": false
+    },
+    {
+      "id": "empty-prefix",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "path": "abc",
+          "rules": [
+            {
+              "prefix": "",
+              "allow": false
+            }
+          ]
+        }
+      },
+      "expected": false,
+      "public": false
+    }
+  ]
+}

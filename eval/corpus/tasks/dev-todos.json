@@ -1,0 +1,151 @@
+{
+  "id": "dev-todos",
+  "language": "typescript",
+  "kind": "new",
+  "split": "development",
+  "title": "Todo command interpreter",
+  "trigger": "first_write",
+  "requirements": [
+    "data 是操作数组：[add,title] 添加未完成任务，[toggle,id] 切换已有任务，[list] 输出当前任务数组。仅 list 产生结果，任务含 id、title、done。",
+    "初始 id 是从 1 递增的整数；不存在的 toggle 忽略。每条输入从空列表开始。"
+  ],
+  "correction": "id 改为字符串 t1、t2…，toggle 也用字符串 id。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for dev-todos: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "empty-list",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          [
+            "list"
+          ]
+        ]
+      },
+      "expected": [
+        []
+      ],
+      "public": true
+    },
+    {
+      "id": "no-list",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": [
+          [
+            "add",
+            "x"
+          ]
+        ]
+      },
+      "expected": [],
+      "public": false
+    },
+    {
+      "id": "add",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          [
+            "add",
+            "A"
+          ],
+          [
+            "list"
+          ]
+        ]
+      },
+      "expected": [
+        [
+          {
+            "id": "t1",
+            "title": "A",
+            "done": false
+          }
+        ]
+      ],
+      "public": true,
+      "before": [
+        [
+          {
+            "id": 1,
+            "title": "A",
+            "done": false
+          }
+        ]
+      ]
+    },
+    {
+      "id": "toggle",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": [
+          [
+            "add",
+            "A"
+          ],
+          [
+            "toggle",
+            "t1"
+          ],
+          [
+            "list"
+          ]
+        ]
+      },
+      "expected": [
+        [
+          {
+            "id": "t1",
+            "title": "A",
+            "done": true
+          }
+        ]
+      ],
+      "public": false,
+      "before": [
+        [
+          {
+            "id": 1,
+            "title": "A",
+            "done": false
+          }
+        ]
+      ]
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": []
+      },
+      "expected": [],
+      "public": false
+    },
+    {
+      "id": "unknown",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": [
+          [
+            "toggle",
+            "none"
+          ],
+          [
+            "list"
+          ]
+        ]
+      },
+      "expected": [
+        []
+      ],
+      "public": false
+    }
+  ]
+}

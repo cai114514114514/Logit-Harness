@@ -153,6 +153,24 @@ Spec: docs/spec.md
 
 ## Implementation watch list
 
+- Evaluation corpus frozen before model trials: `eval/frozen.json`, created
+  `2026-10-21T16:37:41.009915+00:00` (2026-10-22 local), digest
+  `c19d6137492f5401bba7a8223d5045d94da620e4755537c32034f27c2851fd4c`.
+  Contains 12 development and 24 held-out tasks, balanced across Python/Rust/TypeScript and new/existing
+  projects, six functional checks each plus about/protected files, scripted corrections and a frozen
+  external oracle. Rubric, thresholds, interleaving seed, limits and uncertainty method are hashed.
+- All 18 existing source fixtures were compiled/run in independent temporary projects. Each retained
+  its about command and caller-owned files, and each failed at least one initial acceptance check.
+  Record: artifacts/corpus-preflight/summary.json. Both public-check phases compile for all 36 tasks.
+  Strict JSON comparison rejects boolean/number confusion. Freeze/tamper tests passed (2/2).
+- Ruling: this is a custom controlled corpus with disclosed three-second simulated CI latency,
+  not an estimate of general software-engineering performance. Automatic nudges are reported as
+  scripted interventions, not observed human labor. Human rubric cells remain empty until reviewed
+  by a person. Removing selective repair is already the replan baseline; reuse those paired traces
+  for that ablation instead of counting duplicates as independent evidence. Main conditions plus
+  the separate no-stagnation ablation yield 540 scheduled trials, still constrained by the single
+  50 RMB account. No paid trial on this corpus has started.
+
 - Terminal checkpoint: Ratatui/Crossterm now provide continuous input, Chinese/grapheme editing,
   bracketed multiline paste, scrollback, status/diff/budget and lifecycle controls. A dedicated socket
   reader prevents redraw/input cancellation from discarding partial JSON frames. Replayed events

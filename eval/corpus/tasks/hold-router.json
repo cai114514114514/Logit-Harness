@@ -1,0 +1,135 @@
+{
+  "id": "hold-router",
+  "language": "typescript",
+  "kind": "existing",
+  "split": "holdout",
+  "title": "Static and parameter routes",
+  "trigger": "active_check",
+  "requirements": [
+    "data 含 routes 字符串数组和 path；路径按 / 分段，:name 匹配一个非空段，静态段必须相等。初始采用第一条匹配路由。",
+    "返回 {route,params}，无匹配返回 null；修复只比较段数而不比较静态段的问题。"
+  ],
+  "correction": "匹配路由中静态段更多者优先，静态段数相同仍按输入顺序。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-router: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "parameter",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "routes": [
+            "/users/:id"
+          ],
+          "path": "/users/42"
+        }
+      },
+      "expected": {
+        "route": "/users/:id",
+        "params": {
+          "id": "42"
+        }
+      },
+      "public": true
+    },
+    {
+      "id": "missing",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "routes": [
+            "/a"
+          ],
+          "path": "/b"
+        }
+      },
+      "expected": null,
+      "public": false
+    },
+    {
+      "id": "specific",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "routes": [
+            "/:id",
+            "/new"
+          ],
+          "path": "/new"
+        }
+      },
+      "expected": {
+        "route": "/new",
+        "params": {}
+      },
+      "public": true,
+      "before": {
+        "route": "/:id",
+        "params": {
+          "id": "new"
+        }
+      }
+    },
+    {
+      "id": "two-segments",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "routes": [
+            "/:a/:b",
+            "/x/:id"
+          ],
+          "path": "/x/y"
+        }
+      },
+      "expected": {
+        "route": "/x/:id",
+        "params": {
+          "id": "y"
+        }
+      },
+      "public": false,
+      "before": {
+        "route": "/:a/:b",
+        "params": {
+          "a": "x",
+          "b": "y"
+        }
+      }
+    },
+    {
+      "id": "no-routes",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "routes": [],
+          "path": "/"
+        }
+      },
+      "expected": null,
+      "public": false
+    },
+    {
+      "id": "root",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "routes": [
+            "/"
+          ],
+          "path": "/"
+        }
+      },
+      "expected": {
+        "route": "/",
+        "params": {}
+      },
+      "public": false
+    }
+  ]
+}

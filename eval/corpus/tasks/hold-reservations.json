@@ -1,0 +1,141 @@
+{
+  "id": "hold-reservations",
+  "language": "rust",
+  "kind": "existing",
+  "split": "holdout",
+  "title": "Atomic reservation batches",
+  "trigger": "first_write",
+  "requirements": [
+    "data 含 stock 非负整数和 batches 二维非负整数数组。每批申请依次扣库存；有一项不足则整批回滚并输出 rejected，否则输出剩余库存。",
+    "修复当前实现在拒绝批次后仍保留部分扣减的问题。"
+  ],
+  "correction": "拒绝后不再回滚整批，而是跳过不足的单项、继续批内其余项；每批始终输出剩余库存，不再输出 rejected。 调用者已更新 verify.py；不要修改该文件，保留其余要求和 NOTES.txt。",
+  "notes": "Caller notes for hold-reservations: preserve this file byte for byte.\n",
+  "checks": [
+    {
+      "id": "enough",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "stock": 10,
+          "batches": [
+            [
+              2,
+              3
+            ],
+            [
+              1
+            ]
+          ]
+        }
+      },
+      "expected": [
+        5,
+        4
+      ],
+      "public": true
+    },
+    {
+      "id": "empty-batch",
+      "group": "core",
+      "input": {
+        "op": "solve",
+        "data": {
+          "stock": 4,
+          "batches": [
+            []
+          ]
+        }
+      },
+      "expected": [
+        4
+      ],
+      "public": false
+    },
+    {
+      "id": "partial",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "stock": 5,
+          "batches": [
+            [
+              2,
+              9,
+              1
+            ]
+          ]
+        }
+      },
+      "expected": [
+        2
+      ],
+      "public": true,
+      "before": [
+        "rejected"
+      ]
+    },
+    {
+      "id": "continue",
+      "group": "correction",
+      "input": {
+        "op": "solve",
+        "data": {
+          "stock": 5,
+          "batches": [
+            [
+              2,
+              8
+            ],
+            [
+              3
+            ]
+          ]
+        }
+      },
+      "expected": [
+        3,
+        0
+      ],
+      "public": false,
+      "before": [
+        "rejected",
+        2
+      ]
+    },
+    {
+      "id": "empty",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "stock": 0,
+          "batches": []
+        }
+      },
+      "expected": [],
+      "public": false
+    },
+    {
+      "id": "zero",
+      "group": "edge",
+      "input": {
+        "op": "solve",
+        "data": {
+          "stock": 0,
+          "batches": [
+            [
+              0
+            ]
+          ]
+        }
+      },
+      "expected": [
+        0
+      ],
+      "public": false
+    }
+  ]
+}
