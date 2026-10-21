@@ -44,7 +44,6 @@ pub struct BrowserClient {
     directory: PathBuf,
     session: Mutex<Option<Session>>,
     console: Arc<StdMutex<BTreeMap<String, Vec<Value>>>>,
-    locations: StdMutex<BTreeMap<String, String>>,
 }
 impl BrowserClient {
     pub fn new(chrome: PathBuf, directory: PathBuf) -> Self {
@@ -53,7 +52,6 @@ impl BrowserClient {
             directory,
             session: Mutex::new(None),
             console: Arc::new(StdMutex::new(BTreeMap::new())),
-            locations: StdMutex::new(BTreeMap::new()),
         }
     }
     async fn launch(&self) -> anyhow::Result<Session> {
@@ -101,14 +99,6 @@ impl BrowserClient {
             handler,
         })
     }
-    pub fn local(&self, page: &str) -> bool {
-        self.locations
-            .lock()
-            .ok()
-            .and_then(|m| m.get(page).cloned())
-            .and_then(|s| reqwest::Url::parse(&s).ok())
-            .is_some_and(|url| matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]")))
-    }
     pub async fn open(&self, url: &str, cancel: CancellationToken) -> anyhow::Result<String> {
         let parsed = reqwest::Url::parse(url)?;
         anyhow::ensure!(
@@ -148,11 +138,6 @@ impl BrowserClient {
                 }
             }));
             page.goto(url).await?;
-            let location = page.url().await?.unwrap_or_else(|| url.into());
-            self.locations
-                .lock()
-                .map_err(|_| anyhow::anyhow!("browser location lock poisoned"))?
-                .insert(id.clone(), location);
             session.pages.insert(id.clone(), page);
             Ok(id)
         };
@@ -163,17 +148,20 @@ impl BrowserClient {
         id: &str,
         selector: &str,
         text: &str,
+        permission: &super::Permission<'_>,
         cancel: CancellationToken,
     ) -> anyhow::Result<()> {
         let operation = async {
             let state = self.session.lock().await;
             let page = owned_page(&state, id)?;
             let element = page.find_element(selector).await?;
+            authorize(page, permission).await?;
             element.focus().await?;
             element
                 .call_js_fn("function() { if (this.select) this.select(); }", false)
                 .await?;
             // CDP's text insertion supports Unicode/IME text, unlike ASCII key maps.
+            authorize(page, permission).await?;
             page.execute(InsertTextParams::new(text)).await?;
             Ok(())
         };
@@ -183,18 +171,15 @@ impl BrowserClient {
         &self,
         id: &str,
         selector: &str,
+        permission: &super::Permission<'_>,
         cancel: CancellationToken,
     ) -> anyhow::Result<()> {
         let operation = async {
             let state = self.session.lock().await;
             let page = owned_page(&state, id)?;
-            page.find_element(selector).await?.click().await?;
-            if let Some(url) = page.url().await? {
-                self.locations
-                    .lock()
-                    .map_err(|_| anyhow::anyhow!("browser location lock poisoned"))?
-                    .insert(id.into(), url);
-            }
+            let element = page.find_element(selector).await?;
+            authorize(page, permission).await?;
+            element.click().await?;
             Ok(())
         };
         tokio::select! {biased; _=cancel.cancelled()=>anyhow::bail!("click cancelled; inspect its actual effect before retrying"), result=operation=>result}
@@ -223,10 +208,6 @@ impl BrowserClient {
             let screenshot = self.directory.join(format!("{}.png", uuid::Uuid::new_v4()));
             std::fs::write(&screenshot, &bytes)?;
             let url = page.url().await?.unwrap_or_default();
-            self.locations
-                .lock()
-                .map_err(|_| anyhow::anyhow!("browser location lock poisoned"))?
-                .insert(id.into(), url.clone());
             let console = serde_json::to_value(
                 self.console
                     .lock()
@@ -284,6 +265,12 @@ impl BrowserClient {
         }
         Ok(())
     }
+}
+async fn authorize(page: &Page, permission: &super::Permission<'_>) -> anyhow::Result<()> {
+    // Query the live document immediately before input, not the URL remembered
+    // by a previous inspect call. Browser scripts can navigate between tools.
+    let location: String = page.evaluate("window.location.href").await?.into_value()?;
+    permission.check(&location)
 }
 fn owned_page<'a>(session: &'a Option<Session>, id: &str) -> anyhow::Result<&'a Page> {
     session

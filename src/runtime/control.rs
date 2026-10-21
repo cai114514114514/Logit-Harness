@@ -51,6 +51,13 @@ impl Runner {
                             actor.phase = Phase::Ready;
                         }
                     }
+                    // Stopping a completed session keeps its artifacts, but its old
+                    // verdict may no longer describe the tree. Resume a fresh review.
+                    if self.session.actors["main"].phase == Phase::Done
+                        && self.session.final_report.is_some()
+                    {
+                        self.session.verification_pending = true;
+                    }
                     self.status(Status::Running, "resuming saved work")?;
                 }
             }
@@ -71,13 +78,7 @@ impl Runner {
                     .session
                     .actions
                     .values()
-                    .filter(|a| {
-                        !a.running
-                            && crate::tools::approval_id(
-                                &a.pending.call.name,
-                                &a.pending.call.arguments,
-                            ) == id
-                    })
+                    .filter(|a| !a.running && a.approval.as_deref() == Some(id.as_str()))
                     .cloned()
                     .collect();
                 for action in pending {

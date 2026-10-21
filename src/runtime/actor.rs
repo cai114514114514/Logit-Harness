@@ -97,4 +97,6 @@ pub struct Action {
     pub pending: Pending,
     pub running: bool,
     pub pid: Option<u32>,
+    #[serde(default)]
+    pub approval: Option<String>,
 }

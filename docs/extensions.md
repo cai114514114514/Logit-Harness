@@ -15,7 +15,8 @@ hashes. Ordinary shell commands still depend on model compliance with scoped ins
 application policy; this is not isolation from arbitrary code.
 
 MCP servers are configured in `~/.loh/config.toml`. Both stdio and Streamable HTTP use the official
-Rust SDK, currently RMCP 3.6 with the `2026-07-28` discovery lifecycle. Tool schemas are loaded on
+Rust SDK, currently RMCP 3.6. Its built-in `Auto` lifecycle negotiates `2026-07-28` discovery or
+the standard initialize handshake; both paths use the same SDK client and tool admission rules. Tool schemas are loaded on
 demand with `mcp_list` and `mcp_schema`; `mcp_call` invokes a discovered tool.
 
 ```toml

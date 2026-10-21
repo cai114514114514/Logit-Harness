@@ -1,4 +1,7 @@
-use loh::tools::browser::BrowserClient;
+use loh::tools::{
+    Scope,
+    browser::{BrowserClient, Permission},
+};
 use std::path::PathBuf;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
@@ -29,11 +32,27 @@ async fn owned_chrome_performs_unicode_input_click_and_returns_visual_evidence()
     );
     let cancel = CancellationToken::new();
     let page = browser.open(&url, cancel.clone()).await.unwrap();
+    let args = serde_json::json!({"page":page});
+    let scope = Scope::default();
+    let permission = Permission {
+        name: "browser_input",
+        arguments: &args,
+        scope: &scope,
+    };
     browser
-        .input(&page, "#name", "你好 Logit- Harness", cancel.clone())
+        .input(
+            &page,
+            "#name",
+            "你好 Logit- Harness",
+            &permission,
+            cancel.clone(),
+        )
         .await
         .unwrap();
-    browser.click(&page, "#go", cancel.clone()).await.unwrap();
+    browser
+        .click(&page, "#go", &permission, cancel.clone())
+        .await
+        .unwrap();
     let snapshot = browser.inspect(&page, cancel).await.unwrap();
     assert!(snapshot.dom.contains("你好 Logit- Harness"));
     assert!(
@@ -84,4 +103,110 @@ fn image_tool_output_uses_native_image_parts() {
             .unwrap()
             .starts_with("data:image/png;base64,")
     );
+}
+
+#[test]
+fn remote_browser_approval_is_origin_scoped_and_never_elevates_readonly_actors() {
+    use loh::tools::ToolError;
+    let arguments = serde_json::json!({"page":"owned","selector":"#save"});
+    let mut scope = Scope::default();
+    let error = Permission {
+        name: "browser_click",
+        arguments: &arguments,
+        scope: &scope,
+    }
+    .check("https://one.example/form")
+    .unwrap_err();
+    let ToolError::Approval { id, .. } = error.downcast_ref::<ToolError>().unwrap() else {
+        panic!("expected scoped approval")
+    };
+    scope.approvals.insert(id.clone());
+    let permission = Permission {
+        name: "browser_click",
+        arguments: &arguments,
+        scope: &scope,
+    };
+    assert!(permission.check("https://one.example/form").is_ok());
+    assert!(permission.check("https://two.example/form").is_err());
+    assert!(permission.check("https://one.example:8443/form").is_err());
+    scope.readonly = true;
+    assert!(
+        Permission {
+            name: "browser_click",
+            arguments: &arguments,
+            scope: &scope
+        }
+        .check("https://one.example/form")
+        .is_err()
+    );
+}
+
+#[tokio::test]
+async fn browser_rechecks_live_origin_after_script_navigation() {
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        loop {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            tokio::spawn(async move {
+                let mut bytes = [0; 4096];
+                let _ = socket.read(&mut bytes).await;
+                let html = format!(
+                    r#"<!doctype html><html><head><meta charset="utf-8"></head><body><button id="navigate" onclick="setTimeout(()=>location.href='http://[::ffff:127.0.0.1]:{port}/',100)">Navigate</button><button id="save" onclick="document.body.dataset.saved='yes'">Save</button></body></html>"#
+                );
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{html}",
+                    html.len()
+                );
+                let _ = socket.write_all(response.as_bytes()).await;
+            });
+        }
+    });
+    let directory = tempfile::tempdir().unwrap();
+    let browser = BrowserClient::new(
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome".into(),
+        directory.path().into(),
+    );
+    let cancel = CancellationToken::new();
+    let page = browser
+        .open(&format!("http://127.0.0.1:{port}/"), cancel.clone())
+        .await
+        .unwrap();
+    let scope = Scope::default();
+    let args = serde_json::json!({"page":page,"selector":"#navigate"});
+    browser
+        .click(
+            &page,
+            "#navigate",
+            &Permission {
+                name: "browser_click",
+                arguments: &args,
+                scope: &scope,
+            },
+            cancel.clone(),
+        )
+        .await
+        .unwrap();
+    // Navigation happens after the first interaction returns. No inspect call may
+    // refresh remembered state before the second interaction's own authorization.
+    tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+    let args = serde_json::json!({"page":page,"selector":"#save"});
+    let result = browser
+        .click(
+            &page,
+            "#save",
+            &Permission {
+                name: "browser_click",
+                arguments: &args,
+                scope: &scope,
+            },
+            cancel.clone(),
+        )
+        .await;
+    let snapshot = browser.inspect(&page, cancel).await.unwrap();
+    browser.close().await.unwrap();
+    server.abort();
+    assert!(snapshot.url.starts_with("http://[::ffff:"));
+    assert!(result.unwrap_err().is::<loh::tools::ToolError>());
+    assert!(!snapshot.dom.contains("data-saved=\"yes\""));
 }

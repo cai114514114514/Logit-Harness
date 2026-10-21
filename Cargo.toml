@@ -41,6 +41,9 @@ unicode-width = "0.2"
 axum = "0.8"
 rmcp = { version = "3.6", default-features = false, features = ["server", "transport-streamable-http-server"] }
 
+[build-dependencies]
+blake3 = "1"
+
 [profile.release]
 lto = "thin"
 strip = "debuginfo"

@@ -2,6 +2,7 @@
 /.superpowers/
 /.loh/
 /artifacts/
+/dist/
 .DS_Store
 .env
 __pycache__/

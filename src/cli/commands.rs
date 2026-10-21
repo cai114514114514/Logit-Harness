@@ -57,7 +57,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         Command::Doctor { json } => {
             let result = json!({"model":config.model,"base_url":config.base_url,"api_key_present":std::env::var("DEEPSEEK_API_KEY").is_ok_and(|v|!v.trim().is_empty()),
                 "chrome_present":config.chrome.is_file(),"service_sandbox_present":std::path::Path::new("/usr/bin/sandbox-exec").is_file(),
-                "paid_probe_performed":false,"state_directory":paths.home,"platform":std::env::consts::OS});
+                "paid_probe_performed":false,"state_directory":paths.home,"platform":std::env::consts::OS,
+                "version":env!("CARGO_PKG_VERSION"),"source_hash":env!("LOH_SOURCE_HASH")});
             if json {
                 println!("{result}");
             } else {
@@ -146,7 +147,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             daemon::command(&paths, &id, Control::Resume).await?;
             println!("resume requested: {id}");
         }
-        Command::Eval { command } => crate::eval::cli::run(command)?,
+        Command::Eval { command } => crate::eval::cli::run(command, &paths, &config).await?,
     }
     Ok(())
 }

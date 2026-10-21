@@ -219,3 +219,66 @@ Spec: docs/spec.md
   assumption/acceptance-note storage without letting model notes replace user requirements.
 - New Session snapshots have no compatibility requirement yet; keep one clean schema as implementation
   evolves. Do not add legacy readers just for these unreleased development snapshots.
+
+## 2026-10-22 evaluation and execution checkpoint
+
+- Implemented the real daemon-based evaluator: deterministic 540-entry schedule, opaque workspaces,
+  pinned source/executable hashes, durable once-only correction delivery, external source snapshots,
+  bounded standardized rescue, shared per-session/global money attribution and task-paired bootstrap
+  reports. Recovery retains the original session and refuses to recreate previously billed work.
+- First five development pilot trials all exhausted before a runnable CLI. Their source, events,
+  original corpus and freeze remain under artifacts/evaluation/pilot. An explicit pre-holdout
+  amendment raises the equal task ceilings to 500,000 tokens / 8,192 output, and discloses offline
+  serde_json availability. Functional inputs/outputs, thresholds and the 50 RMB total cap are unchanged.
+  Current registered digest: 2e710f9e3af45a70edec4654b3fb9827e19b770e455894a4c2e652ae2267dbbf.
+- The next five trials (dev-intervals, repetition 1, all conditions) passed all external checks, but
+  each exhausted before the agent's own completion gate. This is not a reliability improvement claim.
+  Their pinned executable remains in artifacts/evaluation/development; subsequent development trials
+  are running with that same pin. No holdout trial has run. Accounted spend after those five was
+  3.58795320 RMB, with zero uncertain/reserved; consult the live ledger for later spend.
+- Queued stale checks and stale diagnostic loops were reproduced and fixed. Active time now uses a
+  monotonic clock sampled independently of event volume; continuous-stream starvation was reproduced
+  RED then passed. Resuming stopped completed work triggers a fresh review instead of becoming idle.
+- Model assumptions and operational acceptance notes have separate types, model authorship and exact
+  user-source quotes for acceptance. They cannot mutate requirements or authorize actions. Requirement
+  revisions expire dependent notes. Explicitly observed build artifacts are rehashed for acceptance,
+  including deletion and changes inside normally excluded build directories.
+- Browser input now checks the live document origin immediately before interaction. Approval binds
+  origin and arguments; readonly actors cannot obtain remote mutation rights from an approval. Actual
+  Chrome script-navigation regression passes. Its first fixture incorrectly assumed macOS could reach
+  127.0.0.2; a socket probe disproved that and the fixture now uses a reachable IPv6-mapped loopback.
+  Browser evidence also requires unchanged source hashes across inspection.
+- MCP uses the official SDK's Auto lifecycle. The earlier discover-only ruling was unnecessarily
+  restrictive; SDK negotiation supports initialize servers without a second client implementation.
+  A real child server reproduced the failure and passes after this change. Approval IDs returned from
+  live tool checks are now persisted and used to requeue the exact pending action, with a second
+  authorization required if its origin changes before retry.
+- Full cargo test --all-targets passed after these engineering changes. New checks include actual
+  Chrome navigation, both MCP lifecycle modes, origin-sensitive authorization retries, time limits,
+  note provenance and build-artifact freshness. CLI documentation is now in README.md.
+- Still open: the full budget-constrained study, report threshold diagnostics and human review,
+  finer file-dependency scope, further paused/clarification lifecycle review, macOS release packaging,
+  and the required fresh final review. Native Apple Terminal visual review remains unverified.
+
+## 2026-10-22 protocol checkpoint
+
+- Twenty development trials now finished: 16 passed external acceptance; 4 encountered a Responses
+  history-format defect. The fifteen interval trials are all externally passing; only one reported
+  its own completion before exhaustion. The five decoder trials exposed the interruption ordering
+  bug. Full incident, request IDs, actual replay and study limitations are in
+  docs/incidents/2026-10-22-tool-history.md. The old study executable and results remain unchanged.
+- Wire serialization now delays an interleaved user message until all outputs in its tool batch;
+  the persisted chronology is untouched. A real replay of the original rejected request succeeded,
+  using 20,790 input / 122 output tokens, without executing returned tools.
+- Current shared ledger after replay: 10.36972104 RMB accounted + 25.952256 RMB uncertain, zero
+  reserved. The twelve HTTP 400 replies supplied no usage; their conservative allowance has not
+  been released. The user was asked for billing evidence, not additional spending authorization.
+  No further paid study batch has started after the defect was observed.
+- Time now checkpoints during a pending request, so a crash cannot lose an entire long stream's
+  elapsed duration. These heartbeats do not reset the evaluator's meaningful-activity stall timer.
+  Paused side questions preserve the paused state. Reporting reads the live, readonly ledger,
+  rejects duplicate/missing repetitions, computes strongest-baseline threshold diagnostics, and
+  cannot establish the research gate from partial/development results or timing proxies.
+- Current checks: cargo clippy --all-targets -- -D warnings passed; cargo test --all-targets passed
+  **119/119**; cargo build --release --locked passed. Release doctor reports source hash
+  b3efcf59a650ea4f94efad1bc6b0f36ae5c9f92b352cd65d9bf417180ad06728. Packaging and final review are next.

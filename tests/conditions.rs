@@ -217,6 +217,101 @@ impl loh::runtime::runner::Observer for AtWrite {
 struct Boundary {
     turn: AtomicUsize,
 }
+
+struct QueuedChecks {
+    main: AtomicUsize,
+    diagnosis: AtomicUsize,
+}
+#[async_trait::async_trait]
+impl Provider for QueuedChecks {
+    async fn respond(
+        &self,
+        request: Request,
+        _cancel: CancellationToken,
+        _events: mpsc::UnboundedSender<ModelEvent>,
+    ) -> anyhow::Result<Response> {
+        if request.instructions.starts_with("ROLE: steering") {
+            return Ok(call(
+                "classify_input",
+                json!({"intent":"refine","updates":{"r1":"inspect current result.txt"},"additions":[],"answer":"","reason":"fixture correction"}),
+            ));
+        }
+        if request.instructions.starts_with("ROLE: diagnosis") {
+            self.diagnosis.fetch_add(1, Ordering::SeqCst);
+            return Ok(call(
+                "report_diagnosis",
+                json!({"cause":"obsolete work","strategy":"read current files"}),
+            ));
+        }
+        if request.instructions.starts_with("ROLE: verifier") {
+            let evidence = request
+                .input
+                .iter()
+                .filter_map(|item| item["output"].as_str())
+                .filter_map(|text| serde_json::from_str::<Value>(text).ok())
+                .find_map(|data| data["evidence"].as_str().map(str::to_owned));
+            return Ok(if let Some(evidence) = evidence {
+                call(
+                    "report_verification",
+                    json!({"summary":"actual file","checks":[{"requirement":"r1","passed":true,"evidence":[evidence],"reason":"read file"}]}),
+                )
+            } else {
+                call("read_file", json!({"path":"result.txt"}))
+            });
+        }
+        if self.main.fetch_add(1, Ordering::SeqCst) == 0 {
+            let mut result = call(
+                "apply_patch",
+                json!({"edits":[{"path":"result.txt","operation":"create","expected":"missing","content":"ready"}]}),
+            );
+            for _ in 0..4 {
+                result
+                    .output
+                    .extend(call("check", json!({"command":"printf obsolete"})).output);
+            }
+            return Ok(result);
+        }
+        Ok(prose())
+    }
+}
+
+#[tokio::test]
+async fn obsolete_queued_results_do_not_trigger_stale_diagnostic_loops() {
+    let root = tempfile::tempdir().unwrap();
+    let logs = tempfile::tempdir().unwrap();
+    let session = Session::new(root.path().to_owned(), "write result.txt", 200000, 30);
+    let host = Arc::new(ToolHost::new(
+        Workspace::open(root.path()).unwrap(),
+        Arc::new(tokio::sync::RwLock::new(session.goal.clone())),
+        logs.path().join("logs"),
+    ));
+    let store = Arc::new(Store::open(&logs.path().join("state.db")).unwrap());
+    let observer = Arc::new(AtWrite {
+        store: store.clone(),
+        delivered: Default::default(),
+    });
+    let provider = Arc::new(QueuedChecks {
+        main: AtomicUsize::new(0),
+        diagnosis: AtomicUsize::new(0),
+    });
+    let (runner, _, _) = Runner::new(
+        session,
+        store,
+        provider.clone(),
+        host,
+        Settings {
+            linger: false,
+            max_output: 1024,
+            ..Default::default()
+        },
+    );
+    let state = tokio::time::timeout(Duration::from_secs(3), runner.observe(observer).run())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(state.status, Status::Completed);
+    assert_eq!(provider.diagnosis.load(Ordering::SeqCst), 0);
+}
 #[async_trait::async_trait]
 impl Provider for Boundary {
     async fn respond(

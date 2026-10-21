@@ -200,6 +200,36 @@ async fn stdio_sdk_client_discovers_and_calls_an_actual_child_server() {
 }
 
 #[tokio::test]
+async fn sdk_negotiates_an_initialize_server_without_a_second_client_implementation() {
+    let root = tempfile::tempdir().unwrap();
+    let script =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/mcp_server.py");
+    let server = config(Transport::Stdio {
+        command: "python3".into(),
+        args: vec![
+            "-u".into(),
+            script.to_string_lossy().into_owned(),
+            "--initialize".into(),
+        ],
+        environment: vec![],
+    });
+    let client = McpClient::connect(&server, root.path(), root.path())
+        .await
+        .unwrap();
+    let result = client
+        .call(
+            "echo",
+            json!({"text":"negotiated"}),
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    client.close().await.unwrap();
+    assert!(result.complete && result.success);
+    assert!(result.data.to_string().contains("negotiated"));
+}
+
+#[tokio::test]
 async fn streamable_http_uses_the_official_sdk_on_both_sides() {
     let service: StreamableHttpService<Echo, LocalSessionManager> =
         StreamableHttpService::new(|| Ok(Echo), Default::default(), Default::default());

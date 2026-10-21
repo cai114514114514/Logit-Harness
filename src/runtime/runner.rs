@@ -59,6 +59,7 @@ pub(super) struct Job {
 }
 
 pub struct Runner {
+    clock: super::clock::Clock,
     observer: Option<Arc<dyn Observer>>,
     pub(super) session: Session,
     pub(super) store: Arc<Store>,
@@ -89,6 +90,7 @@ impl Runner {
         let (send, wire) = mpsc::unbounded_channel();
         (
             Self {
+                clock: super::clock::Clock::new(),
                 observer: None,
                 session,
                 store,
@@ -123,6 +125,7 @@ impl Runner {
         self
     }
     pub(super) fn status(&mut self, status: Status, reason: &str) -> anyhow::Result<()> {
+        self.account_time()?;
         self.session.status = status.clone();
         self.emit(EventData::Status {
             status,
@@ -140,6 +143,7 @@ impl Runner {
         }
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
         loop {
+            self.check_time()?;
             self.drain_inbox().await?;
             while let Ok(control) = self.control.try_recv() {
                 self.handle_control(control).await?;
@@ -166,32 +170,56 @@ impl Runner {
                     self.session.status,
                     Status::Running | Status::Waiting | Status::Paused
                 )
+                && self.schedule().await?
             {
-                if self.schedule().await? {
-                    // Local state transitions should not wait for the wall-clock tick.
-                    // Yield to I/O, then drain durable and direct controls before more work.
-                    tokio::task::yield_now().await;
-                    while let Ok(control) = self.control.try_recv() {
-                        self.handle_control(control).await?;
-                    }
-                    continue;
+                // Local state transitions should not wait for the wall-clock tick.
+                // Yield to I/O, then drain durable and direct controls before more work.
+                tokio::task::yield_now().await;
+                while let Ok(control) = self.control.try_recv() {
+                    self.handle_control(control).await?;
                 }
+                continue;
             }
             tokio::select! {
                 biased;
-                Some(control)=self.control.recv()=>self.handle_control(control).await?,
-                Some(wire)=self.wire.recv()=>self.handle_wire(wire)?,
+                Some(control)=self.control.recv()=>{
+                    self.check_time()?;
+                    self.handle_control(control).await?;
+                }
+                Some(wire)=self.wire.recv()=>{
+                    self.check_time()?;
+                    self.handle_wire(wire)?;
+                }
                 Some(result)=self.tasks.join_next(),if !self.tasks.is_empty()=>{
+                    self.check_time()?;
                     let (id,result)=result?;self.handle_result(id,result).await?;
                 }
-                _=tick.tick()=>{
-                    if self.session.status==Status::Running && !self.jobs.is_empty(){
-                        self.session.elapsed+=1;
-                        if self.session.elapsed>=self.session.seconds {self.halt(Status::Exhausted,"execution time budget reached")?;}
-                    }
-                }
+                _=tick.tick()=>self.check_time()?,
             }
         }
+    }
+    fn account_time(&mut self) -> anyhow::Result<()> {
+        let active = self.session.status == Status::Running
+            || (self.session.status == Status::Waiting && !self.jobs.is_empty());
+        let seconds = self.clock.sample(active);
+        if seconds != 0 {
+            self.session.elapsed = self.session.elapsed.saturating_add(seconds);
+            // Delta events omit full snapshots. A long stream must still save
+            // elapsed time before a crash, even without a finished model/tool.
+            self.emit(EventData::Elapsed {
+                seconds: self.session.elapsed,
+            })?;
+        }
+        Ok(())
+    }
+    fn check_time(&mut self) -> anyhow::Result<()> {
+        self.account_time()?;
+        if matches!(self.session.status, Status::Running | Status::Waiting)
+            && self.session.elapsed >= self.session.seconds
+        {
+            self.halt(Status::Exhausted, "execution time budget reached")?;
+        }
+        Ok(())
     }
     pub(super) fn halt(&mut self, target: Status, reason: &str) -> anyhow::Result<()> {
         for job in self.jobs.values() {

@@ -23,6 +23,8 @@ pub struct Goal {
     pub requirements: BTreeMap<String, Requirement>,
     #[serde(default)]
     pub history: Vec<Revision>,
+    #[serde(default)]
+    pub notes: Vec<super::notes::Note>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -72,6 +74,7 @@ impl Goal {
             epoch: 0,
             requirements: BTreeMap::from([(INITIAL_REQUIREMENT_ID.into(), requirement)]),
             history: vec![],
+            notes: vec![],
         }
     }
 

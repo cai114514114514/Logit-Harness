@@ -103,6 +103,27 @@ fn concurrent_runners_share_one_persistent_campaign_cap() {
     assert!(reopened.settle(&reservation, Some(0)).is_err());
 }
 
+#[test]
+fn per_session_costs_still_share_the_same_immutable_cap() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("money.db");
+    let first = Money::open(&path, "study", 50 * RMB, &prices())
+        .unwrap()
+        .for_session("first");
+    let second = Money::open(&path, "study", 50 * RMB, &prices())
+        .unwrap()
+        .for_session("second");
+    let a = first.reserve(4 * RMB).unwrap();
+    let b = second.reserve(3 * RMB).unwrap();
+    first.settle(&a, Some(RMB)).unwrap();
+    second.settle(&b, None).unwrap();
+    assert_eq!(first.session_balance("first").unwrap().used, RMB);
+    assert_eq!(first.session_balance("first").unwrap().uncertain, 0);
+    assert_eq!(first.session_balance("second").unwrap().uncertain, 3 * RMB);
+    assert_eq!(first.balance().unwrap().used, RMB);
+    assert_eq!(first.balance().unwrap().uncertain, 3 * RMB);
+}
+
 struct UsageProvider;
 #[async_trait::async_trait]
 impl loh::model::Provider for UsageProvider {

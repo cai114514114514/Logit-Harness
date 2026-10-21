@@ -38,7 +38,9 @@ impl Task {
         let command = match self.language.as_str() {
             "python" => "python3 -B main.py",
             "typescript" => "node --experimental-strip-types main.ts",
-            _ => "cargo build --offline；Cargo 包名必须为 task，构建后运行 target/debug/task",
+            _ => {
+                "cargo build --offline；Cargo 包名必须为 task，构建后运行 target/debug/task。本机 Cargo 离线缓存已包含 serde_json 1.x，可直接声明使用该 JSON 库"
+            }
         };
         let examples=self.checks.iter().filter(|check|check.public).map(|check|serde_json::json!({"input":check.input,"output":check.before.as_ref().unwrap_or(&check.expected)})).collect::<Vec<_>>();
         format!(

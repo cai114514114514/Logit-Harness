@@ -29,7 +29,7 @@ pub enum ServerMessage {
         event: SessionEvent,
     },
     Snapshot {
-        state: Session,
+        state: Box<Session>,
         sequence: u64,
     },
     View {

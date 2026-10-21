@@ -429,3 +429,47 @@ async fn a_replanned_dependency_rejects_even_a_file_current_patch() {
     );
     assert!(!root.path().join("new.txt").exists());
 }
+
+#[tokio::test]
+async fn obsolete_checks_do_not_launch() {
+    let root = tempfile::tempdir().unwrap();
+    let logs = tempfile::tempdir().unwrap();
+    let mut goal = Goal::new("check JSON storage");
+    let scope = Scope {
+        requirements: goal.active_versions(),
+        readonly: true,
+        ..Default::default()
+    };
+    goal.revise(Change {
+        source: "switch to SQLite".into(),
+        updates: BTreeMap::from([("r1".into(), "check SQLite storage".into())]),
+        additions: vec![],
+        replacement: false,
+    })
+    .unwrap();
+    let host = ToolHost::new(
+        Workspace::open(root.path()).unwrap(),
+        Arc::new(tokio::sync::RwLock::new(goal)),
+        logs.path().to_owned(),
+    );
+    let (events, mut received) = mpsc::unbounded_channel();
+    let result = host
+        .execute(
+            ToolCall {
+                id: "outdated-check".into(),
+                name: "check".into(),
+                arguments: json!({"command":"printf outdated"}),
+            },
+            scope,
+            CancellationToken::new(),
+            events,
+        )
+        .await;
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("requirements changed")
+    );
+    assert!(received.try_recv().is_err());
+}

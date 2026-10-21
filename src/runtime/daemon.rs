@@ -25,9 +25,18 @@ use std::{
 
 pub async fn serve(paths: Paths, id: &str) -> anyhow::Result<()> {
     paths.prepare()?;
-    let config = Config::load(&paths.home)?;
+    let mut config = Config::load(&paths.home)?;
     let store = Arc::new(Store::open(&paths.database())?);
     let mut session: Session = store.load(id)?;
+    if let Some(spec) = &session.evaluation {
+        config.model = spec.protocol.model.clone();
+        config.workers = spec.protocol.workers;
+        config.max_output = spec.protocol.max_output;
+        config.context_bytes = spec.protocol.context_bytes;
+        config.user_skills = spec.protocol.user_skills;
+        config.search_limit = spec.protocol.search_limit;
+        config.mcp.clear();
+    }
     let _owner = workspace_lock(&session.workspace, id)?;
     super::recovery::reconcile(&mut session, &store, &paths.logs(id)?).await?;
     let key = std::env::var("DEEPSEEK_API_KEY")
@@ -38,12 +47,15 @@ pub async fn serve(paths: Paths, id: &str) -> anyhow::Result<()> {
         key.clone(),
     )?);
     let money = if let Some(campaign) = &session.campaign {
-        let money = Arc::new(super::money::Money::open(
-            &paths.home.join("money.sqlite"),
-            &campaign.name,
-            campaign.limit,
-            &campaign.prices,
-        )?);
+        let money = Arc::new(
+            super::money::Money::open(
+                &paths.home.join("money.sqlite"),
+                &campaign.name,
+                campaign.limit,
+                &campaign.prices,
+            )?
+            .for_session(id),
+        );
         provider = Arc::new(super::meter::Metered::new(
             provider,
             money.clone(),
@@ -121,6 +133,18 @@ pub async fn serve(paths: Paths, id: &str) -> anyhow::Result<()> {
     };
     let (runner, control, _events) =
         Runner::new(session, store.clone(), provider, Arc::new(tools), settings);
+    let state: Session = store.load(id)?;
+    let runner = if let Some(spec) = state.evaluation {
+        let observer = Arc::new(crate::eval::correction::Correction::new(
+            spec,
+            id.into(),
+            store.clone(),
+        ));
+        observer.recover()?;
+        runner.observe(observer)
+    } else {
+        runner
+    };
     let server = ipc::Server::bind(
         paths.socket(id)?,
         id.into(),
@@ -164,10 +188,36 @@ pub async fn serve(paths: Paths, id: &str) -> anyhow::Result<()> {
 }
 
 pub async fn launch(paths: &Paths, id: &str) -> anyhow::Result<()> {
+    launch_with(paths, id, &std::env::current_exe()?).await
+}
+
+pub async fn launch_with(paths: &Paths, id: &str, executable: &Path) -> anyhow::Result<()> {
     let socket = paths.socket(id)?;
     if tokio::net::UnixStream::connect(&socket).await.is_ok() {
         return Ok(());
     }
+    let session: Session = Store::open(&paths.database())?.load(id)?;
+    for _ in 0..200 {
+        let handle = owner_file(&session.workspace)?;
+        if unsafe { libc::flock(handle.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+            break;
+        }
+        let error = std::io::Error::last_os_error();
+        anyhow::ensure!(
+            error.raw_os_error() == Some(libc::EWOULDBLOCK),
+            "cannot inspect workspace ownership: {error}"
+        );
+        if tokio::net::UnixStream::connect(&socket).await.is_ok() {
+            return Ok(());
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    let handle = owner_file(&session.workspace)?;
+    anyhow::ensure!(
+        unsafe { libc::flock(handle.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0,
+        "workspace still has a live owner; no replacement daemon was started"
+    );
+    drop(handle);
     let logs = paths.logs(id)?;
     std::fs::create_dir_all(&logs)?;
     let log = std::fs::OpenOptions::new()
@@ -175,7 +225,7 @@ pub async fn launch(paths: &Paths, id: &str) -> anyhow::Result<()> {
         .append(true)
         .mode(0o600)
         .open(logs.join("runner.log"))?;
-    let mut command = std::process::Command::new(std::env::current_exe()?);
+    let mut command = std::process::Command::new(executable);
     command
         .args([
             "--home",
@@ -234,20 +284,7 @@ pub async fn command(paths: &Paths, id: &str, command: Control) -> anyhow::Resul
 }
 
 fn workspace_lock(workspace: &Path, id: &str) -> anyhow::Result<std::fs::File> {
-    let path = workspace.canonicalize()?;
-    let hash = blake3::hash(path.as_os_str().as_encoded_bytes());
-    let file = std::path::PathBuf::from(format!(
-        "/tmp/loh-owner-{}-{}.lock",
-        unsafe { libc::geteuid() },
-        &hash.to_hex()[..24]
-    ));
-    let mut handle = std::fs::OpenOptions::new()
-        .create(true)
-        .read(true)
-        .write(true)
-        .mode(0o600)
-        .custom_flags(libc::O_NOFOLLOW)
-        .open(file)?;
+    let mut handle = owner_file(workspace)?;
     let result = unsafe { libc::flock(handle.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
     anyhow::ensure!(
         result == 0,
@@ -256,5 +293,22 @@ fn workspace_lock(workspace: &Path, id: &str) -> anyhow::Result<std::fs::File> {
     handle.set_len(0)?;
     handle.write_all(id.as_bytes())?;
     handle.sync_all()?;
+    Ok(handle)
+}
+fn owner_file(workspace: &Path) -> anyhow::Result<std::fs::File> {
+    let path = workspace.canonicalize()?;
+    let hash = blake3::hash(path.as_os_str().as_encoded_bytes());
+    let file = std::path::PathBuf::from(format!(
+        "/tmp/loh-owner-{}-{}.lock",
+        unsafe { libc::geteuid() },
+        &hash.to_hex()[..24]
+    ));
+    let handle = std::fs::OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(file)?;
     Ok(handle)
 }

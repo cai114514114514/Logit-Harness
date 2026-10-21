@@ -65,6 +65,14 @@ pub enum EventData {
         tool: String,
         arguments: Value,
     },
+    ActionScoped {
+        id: String,
+        actor: String,
+        requirements: std::collections::BTreeMap<String, u64>,
+        epoch: u64,
+        steps: std::collections::BTreeMap<String, u64>,
+        observed: super::Fingerprints,
+    },
     ActionFinished {
         id: String,
         result: Value,
@@ -75,6 +83,9 @@ pub enum EventData {
         input: u64,
         output: u64,
         cached: u64,
+    },
+    Elapsed {
+        seconds: u64,
     },
     Evidence {
         id: String,

@@ -141,10 +141,11 @@ async fn missing_storage_decision_does_not_block_independent_interface_work() {
     let running = tokio::spawn(runner.run());
     let waiting = tokio::time::timeout(Duration::from_secs(2), async {
         loop {
-            if let Ok(session) = store.load::<Session>(&id) {
-                if session.status == Status::Waiting && root.path().join("ui.txt").exists() {
-                    break session;
-                }
+            if let Ok(session) = store.load::<Session>(&id)
+                && session.status == Status::Waiting
+                && root.path().join("ui.txt").exists()
+            {
+                break session;
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }

@@ -185,24 +185,24 @@ impl ToolHost {
         } else {
             None
         };
-        if !effect.readonly() && effect != Effect::Control {
+        if (!effect.readonly() || effect == Effect::Check) && effect != Effect::Control {
             self.check_stale(&scope).await?;
         }
-        if call.name == "apply_patch" {
-            if let Some(knowledge) = &self.knowledge {
-                let paths = call.arguments["edits"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|edit| edit["path"].as_str().map(str::to_owned))
-                    .collect::<Vec<_>>();
-                for entry in knowledge.instructions.for_paths(&paths)? {
-                    anyhow::ensure!(
-                        scope.observed.get(&entry.path) == Some(&entry.hash),
-                        "read project_instructions before editing this directory: {}",
-                        entry.path
-                    );
-                }
+        if call.name == "apply_patch"
+            && let Some(knowledge) = &self.knowledge
+        {
+            let paths = call.arguments["edits"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|edit| edit["path"].as_str().map(str::to_owned))
+                .collect::<Vec<_>>();
+            for entry in knowledge.instructions.for_paths(&paths)? {
+                anyhow::ensure!(
+                    scope.observed.get(&entry.path) == Some(&entry.hash),
+                    "read project_instructions before editing this directory: {}",
+                    entry.path
+                );
             }
         }
         anyhow::ensure!(!cancel.is_cancelled(), "tool cancelled before dispatch");

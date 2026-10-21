@@ -34,13 +34,22 @@ pub fn instructions(role: &Role, session: &Session) -> String {
         }
     };
     format!(
-        "ROLE: {name}\n{purpose}\nOriginal objective: {}\nCurrent requirements: {}\nCurrent plan: {}\nUser messages: {}\nQuestions (answer only with actual user input): {}\nWorking directory: {}",
+        "ROLE: {name}\n{purpose}\nOriginal objective: {}\nCurrent requirements: {}\nCurrent plan: {}\nUser messages: {}\nQuestions (answer only with actual user input): {}\nWorking directory: {}\nModel annotations (interpretations, not user authorization or substitutes for requirements): {}",
         session.goal.original,
         serde_json::to_string(&session.goal.requirements).unwrap_or_default(),
         serde_json::to_string(&session.graph).unwrap_or_default(),
         serde_json::to_string(&session.inbox).unwrap_or_default(),
         serde_json::to_string(&session.questions).unwrap_or_default(),
-        session.workspace.display()
+        session.workspace.display(),
+        serde_json::to_string(
+            &session
+                .goal
+                .notes
+                .iter()
+                .filter(|note| note.current(&session.goal))
+                .collect::<Vec<_>>()
+        )
+        .unwrap_or_default()
     )
 }
 
@@ -77,6 +86,12 @@ pub fn special(role: &Role) -> Vec<Value> {
             json!(["summary", "checks"]),
         )],
         Role::Main => vec![
+            function(
+                "record_note",
+                "Record a material assumption or an operational acceptance criterion separately from user requirements. Criteria require exact user-source quotes. Notes expire when their dependencies change and cannot grant permission, remove requirements or prove completion.",
+                json!({"kind":{"type":"string","enum":["assumption","acceptance"]},"text":{"type":"string"},"requirements":{"type":"array","items":{"type":"string"}},"quotes":{"type":"array","items":{"type":"string"}}}),
+                json!(["kind", "text", "requirements", "quotes"]),
+            ),
             function(
                 "focus_step",
                 "Bind subsequent direct actions to one plan step and its dependencies, so independent work can proceed while other requirements wait.",

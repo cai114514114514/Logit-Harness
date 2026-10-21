@@ -14,6 +14,43 @@ impl Context {
     pub fn append(&mut self, output: &[Value]) {
         self.items.extend_from_slice(output);
     }
+    /// The event history preserves when a correction arrived. The Responses
+    /// wire must keep every assistant tool batch adjacent to all its outputs:
+    /// inserting a user message between them starts a new message and loses the
+    /// association in DeepSeek's adapter. Delay only that message's wire position.
+    pub fn request_items(&self) -> anyhow::Result<Vec<Value>> {
+        self.validate_tool_pairing()?;
+        let mut pending = BTreeSet::new();
+        let mut delayed = vec![];
+        let mut items = vec![];
+        for item in &self.items {
+            match item["type"].as_str() {
+                Some("function_call" | "custom_tool_call") => {
+                    pending.insert(item["call_id"].as_str().unwrap());
+                }
+                Some("function_call_output" | "custom_tool_call_output") => {
+                    anyhow::ensure!(
+                        pending.remove(item["call_id"].as_str().unwrap()),
+                        "orphan or duplicate tool output"
+                    );
+                }
+                _ => (),
+            }
+            if matches!(item["role"].as_str(), Some("user" | "developer")) && !pending.is_empty() {
+                delayed.push(item.clone());
+            } else {
+                items.push(item.clone());
+                if pending.is_empty() {
+                    items.append(&mut delayed);
+                }
+            }
+        }
+        anyhow::ensure!(
+            pending.is_empty(),
+            "cannot dispatch across outstanding tool calls"
+        );
+        Ok(items)
+    }
     pub fn tool_result(&mut self, id: &str, result: &Value) {
         // `Value::to_string` re-serializes: an already-string result gains a second layer of
         // quotes/escaping. Tool outputs are JSON-shaped for the model, so the uniform encoding

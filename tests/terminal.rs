@@ -56,7 +56,7 @@ fn delayed_snapshot_cannot_overwrite_a_newer_live_status() {
     let mut session = Session::new(std::env::temp_dir(), "test", 1000, 60);
     session.status = Status::Running;
     screen.receive(ServerMessage::Snapshot {
-        state: session.clone(),
+        state: session.clone().into(),
         sequence: 10,
     });
     screen.receive(ServerMessage::Event {
@@ -71,7 +71,7 @@ fn delayed_snapshot_cannot_overwrite_a_newer_live_status() {
         },
     });
     screen.receive(ServerMessage::Snapshot {
-        state: session,
+        state: session.into(),
         sequence: 10,
     });
     assert_eq!(screen.session.unwrap().status, Status::Paused);
@@ -84,7 +84,7 @@ fn replayed_history_does_not_revert_the_latest_snapshot_status_or_budget() {
     session.budget.used = 50;
     let mut screen = Screen::default();
     screen.receive(ServerMessage::Snapshot {
-        state: session,
+        state: session.into(),
         sequence: 9,
     });
     for (sequence, data) in [

@@ -207,6 +207,21 @@ impl Workspace {
         );
         Ok(result)
     }
+
+    /// Explicitly observed files remain dependencies even inside excluded build
+    /// directories. Keep them separate from the aggregate source-tree digest.
+    pub fn snapshot_for<'a>(
+        &self,
+        paths: impl IntoIterator<Item = &'a String>,
+    ) -> anyhow::Result<Fingerprints> {
+        let mut snapshot = self.fingerprints()?;
+        for path in paths {
+            if path != WORKSPACE_FINGERPRINT_KEY {
+                snapshot.insert(path.clone(), fingerprint(&self.resolve(path)?)?);
+            }
+        }
+        Ok(snapshot)
+    }
 }
 
 pub fn fingerprint(path: &Path) -> anyhow::Result<String> {

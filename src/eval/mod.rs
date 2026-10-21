@@ -1,2 +1,11 @@
 pub mod cli;
+pub mod correction;
+mod files;
+pub mod gate;
+pub mod grade;
 pub mod manifest;
+pub mod report;
+pub mod run;
+pub mod schedule;
+mod stats;
+pub mod trial;

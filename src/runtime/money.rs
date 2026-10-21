@@ -46,6 +46,40 @@ pub struct Money {
     connection: Mutex<Connection>,
     account: String,
     owner: crate::tools::identity::Identity,
+    session: Option<String>,
+}
+
+/// Reports read the same account without creating accounts, settling reservations
+/// or depending on mutable configuration files.
+pub struct Ledger {
+    connection: Connection,
+    account: String,
+}
+impl Ledger {
+    pub fn open(path: &Path, account: &str) -> anyhow::Result<Self> {
+        let connection =
+            Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        connection.busy_timeout(std::time::Duration::from_secs(5))?;
+        read_balance(&connection, account)?;
+        Ok(Self {
+            connection,
+            account: account.into(),
+        })
+    }
+    pub fn balance(&self) -> anyhow::Result<Balance> {
+        read_balance(&self.connection, &self.account)
+    }
+    pub fn session_balance(&self, session: &str) -> anyhow::Result<Balance> {
+        read_session(&self.connection, &self.account, session)
+    }
+    pub fn prices(&self) -> anyhow::Result<Prices> {
+        let raw: String = self.connection.query_row(
+            "SELECT prices FROM accounts WHERE name=?1",
+            [&self.account],
+            |row| row.get(0),
+        )?;
+        Ok(serde_json::from_str(&raw)?)
+    }
 }
 impl Money {
     pub fn open(path: &Path, account: &str, limit: u64, prices: &Prices) -> anyhow::Result<Self> {
@@ -60,7 +94,9 @@ impl Money {
             CREATE TABLE IF NOT EXISTS charges(id TEXT PRIMARY KEY, account TEXT NOT NULL,
                 amount INTEGER NOT NULL, state TEXT NOT NULL, actual INTEGER);
             CREATE INDEX IF NOT EXISTS charges_account ON charges(account,state);
-            CREATE TABLE IF NOT EXISTS charge_owners(id TEXT PRIMARY KEY, identity TEXT NOT NULL);")?;
+            CREATE TABLE IF NOT EXISTS charge_owners(id TEXT PRIMARY KEY, identity TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS charge_sessions(id TEXT PRIMARY KEY, session TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS charge_session ON charge_sessions(session);")?;
         let encoded = serde_json::to_string(prices)?;
         connection.execute(
             "INSERT INTO accounts(name,cap,prices) VALUES(?1,?2,?3) ON CONFLICT(name) DO NOTHING",
@@ -76,6 +112,7 @@ impl Money {
             "existing campaign budget or price schedule differs; cannot silently reset it"
         );
         let money = Self {
+            session: None,
             connection: Mutex::new(connection),
             account: account.into(),
             owner: crate::tools::identity::Identity::capture(std::process::id())?
@@ -108,8 +145,25 @@ impl Money {
             "INSERT INTO charge_owners(id,identity) VALUES(?1,?2)",
             params![id, serde_json::to_string(&self.owner)?],
         )?;
+        if let Some(session) = &self.session {
+            transaction.execute(
+                "INSERT INTO charge_sessions(id,session) VALUES(?1,?2)",
+                params![id, session],
+            )?;
+        }
         transaction.commit()?;
         Ok(id)
+    }
+    pub fn for_session(mut self, session: &str) -> Self {
+        self.session = Some(session.into());
+        self
+    }
+    pub fn session_balance(&self, session: &str) -> anyhow::Result<Balance> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| anyhow::anyhow!("money lock poisoned"))?;
+        read_session(&connection, &self.account, session)
     }
     pub fn settle(&self, id: &str, amount: Option<u64>) -> anyhow::Result<()> {
         let mut connection = self
@@ -207,4 +261,20 @@ fn read_balance(connection: &Connection, account: &str) -> anyhow::Result<Balanc
             })
         },
     )?)
+}
+
+fn read_session(connection: &Connection, account: &str, session: &str) -> anyhow::Result<Balance> {
+    let mut balance = read_balance(connection, account)?;
+    let values: (u64, u64, u64) = connection.query_row(
+        "SELECT COALESCE(SUM(CASE WHEN state='settled' THEN actual ELSE 0 END),0),
+            COALESCE(SUM(CASE WHEN state='uncertain' THEN amount ELSE 0 END),0),
+            COALESCE(SUM(CASE WHEN state='reserved' THEN amount ELSE 0 END),0)
+         FROM charges JOIN charge_sessions USING(id) WHERE account=?1 AND session=?2",
+        params![account, session],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    balance.used = values.0;
+    balance.uncertain = values.1;
+    balance.reserved = values.2;
+    Ok(balance)
 }

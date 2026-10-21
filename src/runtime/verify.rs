@@ -28,7 +28,12 @@ impl Runner {
                 && self.blocked_requirements().is_empty(),
             "active actions or missing user input must settle before completion"
         );
-        let snapshot = self.tools.workspace.fingerprints()?;
+        let snapshot = self.tools.workspace.snapshot_for(
+            self.session
+                .evidence
+                .iter()
+                .flat_map(|evidence| evidence.files.keys()),
+        )?;
         let versions = self.session.goal.active_versions();
         // A malformed verdict is a verifier protocol error, not a reason to rewrite
         // a correct deliverable. Validate the entire report before adding evidence.

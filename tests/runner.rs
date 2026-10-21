@@ -202,10 +202,10 @@ async fn correction_cancels_old_command_before_replacement_write() {
     let running = tokio::spawn(runner.run());
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {
-            if let Ok(event) = events.recv().await {
-                if matches!(event.data,EventData::ActionStarted{ref tool,..}if tool=="shell") {
-                    break;
-                }
+            if let Ok(event) = events.recv().await
+                && matches!(event.data,EventData::ActionStarted{ref tool,..}if tool=="shell")
+            {
+                break;
             }
         }
     })
@@ -340,6 +340,52 @@ async fn a_question_after_completion_restores_the_completed_status() {
 struct InvalidPlan {
     first: std::sync::atomic::AtomicBool,
     inner: Script,
+}
+
+#[tokio::test]
+async fn a_side_question_while_paused_does_not_resume_implementation() {
+    let root = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    std::fs::write(root.path().join("result.txt"), "SQLite").unwrap();
+    let mut session = Session::new(root.path().into(), "Write result.txt", 1_000_000, 60);
+    session.status = Status::Paused;
+    let id = session.id.clone();
+    let store = Arc::new(Store::open(&state.path().join("db")).unwrap());
+    let tools = Arc::new(ToolHost::new(
+        Workspace::open(root.path()).unwrap(),
+        Arc::new(tokio::sync::RwLock::new(session.goal.clone())),
+        state.path().join("logs"),
+    ));
+    let provider = Arc::new(QuestionScript(Script {
+        main: AtomicUsize::new(0),
+        premature: false,
+        long_command: false,
+    }));
+    let (runner, control, mut events) = Runner::new(
+        session,
+        store.clone(),
+        provider.clone(),
+        tools,
+        Settings::default(),
+    );
+    let running = tokio::spawn(runner.run());
+    control
+        .send(Control::Message {
+            text: "What is in the file?".into(),
+        })
+        .await
+        .unwrap();
+    let answered = tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            if matches!(events.recv().await.unwrap().data, EventData::Message { ref actor, .. } if actor.starts_with("question-")) { break; }
+        }
+    }).await;
+    let saved: Session = store.load(&id).unwrap();
+    control.send(Control::Stop).await.unwrap();
+    running.await.unwrap().unwrap();
+    assert!(answered.is_ok());
+    assert_eq!(saved.status, Status::Paused);
+    assert_eq!(provider.0.main.load(Ordering::SeqCst), 0);
 }
 #[async_trait::async_trait]
 impl Provider for InvalidPlan {
@@ -525,6 +571,39 @@ struct ReportFormat {
     inner: Script,
     malformed: std::sync::atomic::AtomicBool,
 }
+
+#[tokio::test]
+async fn time_is_durable_before_a_long_request_finishes() {
+    let root = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let session = Session::new(root.path().into(), "work", 1_000_000, 60);
+    let id = session.id.clone();
+    let store = Arc::new(Store::open(&state.path().join("db")).unwrap());
+    let tools = Arc::new(ToolHost::new(
+        Workspace::open(root.path()).unwrap(),
+        Arc::new(tokio::sync::RwLock::new(session.goal.clone())),
+        state.path().join("logs"),
+    ));
+    let (runner, control, mut events) = Runner::new(
+        session,
+        store.clone(),
+        Arc::new(SlowCancellation),
+        tools,
+        Settings::default(),
+    );
+    let running = tokio::spawn(runner.run());
+    let checkpoint = tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            if matches!(events.recv().await.unwrap().data, EventData::Elapsed { seconds } if seconds >= 1) { break; }
+        }
+    }).await;
+    let saved: Session = store.load(&id).unwrap();
+    control.send(Control::Stop).await.unwrap();
+    running.await.unwrap().unwrap();
+    assert!(checkpoint.is_ok());
+    assert!(saved.elapsed >= 1);
+    assert_eq!(saved.status, Status::Running);
+}
 #[async_trait::async_trait]
 impl Provider for ReportFormat {
     async fn respond(
@@ -621,4 +700,102 @@ async fn resuming_completed_work_preserves_its_completion() {
     control.send(Control::Stop).await.unwrap();
     running.await.unwrap().unwrap();
     assert_eq!(snapshot.status, Status::Completed);
+}
+
+struct Streaming;
+
+#[tokio::test]
+async fn stopped_completed_work_gets_fresh_verification_on_resume() {
+    let root = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let script = || Script {
+        main: AtomicUsize::new(0),
+        premature: false,
+        long_command: false,
+    };
+    let (runner, _, _) = setup(root.path(), state.path(), script());
+    let mut session = runner.run().await.unwrap();
+    assert_eq!(session.status, Status::Completed);
+    let old_reviews = session.evidence.len();
+    session.status = Status::Stopped;
+    let store = Arc::new(Store::open(&state.path().join("resume.db")).unwrap());
+    let tools = Arc::new(ToolHost::new(
+        Workspace::open(root.path()).unwrap(),
+        Arc::new(tokio::sync::RwLock::new(session.goal.clone())),
+        state.path().join("logs"),
+    ));
+    let (runner, control, _) = Runner::new(
+        session,
+        store,
+        Arc::new(script()),
+        tools,
+        Settings {
+            linger: false,
+            ..Settings::default()
+        },
+    );
+    control.send(Control::Resume).await.unwrap();
+    let resumed = tokio::time::timeout(Duration::from_secs(3), runner.run())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(resumed.status, Status::Completed);
+    assert!(
+        resumed.evidence.len() > old_reviews,
+        "completion needs a fresh inspection after stop"
+    );
+}
+#[async_trait::async_trait]
+impl Provider for Streaming {
+    async fn respond(
+        &self,
+        _request: Request,
+        cancel: CancellationToken,
+        events: mpsc::UnboundedSender<ModelEvent>,
+    ) -> anyhow::Result<Response> {
+        while !cancel.is_cancelled() {
+            // Keep the preferred wire branch ready. Event count must not determine time.
+            for _ in 0..256 {
+                let _ = events.send(ModelEvent::Reasoning("thinking".into()));
+            }
+            tokio::task::yield_now().await;
+        }
+        anyhow::bail!("cancelled")
+    }
+}
+
+#[tokio::test]
+async fn execution_limit_measures_wall_time_during_continuous_streaming() {
+    let root = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let session = Session::new(root.path().into(), "work", 1_000_000, 1);
+    let store = Arc::new(Store::open(&state.path().join("db")).unwrap());
+    let tools = Arc::new(ToolHost::new(
+        Workspace::open(root.path()).unwrap(),
+        Arc::new(tokio::sync::RwLock::new(session.goal.clone())),
+        state.path().join("logs"),
+    ));
+    let (runner, _control, _events) = Runner::new(
+        session,
+        store,
+        Arc::new(Streaming),
+        tools,
+        Settings {
+            linger: false,
+            ..Settings::default()
+        },
+    );
+    let started = tokio::time::Instant::now();
+    let result = tokio::time::timeout(Duration::from_secs(3), runner.run()).await;
+    assert!(
+        result.is_ok(),
+        "busy event traffic must not starve the time limit"
+    );
+    assert!(
+        started.elapsed() >= Duration::from_millis(900),
+        "the first immediate interval tick is not a second of work"
+    );
+    let session = result.unwrap().unwrap();
+    assert_eq!(session.status, Status::Exhausted);
+    assert!(session.elapsed >= 1);
 }

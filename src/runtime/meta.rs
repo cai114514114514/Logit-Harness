@@ -16,6 +16,24 @@ impl Runner {
     ) -> anyhow::Result<bool> {
         let role = self.session.actors[actor_id].role.clone();
         match (role, pending.call.name.as_str()) {
+            (Role::Main, "record_note") => {
+                anyhow::ensure!(
+                    self.scope_current(&pending.scope),
+                    "note uses obsolete requirements"
+                );
+                let input = serde_json::from_value(pending.call.arguments.clone())?;
+                let author = format!("{actor_id}:turn-{}", self.session.actors[actor_id].turns);
+                let id = self.session.goal.annotate(input, &author)?;
+                *self.tools.goal.write().await = self.session.goal.clone();
+                let actor = self.session.actors.get_mut(actor_id).unwrap();
+                actor
+                    .context
+                    .tool_result(&pending.call.id, &json!({"note":id}));
+                actor.phase = Phase::Ready;
+                self.emit(EventData::Diagnostic {
+                    message: "model annotation saved separately from user requirements".into(),
+                })?;
+            }
             (Role::Diagnosis, "report_diagnosis") => {
                 self.finish_diagnosis(actor_id, &pending.call.arguments)?
             }

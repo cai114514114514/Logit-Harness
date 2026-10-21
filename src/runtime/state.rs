@@ -42,6 +42,8 @@ pub struct Question {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Session {
     #[serde(default)]
+    pub evaluation: Option<crate::eval::trial::Spec>,
+    #[serde(default)]
     pub condition: super::condition::Condition,
     #[serde(default)]
     pub prompt_pending: bool,
@@ -66,8 +68,8 @@ pub struct Session {
     pub approvals: BTreeSet<String>,
     pub created: String,
     pub seconds: u64,
-    /// Whole seconds of Running-with-active-jobs wall time; compared against
-    /// `seconds` by the runner tick. Not a cost measure.
+    /// Whole seconds in Running, measured with a monotonic clock. Pauses and
+    /// waiting for external input are excluded. Not a cost measure.
     pub elapsed: u64,
     pub final_report: Option<String>,
     #[serde(default)]
@@ -97,6 +99,7 @@ impl Session {
             },
         );
         Self {
+            evaluation: None,
             condition: Default::default(),
             prompt_pending: false,
             replan_pending: false,

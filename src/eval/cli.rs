@@ -4,25 +4,52 @@ use std::path::PathBuf;
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    Run {
+        #[command(flatten)]
+        options: super::run::Options,
+    },
+    Report {
+        #[arg(long, default_value = "artifacts/evaluation/development")]
+        output: PathBuf,
+        #[arg(long, default_value = "eval/corpus")]
+        corpus: PathBuf,
+        #[arg(long, default_value = "eval/registered.json")]
+        frozen: PathBuf,
+    },
     Freeze {
         #[arg(long, default_value = "eval/corpus")]
         corpus: PathBuf,
-        #[arg(long, default_value = "eval/frozen.json")]
+        #[arg(long, default_value = "eval/registered.json")]
         output: PathBuf,
     },
     Status {
         #[arg(long, default_value = "eval/corpus")]
         corpus: PathBuf,
-        #[arg(long, default_value = "eval/frozen.json")]
+        #[arg(long, default_value = "eval/registered.json")]
         frozen: PathBuf,
     },
 }
 
-pub fn run(command: Option<Command>) -> anyhow::Result<()> {
+pub async fn run(
+    command: Option<Command>,
+    paths: &crate::config::Paths,
+    config: &crate::config::Config,
+) -> anyhow::Result<()> {
     match command.unwrap_or(Command::Status {
         corpus: "eval/corpus".into(),
-        frozen: "eval/frozen.json".into(),
+        frozen: "eval/registered.json".into(),
     }) {
+        Command::Run { options } => super::run::run(options, paths.clone(), config.clone()).await?,
+        Command::Report {
+            output,
+            frozen,
+            corpus,
+        } => {
+            let frozen = Frozen::load(&frozen)?;
+            frozen.verify(&corpus)?;
+            super::report::write(&output, &frozen, paths)?;
+            println!("{}", output.join("report.md").display());
+        }
         Command::Freeze { corpus, output } => {
             let frozen = Manifest::load(&corpus)?.freeze(&output)?;
             println!(

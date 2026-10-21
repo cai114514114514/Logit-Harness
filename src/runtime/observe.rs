@@ -225,21 +225,21 @@ impl Runner {
                     .actions
                     .remove(&action)
                     .ok_or_else(|| anyhow::anyhow!("missing action record"))?;
-                if let Err(error) = &result {
-                    if let Some(ToolError::Approval { id, reason }) =
+                if let Err(error) = &result
+                    && let Some(ToolError::Approval { id, reason }) =
                         error.downcast_ref::<ToolError>()
-                    {
-                        record.running = false;
-                        self.session.actions.insert(action, record);
-                        self.session.actors.get_mut(&job.actor).unwrap().phase = Phase::Blocked;
-                        self.emit(EventData::Approval {
-                            id: id.clone(),
-                            tool: "external action".into(),
-                            reason: reason.clone(),
-                        })?;
-                        self.status(Status::Waiting, "waiting for scoped authorization")?;
-                        return Ok(());
-                    }
+                {
+                    record.running = false;
+                    record.approval = Some(id.clone());
+                    self.session.actions.insert(action, record);
+                    self.session.actors.get_mut(&job.actor).unwrap().phase = Phase::Blocked;
+                    self.emit(EventData::Approval {
+                        id: id.clone(),
+                        tool: "external action".into(),
+                        reason: reason.clone(),
+                    })?;
+                    self.status(Status::Waiting, "waiting for scoped authorization")?;
+                    return Ok(());
                 }
                 let mut images = vec![];
                 let data = match result {

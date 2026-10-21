@@ -166,19 +166,18 @@ impl Runner {
             tools.clear();
         }
         tools.extend(prompts::special(&actor.role));
-        if actor.role == Role::Worker {
-            if let Some(mut proposal) = self
+        if actor.role == Role::Worker
+            && let Some(mut proposal) = self
                 .tools
                 .definitions()
                 .into_iter()
                 .find(|t| t["name"] == "apply_patch")
-            {
-                proposal["name"] = json!("propose_patch");
-                proposal["description"] = json!(
-                    "Submit a patch proposal to the central owner. The owner rechecks your original requirement, step and observed file versions before committing it."
-                );
-                tools.push(proposal);
-            }
+        {
+            proposal["name"] = json!("propose_patch");
+            proposal["description"] = json!(
+                "Submit a patch proposal to the central owner. The owner rechecks your original requirement, step and observed file versions before committing it."
+            );
+            tools.push(proposal);
         }
         if actor.role == Role::Verifier {
             for tool in &mut tools {
@@ -207,7 +206,7 @@ impl Runner {
                     serde_json::to_string(&actor.scope)?
                 )
             },
-            input: actor.context.items.clone(),
+            input: actor.context.request_items()?,
             tools: if compact { vec![] } else { tools },
             max_output: if compact {
                 4096
@@ -307,6 +306,7 @@ impl Runner {
                 pending: pending.clone(),
                 running: true,
                 pid: None,
+                approval: None,
             },
         );
         {
@@ -314,6 +314,14 @@ impl Runner {
             actor.busy += 1;
             actor.phase = Phase::Awaiting;
         }
+        self.emit(EventData::ActionScoped {
+            id: id.clone(),
+            actor: actor_id.into(),
+            requirements: pending.scope.requirements.clone(),
+            epoch: pending.scope.epoch,
+            steps: pending.scope.steps.clone(),
+            observed: pending.scope.observed.clone(),
+        })?;
         self.emit(EventData::ActionStarted {
             id: id.clone(),
             tool: pending.call.name.clone(),

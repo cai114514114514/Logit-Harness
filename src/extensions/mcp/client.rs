@@ -230,7 +230,8 @@ impl McpClient {
 }
 
 fn lifecycle() -> ClientLifecycleMode {
-    ClientLifecycleMode::Discover {
+    ClientLifecycleMode::Auto {
         preferred_versions: vec![ProtocolVersion::LATEST],
+        legacy_version: Some(ProtocolVersion::V_2025_11_25),
     }
 }

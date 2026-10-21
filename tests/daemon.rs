@@ -99,10 +99,10 @@ async fn crashed_daemon_reconciles_command_and_preserves_concurrent_user_edit() 
     let pid = tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             let session: Session = store.load(id).unwrap();
-            if workspace.path().join("marker.txt").exists() {
-                if let Some(pid) = session.actions.values().find_map(|a| a.pid) {
-                    break pid;
-                }
+            if workspace.path().join("marker.txt").exists()
+                && let Some(pid) = session.actions.values().find_map(|a| a.pid)
+            {
+                break pid;
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
@@ -304,10 +304,9 @@ async fn detached_cli_exits_while_daemon_finishes_and_accepts_reattach() {
                 ipc::request(&socket, ClientMessage::Snapshot)
                     .await
                     .unwrap()
+                && state.status == Status::Completed
             {
-                if state.status == Status::Completed {
-                    break state;
-                }
+                break state;
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }

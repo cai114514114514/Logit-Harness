@@ -63,7 +63,9 @@ impl Runner {
         actor_id: &str,
         observation: &Value,
     ) -> anyhow::Result<()> {
-        if !self.session.condition.diagnoses() {
+        if !self.session.condition.diagnoses()
+            || !self.scope_current(&self.session.actors[actor_id].scope)
+        {
             return Ok(());
         }
         let actor = self.session.actors.get_mut(actor_id).unwrap();

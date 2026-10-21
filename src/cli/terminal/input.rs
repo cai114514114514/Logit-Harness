@@ -35,7 +35,7 @@ impl Input {
     pub fn left(&mut self) {
         self.cursor = self.text[..self.cursor]
             .grapheme_indices(true)
-            .last()
+            .next_back()
             .map(|(index, _)| index)
             .unwrap_or(0);
     }

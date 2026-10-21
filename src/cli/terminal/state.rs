@@ -29,7 +29,7 @@ impl Screen {
         match message {
             ServerMessage::Snapshot { state, sequence } => {
                 self.receive(ServerMessage::View {
-                    state: state.into(),
+                    state: (*state).into(),
                     sequence,
                 });
             }
@@ -47,19 +47,20 @@ impl Screen {
                 self.sequence = event.sequence;
                 // Subscription starts with a current snapshot, then replays old history.
                 // History is visible but cannot rewind live status or double-count usage.
-                if event.sequence > self.snapshot {
-                    if let Some(session) = &mut self.session {
-                        match &event.data {
-                            EventData::Status { status, .. } => session.status = status.clone(),
-                            EventData::Usage { input, output, .. } => {
-                                session.budget.used = session
-                                    .budget
-                                    .used
-                                    .saturating_add(*input)
-                                    .saturating_add(*output)
-                            }
-                            _ => (),
+                if event.sequence > self.snapshot
+                    && let Some(session) = &mut self.session
+                {
+                    match &event.data {
+                        EventData::Status { status, .. } => session.status = status.clone(),
+                        EventData::Elapsed { seconds } => session.elapsed = *seconds,
+                        EventData::Usage { input, output, .. } => {
+                            session.budget.used = session
+                                .budget
+                                .used
+                                .saturating_add(*input)
+                                .saturating_add(*output)
                         }
+                        _ => (),
                     }
                 }
                 match event.data {

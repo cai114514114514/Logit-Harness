@@ -1,9 +1,7 @@
 use super::BrowserClient;
 use crate::{
     domain::EvidenceKind,
-    tools::{
-        Effect, Tool, ToolContext, ToolEvent, ToolImage, ToolResult, ToolSpec, policy::Decision,
-    },
+    tools::{Effect, Tool, ToolContext, ToolEvent, ToolImage, ToolResult, ToolSpec},
 };
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -59,16 +57,11 @@ impl Tool for BrowserTool {
             name: self.name.into(),
             description: description.into(),
             parameters: json!({"type":"object","properties":properties,"required":required,"additionalProperties":false}),
-            effect: Effect::Read,
-        }
-    }
-    fn policy(&self, args: &Value) -> Decision {
-        if matches!(self.name, "browser_click" | "browser_input")
-            && !self.client.local(args["page"].as_str().unwrap_or(""))
-        {
-            Decision::Ask("interaction with a remote website may modify external state".into())
-        } else {
-            Decision::Allow
+            effect: if matches!(self.name, "browser_click" | "browser_input") {
+                Effect::Check
+            } else {
+                Effect::Read
+            },
         }
     }
     async fn call(
@@ -78,6 +71,12 @@ impl Tool for BrowserTool {
         cancel: CancellationToken,
         _events: mpsc::UnboundedSender<ToolEvent>,
     ) -> anyhow::Result<ToolResult> {
+        let before = context.workspace.fingerprints()?;
+        let permission = super::Permission {
+            name: self.name,
+            arguments: &args,
+            scope: &context.scope,
+        };
         let get = |key: &str| {
             args[key]
                 .as_str()
@@ -91,12 +90,18 @@ impl Tool for BrowserTool {
         match self.name {
             "browser_click" => {
                 self.client
-                    .click(&page, get("selector")?, cancel.clone())
+                    .click(&page, get("selector")?, &permission, cancel.clone())
                     .await?
             }
             "browser_input" => {
                 self.client
-                    .input(&page, get("selector")?, get("text")?, cancel.clone())
+                    .input(
+                        &page,
+                        get("selector")?,
+                        get("text")?,
+                        &permission,
+                        cancel.clone(),
+                    )
                     .await?
             }
             _ => (),
@@ -106,17 +111,19 @@ impl Tool for BrowserTool {
             data_url: snapshot.image.clone(),
         };
         let mut data = serde_json::to_value(snapshot)?;
-        if let Some(dom) = data["dom"].as_str() {
-            if dom.len() > 60000 {
-                data["dom"] = json!(dom.chars().take(60000).collect::<String>());
-                data["truncated"] = json!(true);
-            }
+        if let Some(dom) = data["dom"].as_str()
+            && dom.len() > 60000
+        {
+            data["dom"] = json!(dom.chars().take(60000).collect::<String>());
+            data["truncated"] = json!(true);
         }
         let files = context.workspace.fingerprints()?;
+        let stable = before["$workspace"] == files["$workspace"];
+        data["source_stable"] = json!(stable);
         Ok(ToolResult {
             data,
             images: vec![image],
-            success: true,
+            success: stable,
             files: std::collections::BTreeMap::from([(
                 "$workspace".into(),
                 files["$workspace"].clone(),

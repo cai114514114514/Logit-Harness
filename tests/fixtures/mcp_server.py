@@ -9,7 +9,12 @@ for line in sys.stdin:
     if "id" not in request:
         continue
     method = request["method"]
-    if method == "server/discover":
+    if method == "server/discover" and "--initialize" in sys.argv:
+        print(json.dumps({"jsonrpc": "2.0", "id": request["id"], "error": {"code": -32601, "message": "Use initialize"}}), flush=True)
+        continue
+    if method == "initialize":
+        result = {"protocolVersion": "2025-11-25", "capabilities": {"tools": {}}, "serverInfo": {"name": "fixture", "version": "1"}}
+    elif method == "server/discover":
         result = {
             "resultType": "complete",
             "supportedVersions": ["2026-07-28"],

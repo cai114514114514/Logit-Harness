@@ -101,7 +101,12 @@ impl Runner {
             .ok_or_else(|| anyhow::anyhow!("missing step"))?;
         let ids: Vec<String> = serde_json::from_value(pending.call.arguments["evidence"].clone())?;
         let scope = self.session.graph.scope(id, &self.session.goal)?;
-        let files = self.tools.workspace.fingerprints()?;
+        let files = self.tools.workspace.snapshot_for(
+            self.session
+                .evidence
+                .iter()
+                .flat_map(|evidence| evidence.files.keys()),
+        )?;
         let support: Vec<_> = ids
             .iter()
             .filter_map(|id| self.session.evidence.iter().find(|e| e.id == *id))

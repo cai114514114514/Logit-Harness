@@ -1,8 +1,29 @@
-# Evaluation executor implementation notes
+# Evaluation execution and replay
 
-The corpus is already frozen in `eval/frozen.json`; do not rewrite its tasks/oracle/protocol to fit
-model outcomes. `loh eval freeze` and `status` work. Campaign execution and reporting are the next
-implementation step; they are not yet available commands.
+`loh eval run`, `report`, `freeze` and `status` are implemented. The current registered corpus is
+`eval/registered.json`; `eval/frozen.json` preserves the original execution-limit pilot. Its corpus
+is archived at `artifacts/evaluation/pilot/corpus`. The explicit pre-holdout amendment is
+`eval/corpus/amendment.md`. Do not rewrite frozen tasks/oracles to fit model outcomes.
+
+```sh
+loh eval status
+loh --home artifacts/campaign eval run --split development --jobs 2 --limit 5
+loh --home artifacts/campaign eval report --output artifacts/evaluation/development
+```
+
+Real runs require `DEEPSEEK_API_KEY` and the existing campaign configuration. This project's authorized
+account is `weft-first-evaluation` in `artifacts/campaign/money.sqlite`; the historical account name
+is immutable. All probes and study stages share its 50 RMB cap. Never create a replacement account.
+
+Each output directory pins its executable and source hash in `study.json`. Resume with **that pinned
+executable**, the original home, corpus, split and output directory. `--limit` counts unfinished trials
+for this invocation; completed trials are skipped. A driver lock prevents two schedulers from running
+the same directory. A lost socket does not create a replacement session or replay an uncertain action.
+
+Reports include raw trial metadata, external acceptance, paired task-bootstrap intervals, global and
+per-session accounting, missing results and an unfilled `human-review.csv`. The live ledger is used
+even for unfinished trials; configured conservative rates are accounting estimates, not invoices.
+Opaque workspace IDs blind the condition label. Review cells require an actual human reviewer.
 
 Implemented kernel interfaces:
 
@@ -20,7 +41,7 @@ Implemented kernel interfaces:
 - `ReportedFailure`: terminal usage survives truncated/invalid model output while tool execution is
   still refused. Meter and task budget settle actual reported usage. Missing usage stays uncertain.
 
-## Next executor steps
+## Execution and recovery contract
 
 Create a deterministic shuffled schedule of task × condition × three repetitions, development
 first. There are 540 entries including the no-stagnation ablation; replan already supplies the
@@ -57,5 +78,6 @@ completed study. A provider stream without terminal usage remains conservatively
 event-boundary injection avoids introducing an unrelated model-dispatch race into the benchmark.
 
 Before freezing a holdout executable, finish the outstanding engineering watch list in progress.md
-(notably current browser-origin authorization, assumptions/acceptance provenance, time accounting,
-ignored-file evidence, and additional lifecycle edges). No holdout-driven harness tuning afterward.
+and record its tests/build hash. No holdout-driven harness tuning afterward. An incomplete schedule
+or missing human review cannot establish the registered research gate, even if every finished
+functional test passes.

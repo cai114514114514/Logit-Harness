@@ -96,6 +96,13 @@ impl Store {
             })?;
         Ok(serde_json::from_str(&state)?)
     }
+    pub fn has_session(&self, session: &str) -> anyhow::Result<bool> {
+        Ok(self.conn()?.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sessions WHERE id=?1)",
+            [session],
+            |row| row.get(0),
+        )?)
+    }
     pub fn snapshot<T: DeserializeOwned>(&self, session: &str) -> anyhow::Result<(T, u64)> {
         let connection = self.conn()?;
         let (state, sequence): (String, u64) = connection.query_row(
@@ -182,6 +189,20 @@ impl Store {
         )?;
         transaction.commit()?;
         Ok(id)
+    }
+    pub fn control_key(
+        &self,
+        session: &str,
+        key: &str,
+    ) -> anyhow::Result<Option<(u64, serde_json::Value)>> {
+        let connection = self.conn()?;
+        let saved:Option<(u64,String)>=connection.query_row(
+            "SELECT controls.id,controls.data FROM control_keys JOIN controls ON controls.id=control_keys.control WHERE control_keys.session=?1 AND control_keys.key=?2",
+            params![session,key],|row|Ok((row.get(0)?,row.get(1)?)),
+        ).optional()?;
+        saved
+            .map(|(id, data)| Ok((id, serde_json::from_str(&data)?)))
+            .transpose()
     }
     /// Returns every persisted session snapshot without pagination. Sessions
     /// are rare (one per user task), so a full scan stays cheap; revisit if a
