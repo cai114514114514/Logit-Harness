@@ -41,6 +41,12 @@ pub struct Question {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Session {
+    #[serde(default)]
+    pub condition: super::condition::Condition,
+    #[serde(default)]
+    pub prompt_pending: bool,
+    #[serde(default)]
+    pub replan_pending: bool,
     pub id: String,
     pub workspace: PathBuf,
     pub goal: Goal,
@@ -91,6 +97,9 @@ impl Session {
             },
         );
         Self {
+            condition: Default::default(),
+            prompt_pending: false,
+            replan_pending: false,
             // `simple()` is ASCII hex, so slicing at ID_LENGTH never splits a
             // multi-byte character.
             id: uuid::Uuid::new_v4().simple().to_string()[..ID_LENGTH].into(),

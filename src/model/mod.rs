@@ -1,9 +1,11 @@
 mod context;
 mod deepseek;
+mod failure;
 mod stream;
 
 pub use context::Context;
 pub use deepseek::DeepSeek;
+pub use failure::ReportedFailure;
 pub use stream::StreamDecoder;
 
 use crate::domain::Usage;

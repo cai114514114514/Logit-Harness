@@ -53,16 +53,23 @@ impl Runner {
                     additions: input.additions,
                     replacement: input.intent == "replace",
                 })?;
-                self.session.graph.invalidate(&impact.changed);
+                if self.session.condition == super::condition::Condition::Replan {
+                    self.session.goal.epoch += 1;
+                    self.session.graph = Default::default();
+                    self.session.replan_pending = true;
+                } else {
+                    self.session.graph.invalidate(&impact.changed);
+                }
                 self.refresh_plan().await?;
                 *self.tools.goal.write().await = self.session.goal.clone();
                 self.refresh_questions().await;
                 for job in self.jobs.values() {
-                    if job
-                        .scope
-                        .requirements
-                        .keys()
-                        .any(|id| impact.changed.contains(id))
+                    if self.session.condition.cancels_active()
+                        && job
+                            .scope
+                            .requirements
+                            .keys()
+                            .any(|id| impact.changed.contains(id))
                     {
                         job.cancel.cancel();
                     }

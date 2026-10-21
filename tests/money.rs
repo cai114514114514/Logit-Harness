@@ -22,6 +22,65 @@ fn money_counts_cached_tokens_at_their_own_verified_rate() {
     assert_eq!(prices().reserve(1_000_000, 100_000), 2_800_000_000);
 }
 
+#[tokio::test]
+async fn incomplete_http_response_settles_reported_usage_instead_of_full_reservation() {
+    use loh::model::{DeepSeek, Provider, Request};
+    use std::sync::Arc;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut buffer = [0; 8192];
+        let _ = socket.read(&mut buffer).await.unwrap();
+        let data = serde_json::json!({"type":"response.incomplete","response":{"status":"incomplete","model":"fixture","output":[],"usage":{"input_tokens":120,"output_tokens":40,"input_tokens_details":{"cached_tokens":20}}}});
+        let body = format!("data: {data}\n\n");
+        socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).as_bytes()).await.unwrap();
+    });
+    let root = tempfile::tempdir().unwrap();
+    let money = Arc::new(
+        Money::open(
+            &root.path().join("money.db"),
+            "fixture",
+            50 * RMB,
+            &prices(),
+        )
+        .unwrap(),
+    );
+    let metered = loh::runtime::meter::Metered::new(
+        Arc::new(DeepSeek::new(base, "deepseek-flash".into(), "fixture-key".into()).unwrap()),
+        money.clone(),
+        prices(),
+    );
+    let (events, _) = tokio::sync::mpsc::unbounded_channel();
+    let error = metered
+        .respond(
+            Request {
+                instructions: "fixture".into(),
+                input: vec![],
+                tools: vec![],
+                max_output: 100,
+            },
+            tokio_util::sync::CancellationToken::new(),
+            events,
+        )
+        .await
+        .unwrap_err();
+    assert!(error.is::<loh::model::ReportedFailure>());
+    let balance = money.balance().unwrap();
+    assert_eq!(
+        balance.used,
+        prices().cost(&Usage {
+            input: 120,
+            output: 40,
+            cached: 20
+        })
+    );
+    assert_eq!(balance.uncertain, 0);
+    assert_eq!(balance.reserved, 0);
+    server.await.unwrap();
+}
+
 #[test]
 fn concurrent_runners_share_one_persistent_campaign_cap() {
     let temp = tempfile::tempdir().unwrap();

@@ -13,6 +13,7 @@ pub struct Config {
     pub max_output: u32,
     pub context_bytes: usize,
     pub workers: usize,
+    pub user_skills: bool,
     pub search_limit: u32,
     pub chrome: PathBuf,
 }
@@ -28,6 +29,7 @@ impl Default for Config {
             max_output: 32768,
             context_bytes: 262144,
             workers: 2,
+            user_skills: true,
             search_limit: 50,
             chrome: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome".into(),
         }

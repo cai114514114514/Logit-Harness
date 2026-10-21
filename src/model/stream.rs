@@ -1,5 +1,4 @@
 use super::{ModelEvent, Response};
-use crate::domain::Usage;
 use serde_json::Value;
 
 /// One SSE frame may never exceed this size; the buffer holds at most one partial frame,
@@ -47,12 +46,16 @@ impl StreamDecoder {
                     value["delta"].as_str().unwrap_or("").into(),
                 )),
                 "response.completed" => {
-                    let terminal = build_terminal(&value["response"])?;
+                    let terminal = build_terminal(&value["response"])
+                        .map_err(|error| super::failure::reported(&value["response"], error))?;
                     anyhow::ensure!(self.terminal.is_none(), "duplicate terminal response");
                     self.terminal = Some(terminal);
                 }
                 "response.failed" | "response.incomplete" | "error" => {
-                    anyhow::bail!("provider response did not complete: {}", value["type"]);
+                    return Err(super::failure::reported(
+                        &value["response"],
+                        anyhow::anyhow!("provider response did not complete: {}", value["type"]),
+                    ));
                 }
                 _ => (), // Tool deltas are display-only until the terminal response validates them.
             }
@@ -118,25 +121,13 @@ fn build_terminal(response: &Value) -> anyhow::Result<Response> {
         .as_array()
         .ok_or_else(|| anyhow::anyhow!("missing response output"))?
         .clone();
-    let input = response["usage"]["input_tokens"]
-        .as_u64()
-        .ok_or_else(|| anyhow::anyhow!("missing input usage"))?;
-    let output_tokens = response["usage"]["output_tokens"]
-        .as_u64()
-        .ok_or_else(|| anyhow::anyhow!("missing output usage"))?;
     let result = Response {
         output,
         model: response["model"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("missing response model"))?
             .into(),
-        usage: Usage {
-            input,
-            output: output_tokens,
-            cached: response["usage"]["input_tokens_details"]["cached_tokens"]
-                .as_u64()
-                .unwrap_or(0),
-        },
+        usage: super::failure::usage(response)?,
     };
     result.calls()?;
     Ok(result)

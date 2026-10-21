@@ -129,13 +129,15 @@ impl Runner {
 
     pub(super) async fn refresh_plan(&mut self) -> anyhow::Result<()> {
         *self.tools.steps.write().await = self.session.graph.versions();
-        if let Some(services) = &self.tools.services {
+        if let Some(services) = &self.tools.services
+            && self.session.condition.cancels_active()
+        {
             services
                 .invalidate(&self.session.goal, &self.session.graph.versions())
                 .await?;
         }
         for job in self.jobs.values() {
-            if !self.scope_current(&job.scope) {
+            if self.session.condition.cancels_active() && !self.scope_current(&job.scope) {
                 job.cancel.cancel();
             }
         }

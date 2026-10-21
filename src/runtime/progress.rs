@@ -63,6 +63,9 @@ impl Runner {
         actor_id: &str,
         observation: &Value,
     ) -> anyhow::Result<()> {
+        if !self.session.condition.diagnoses() {
+            return Ok(());
+        }
         let actor = self.session.actors.get_mut(actor_id).unwrap();
         if actor.retired
             || !matches!(actor.role, Role::Main | Role::Worker | Role::Verifier)

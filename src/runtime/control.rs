@@ -101,13 +101,17 @@ impl Runner {
                     return self.halt(Status::Paused, "user requested pause");
                 }
                 let id = uuid::Uuid::new_v4().to_string();
+                let prompt_only = self.session.condition == super::condition::Condition::Prompt;
                 self.session.inbox.push(UserMessage {
                     id,
                     text: text.clone(),
-                    applied: false,
+                    applied: prompt_only,
                     prior: self.session.status.clone(),
                     revision: self.session.goal.revision,
                 });
+                if prompt_only {
+                    self.append_prompt_correction(&text);
+                }
                 self.emit(EventData::User { message: text })?;
                 if matches!(self.session.status, Status::Completed | Status::Waiting) {
                     self.status(Status::Running, "received new user input")?;

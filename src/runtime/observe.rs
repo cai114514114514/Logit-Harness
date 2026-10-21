@@ -71,14 +71,39 @@ impl Runner {
                     .as_ref()
                     .err()
                     .is_some_and(|error| error.is::<super::charge::NotSubmitted>());
+                let failure = result
+                    .as_ref()
+                    .err()
+                    .and_then(|error| error.downcast_ref::<crate::model::ReportedFailure>());
                 self.session.budget.settle(
                     &reservation,
                     if refused || not_submitted {
                         Some(&zero)
                     } else {
-                        result.as_ref().ok().map(|r| &r.usage)
+                        result
+                            .as_ref()
+                            .ok()
+                            .map(|r| &r.usage)
+                            .or_else(|| failure.map(|failure| &failure.usage))
                     },
                 )?;
+                if let Some(failure) = failure {
+                    let artifact = self.tools.logs.join(format!("{id}.failed-response.json"));
+                    std::fs::create_dir_all(&self.tools.logs)?;
+                    std::fs::write(&artifact, serde_json::to_vec(&failure.response)?)?;
+                    self.emit(EventData::Usage {
+                        actor: job.actor.clone(),
+                        input: failure.usage.input,
+                        output: failure.usage.output,
+                        cached: failure.usage.cached,
+                    })?;
+                    self.emit(EventData::Diagnostic {
+                        message: format!(
+                            "non-executable model response retained for accounting: {}",
+                            artifact.display()
+                        ),
+                    })?;
+                }
                 if refused {
                     self.session.actors.get_mut(&job.actor).unwrap().phase = Phase::Ready;
                     self.halt(
@@ -146,9 +171,13 @@ impl Runner {
                             actor.phase = Phase::Done;
                             match actor.role {
                                 Role::Main => {
-                                    self.session.final_report = Some(text);
-                                    self.session.verification_pending = true;
-                                    self.start_verifier();
+                                    if self.session.prompt_pending {
+                                        actor.phase = Phase::Ready;
+                                    } else {
+                                        self.session.final_report = Some(text);
+                                        self.session.verification_pending = true;
+                                        self.start_verifier()?;
+                                    }
                                 }
                                 Role::Verifier | Role::Steering | Role::Diagnosis => {
                                     actor.failures += 1;
@@ -175,6 +204,7 @@ impl Runner {
                         };
                         if !job.cancel.is_cancelled() {
                             actor.failures += 1;
+                            actor.context.user(&format!("The previous model response was not executable: {error}. Retry with a smaller, complete response; split large edits into separate tool calls. No partial tool call was executed."));
                             let failures = actor.failures;
                             self.emit(EventData::Diagnostic {
                                 message: format!("{}: {error}", job.actor),
@@ -260,7 +290,7 @@ impl Runner {
         }
         Ok(())
     }
-    pub(super) fn start_verifier(&mut self) {
+    pub(super) fn start_verifier(&mut self) -> anyhow::Result<()> {
         if !self.session.verification_pending
             || self.has_workers()
             || self.session.actions.values().any(|a| a.running)
@@ -271,7 +301,15 @@ impl Runner {
                 .values()
                 .any(|a| a.role == Role::Verifier && !a.retired && a.phase != Phase::Done)
         {
-            return;
+            return Ok(());
+        }
+        if !self.session.condition.verifies() {
+            self.session.verification_pending = false;
+            self.status(
+                Status::Completed,
+                "prompt baseline ended its attempt; external acceptance is separate",
+            )?;
+            return Ok(());
         }
         let id = format!("verify-{}", uuid::Uuid::new_v4());
         let actor = Actor::new(
@@ -286,5 +324,6 @@ impl Runner {
             },
         );
         self.session.actors.insert(id, actor);
+        Ok(())
     }
 }

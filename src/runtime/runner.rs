@@ -22,6 +22,12 @@ pub struct Settings {
     pub context_limit: usize,
     pub linger: bool,
 }
+
+/// Instrumentation observes the same durable events as clients. An evaluation script can
+/// enqueue a correction at an exact event boundary before the following model dispatch.
+pub trait Observer: Send + Sync {
+    fn on_event(&self, event: &SessionEvent) -> anyhow::Result<()>;
+}
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -53,6 +59,7 @@ pub(super) struct Job {
 }
 
 pub struct Runner {
+    observer: Option<Arc<dyn Observer>>,
     pub(super) session: Session,
     pub(super) store: Arc<Store>,
     pub(super) provider: Arc<dyn Provider>,
@@ -82,6 +89,7 @@ impl Runner {
         let (send, wire) = mpsc::unbounded_channel();
         (
             Self {
+                observer: None,
                 session,
                 store,
                 provider,
@@ -104,8 +112,15 @@ impl Runner {
         } else {
             self.store.commit(&self.session.id, &self.session, data)?
         };
+        if let Some(observer) = &self.observer {
+            observer.on_event(&event)?;
+        }
         let _ = self.events.send(event);
         Ok(())
+    }
+    pub fn observe(mut self, observer: Arc<dyn Observer>) -> Self {
+        self.observer = Some(observer);
+        self
     }
     pub(super) fn status(&mut self, status: Status, reason: &str) -> anyhow::Result<()> {
         self.session.status = status.clone();
@@ -126,6 +141,9 @@ impl Runner {
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
         loop {
             self.drain_inbox().await?;
+            while let Ok(control) = self.control.try_recv() {
+                self.handle_control(control).await?;
+            }
             if self.jobs.is_empty() {
                 if let Some(target) = self.session.transition.take() {
                     self.status(target, "all active operations have settled")?;

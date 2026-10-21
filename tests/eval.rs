@@ -54,3 +54,29 @@ fn freeze_is_immutable_and_rejects_modified_acceptance_code() {
     assert!(frozen.verify(&corpus).is_err());
     assert!(Manifest::load(&corpus).unwrap().freeze(&path).is_err());
 }
+
+#[test]
+fn correction_inbox_keys_survive_restart_without_duplicate_delivery() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("state.db");
+    let command = serde_json::json!({"type":"message","text":"use SQLite"});
+    let first = loh::store::Store::open(&path).unwrap();
+    let id = first
+        .enqueue_once("session", "correction", &command)
+        .unwrap();
+    drop(first);
+    let resumed = loh::store::Store::open(&path).unwrap();
+    assert_eq!(
+        resumed
+            .enqueue_once("session", "correction", &command)
+            .unwrap(),
+        id
+    );
+    assert_eq!(resumed.queued("session", 0).unwrap().len(), 1);
+    assert!(
+        resumed
+            .enqueue_once("session", "correction", &serde_json::json!({"type":"stop"}))
+            .is_err(),
+        "a key cannot silently change meaning"
+    );
+}

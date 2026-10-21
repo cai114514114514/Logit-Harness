@@ -153,6 +153,23 @@ Spec: docs/spec.md
 
 ## Implementation watch list
 
+- Study mechanisms are now real `Session.condition` switches, with dynamic as the normal default.
+  Fixed-provider/real-process tests verify prompt completion without an independent judge, tracking
+  allowing an old process to finish, dynamic/replan cancelling it, and no-stagnation suppressing the
+  diagnostic actor. Replan waits for settlement before clearing the main context and invalidates all
+  dependency epochs; source files remain intact.
+- Added a durable event observer and transactionally keyed control delivery. The observer test proves
+  a scripted correction is saved before the next model dispatch; restart tests reject duplicate or
+  changed-content deliveries. This supports precise frozen triggers without a client/model timing race.
+- Terminal incomplete/invalid tool responses now retain authoritative provider usage while remaining
+  non-executable. Actual local HTTP/SSE test verifies the shared money meter settles that usage rather
+  than charging the full reservation as unknown. Runtime also saves the failed payload and usage and
+  gives the next model round actionable feedback. Interrupted streams lacking usage remain conservative.
+- Full `cargo test`: **98/98** integration tests passed after mechanisms and accounting changes.
+  Current monetary ledger: **0.39785736 RMB**, no new paid calls in this checkpoint. The experiment
+  executor/reporting are still unimplemented; concrete next interfaces and recovery rules are in
+  docs/eval-execution.md. The corpus freeze is not evidence that the study has run.
+
 - Evaluation corpus frozen before model trials: `eval/frozen.json`, created
   `2026-10-21T16:37:41.009915+00:00` (2026-10-22 local), digest
   `c19d6137492f5401bba7a8223d5045d94da620e4755537c32034f27c2851fd4c`.
@@ -197,7 +214,7 @@ Spec: docs/spec.md
 - Keep the existing 50 RMB account at artifacts/campaign/money.sqlite across every real run.
 - Current application-layer command policy is not an adversarial shell sandbox.
 - Remaining: browser authorization/recovery refinements, native terminal visual review,
-  frozen 36-task corpus/comparisons/ablations, macOS packaging and fresh final review.
+  execution/reporting of the frozen 36-task comparisons/ablations, macOS packaging and fresh final review.
 - Also verify paused side questions, clarification cancellation and stale evidence; add explicit
   assumption/acceptance-note storage without letting model notes replace user requirements.
 - New Session snapshots have no compatibility requirement yet; keep one clean schema as implementation

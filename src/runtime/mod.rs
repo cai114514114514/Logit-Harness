@@ -1,8 +1,10 @@
 mod actor;
 pub mod charge;
+pub mod condition;
 mod control;
 pub mod daemon;
 mod dispatch;
+mod experiment;
 pub mod graph;
 pub mod ipc;
 mod meta;

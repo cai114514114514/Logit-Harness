@@ -16,12 +16,18 @@ impl Runner {
     pub(super) async fn schedule(&mut self) -> anyhow::Result<bool> {
         let mut progressed = false;
         self.start_steering();
+        if self.session.replan_pending {
+            if !self.jobs.is_empty() {
+                return Ok(false);
+            }
+            self.restart_plan();
+        }
         if !self.frozen()
             && self.session.status == Status::Running
             && self.session.actors["main"].phase == Phase::Done
             && self.session.final_report.is_some()
         {
-            self.start_verifier();
+            self.start_verifier()?;
         }
         let mut ids: Vec<_> = self.session.actors.keys().cloned().collect();
         ids.sort_by_key(|id| {
@@ -237,6 +243,9 @@ impl Runner {
         actor.busy += 1;
         actor.turns += 1;
         let scope = actor.scope.clone();
+        if actor.role == Role::Main {
+            self.session.prompt_pending = false;
+        }
         let id = uuid::Uuid::new_v4().to_string();
         let artifact = self.tools.logs.join(format!("{id}.request.json"));
         std::fs::create_dir_all(&self.tools.logs)?;

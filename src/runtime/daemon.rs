@@ -84,9 +84,12 @@ pub async fn serve(paths: Paths, id: &str) -> anyhow::Result<()> {
     for tool in crate::extensions::mcp::tools(mcp.clone()) {
         tools.register(tool)?;
     }
-    let mut skill_roots = vec![paths.home.join("skills")];
-    if let Some(user) = directories::BaseDirs::new() {
-        skill_roots.push(user.home_dir().join(".agents/skills"));
+    let mut skill_roots = vec![];
+    if config.user_skills {
+        skill_roots.push(paths.home.join("skills"));
+        if let Some(user) = directories::BaseDirs::new() {
+            skill_roots.push(user.home_dir().join(".agents/skills"));
+        }
     }
     let knowledge = Arc::new(crate::extensions::knowledge::Knowledge::new(
         session.workspace.clone(),

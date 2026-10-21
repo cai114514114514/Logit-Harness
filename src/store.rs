@@ -1,5 +1,5 @@
 use crate::domain::{EventData, SessionEvent};
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Serialize, de::DeserializeOwned};
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
@@ -33,7 +33,11 @@ impl Store {
             CREATE TABLE IF NOT EXISTS controls (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, session TEXT NOT NULL, data TEXT NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS controls_session ON controls(session,id);",
+            CREATE INDEX IF NOT EXISTS controls_session ON controls(session,id);
+            CREATE TABLE IF NOT EXISTS control_keys (
+                session TEXT NOT NULL, key TEXT NOT NULL, control INTEGER NOT NULL,
+                PRIMARY KEY(session,key)
+            );",
         )?;
         Ok(Self {
             connection: Mutex::new(connection),
@@ -144,6 +148,40 @@ impl Store {
             Ok((id, serde_json::from_str(&data)?))
         })
         .collect()
+    }
+    /// A benchmark correction or resumed client operation can be retried without adding a
+    /// second message. The same key with different content is a protocol error, not an update.
+    pub fn enqueue_once(
+        &self,
+        session: &str,
+        key: &str,
+        data: &serde_json::Value,
+    ) -> anyhow::Result<u64> {
+        let mut connection = self.conn()?;
+        let transaction =
+            connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let saved:Option<(u64,String)>=transaction.query_row(
+            "SELECT controls.id,controls.data FROM control_keys JOIN controls ON controls.id=control_keys.control WHERE control_keys.session=?1 AND control_keys.key=?2",
+            params![session,key],|row|Ok((row.get(0)?,row.get(1)?)),
+        ).optional()?;
+        if let Some((id, saved)) = saved {
+            anyhow::ensure!(
+                serde_json::from_str::<serde_json::Value>(&saved)? == *data,
+                "control idempotency key changed meaning"
+            );
+            return Ok(id);
+        }
+        transaction.execute(
+            "INSERT INTO controls(session,data) VALUES(?1,?2)",
+            params![session, serde_json::to_string(data)?],
+        )?;
+        let id = u64::try_from(transaction.last_insert_rowid())?;
+        transaction.execute(
+            "INSERT INTO control_keys(session,key,control) VALUES(?1,?2,?3)",
+            params![session, key, id],
+        )?;
+        transaction.commit()?;
+        Ok(id)
     }
     /// Returns every persisted session snapshot without pagination. Sessions
     /// are rare (one per user task), so a full scan stays cheap; revisit if a

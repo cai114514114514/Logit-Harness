@@ -62,6 +62,31 @@ fn invalid_complete_tool_arguments_are_rejected() {
 }
 
 #[test]
+fn incomplete_or_invalid_tools_keep_reported_usage_without_becoming_executable() {
+    let incomplete = json!({"type":"response.incomplete","response":{"status":"incomplete","model":"fixture","usage":{"input_tokens":120,"output_tokens":40,"input_tokens_details":{"cached_tokens":20}},"output":[{"type":"function_call","call_id":"partial","name":"shell","arguments":"{"}]}});
+    let mut decoder = StreamDecoder::default();
+    let error = decoder
+        .push(format!("data: {incomplete}\n\n").as_bytes())
+        .unwrap_err();
+    let failure = error
+        .downcast_ref::<loh::model::ReportedFailure>()
+        .expect("reported usage remains available for settlement");
+    assert_eq!(failure.usage.input, 120);
+    assert_eq!(failure.usage.output, 40);
+    assert_eq!(failure.usage.cached, 20);
+    let mut decoder = StreamDecoder::default();
+    let error = decoder
+        .push(
+            terminal(
+                json!([{"type":"function_call","call_id":"bad","name":"shell","arguments":"{"}]),
+            )
+            .as_bytes(),
+        )
+        .unwrap_err();
+    assert!(error.is::<loh::model::ReportedFailure>());
+}
+
+#[test]
 fn repeated_call_ids_and_non_object_arguments_are_not_executable() {
     for calls in [
         json!([
