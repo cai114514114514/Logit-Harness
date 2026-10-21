@@ -49,10 +49,26 @@ impl Runner {
                 "duplicate requirement verdict"
             );
             for id in &check.evidence {
-                anyhow::ensure!(
-                    self.session.evidence.iter().any(|e| e.id == *id),
-                    "unknown evidence ID: {id}"
-                );
+                let evidence = self
+                    .session
+                    .evidence
+                    .iter()
+                    .find(|evidence| evidence.id == *id)
+                    .ok_or_else(|| anyhow::anyhow!("unknown evidence ID: {id}"))?;
+                // A passing verdict that cites a failed/obsolete observation is
+                // internally inconsistent. Let the verifier refresh or correct
+                // its verdict before making the implementer change working code.
+                if check.passed {
+                    anyhow::ensure!(
+                        evidence.current_at(
+                            &self.session.goal,
+                            &snapshot,
+                            &self.session.graph.versions(),
+                        ),
+                        "passing verdict for {} cites failed or obsolete evidence {id}; refresh the evidence and correct the verdict. If the requirement actually fails, report passed=false",
+                        check.requirement
+                    );
+                }
             }
         }
         anyhow::ensure!(

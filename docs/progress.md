@@ -318,3 +318,39 @@ Spec: docs/spec.md
 - Strict Clippy and the full development suite passed **126/126**. Release-mode daemon, terminal,
   process-group and MCP tests passed **20/20**, followed by a clean default release build. No
   re-review was dispatched: the skill calls for one author fix pass with covering regressions.
+
+## Installed engineering release
+
+- Installed `/opt/homebrew/bin/loh`; `loh --version` returns `loh 0.1.0`. The installed executable,
+  `target/release/loh` and the packaged executable are byte-identical. `doctor --json`, Mach-O ARM64
+  inspection and local ad-hoc signature verification pass. No notarization or public distribution
+  has been performed.
+- Package: `dist/release/loh-macos-arm64-0.1.0.tar.gz`, with its SHA-256 sidecar and manifest.
+  Source hash: `3e50639ce50ee15d3e5c4cd0a32506b3236d112b549ead8970b4d59b1849f933`.
+  Binary SHA-256: `197dfdfd8773519e7330405263dc1cf8951c8e9e0bcf77e5a0643347cedb8b36`.
+  Exact build/test logs and installation receipt are in `artifacts/release`.
+- The ordinary shell still needs `DEEPSEEK_API_KEY` exported, as documented in README.md. Test
+  runners receive the existing local credential through their environment without printing it.
+- Engineering delivery does not finish the research study: the original 20 development trials,
+  the preserved protocol defect and conservative uncertain charges remain reportable. No held-out
+  trajectory or human rubric review has been completed at this checkpoint.
+
+## Installed-binary smoke and verification feedback repair
+
+- Real session `4d903ae72fd34848` reached its own Completed state in 212 active seconds, using
+  904,338 tokens and 0.73989896 RMB of configured-rate usage. The caller's correction cancelled the
+  live verification process; the final external SQLite/data-preservation checks and protected-file
+  hashes passed. Full replay and acceptance: `artifacts/release-smoke`.
+- This smoke is **not** evidence of JSON-to-SQLite adaptation: its initial public oracle accidentally
+  included the later SQLite assertions, and the model implemented SQLite before the correction.
+  That contaminated fixture and its failure of initial task fidelity are retained and disclosed.
+  A separate `artifacts/storage-correction` fixture exposes only the current JSON contract before
+  correction and saves an external initial-storage check before introducing SQLite.
+- The run also exposed unnecessary implementation work: a verifier reported success while citing
+  a failed optional concurrency check; the harness sent this contradictory report back to the
+  implementer. Passing verdicts with failed/obsolete cited evidence now return an actionable error
+  to the same verifier to refresh evidence or correct its verdict. A genuinely failed requirement
+  still returns to implementation, and invalid evidence still cannot establish completion.
+- The actual command-based regression failed before repair and passes afterward. Strict Clippy
+  and the complete **127-test** suite pass. No held-out trajectory has started, so this change does
+  not tune against held-out outcomes. Release checks and the corrected fixture follow before pinning.
