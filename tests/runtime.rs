@@ -66,3 +66,25 @@ fn cyclic_or_incomplete_plan_is_rejected_atomically() {
     assert!(graph.steps.contains_key("valid"));
     assert!(graph.install(vec![], &goal).is_err());
 }
+#[test]
+fn delegated_step_inherits_all_dependency_versions() {
+    let mut goal = weft::domain::Goal::new("root");
+    goal.revise(weft::domain::Change {
+        source: "more".into(),
+        updates: Default::default(),
+        additions: vec!["storage".into(), "ui".into()],
+        replacement: false,
+    })
+    .unwrap();
+    let mut graph = weft::runtime::graph::Graph::default();
+    let steps = serde_json::from_value(serde_json::json!([
+        {"id":"storage","description":"storage","requirements":["r1","r2"],"dependencies":[],"files":[],"revision":1,"status":"pending"},
+        {"id":"ui","description":"ui","requirements":["r3"],"dependencies":["storage"],"files":[],"revision":1,"status":"pending"}
+    ])).unwrap();
+    graph.install(steps, &goal).unwrap();
+    let scope = graph.scope("ui", &goal).unwrap();
+    assert_eq!(scope.requirements.len(), 3);
+    assert_eq!(scope.steps.len(), 2);
+    graph.invalidate(&std::collections::BTreeSet::from(["r2".into()]));
+    assert_ne!(scope.steps["ui"], graph.steps["ui"].revision);
+}

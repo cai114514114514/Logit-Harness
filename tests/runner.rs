@@ -243,8 +243,20 @@ impl Provider for QuestionScript {
         if request.instructions.starts_with("ROLE: steering") {
             Ok(call(
                 "classify_input",
-                json!({"intent":"question","updates":{},"additions":[],"answer":"The file is complete.","reason":"side question"}),
+                json!({"intent":"question","updates":{},"additions":[],"answer":"","reason":"side question","needs_tools":true}),
             ))
+        } else if request.instructions.starts_with("ROLE: question") {
+            Ok(
+                if request
+                    .input
+                    .iter()
+                    .any(|v| v["type"] == "function_call_output")
+                {
+                    text("The file contains SQLite.")
+                } else {
+                    call("read_file", json!({"path":"result.txt"}))
+                },
+            )
         } else {
             self.0.respond(request, cancel, events).await
         }
@@ -314,6 +326,15 @@ async fn a_question_after_completion_restores_the_completed_status() {
         "answering a question must not leave an already completed goal stuck in Running"
     );
     assert_eq!(finished.goal.revision, 1);
+    assert_eq!(
+        finished
+            .evidence
+            .iter()
+            .filter(|e| e.description == "read_file")
+            .count(),
+        2,
+        "the side question must inspect the actual file in a separate context"
+    );
 }
 
 struct InvalidPlan {

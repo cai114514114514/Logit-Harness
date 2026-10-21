@@ -11,6 +11,16 @@ use crate::{
 impl Runner {
     pub(super) async fn handle_control(&mut self, control: Control) -> anyhow::Result<()> {
         match control {
+            Control::Answer { id, text } => {
+                self.emit(EventData::User {
+                    message: text.clone(),
+                })?;
+                if let Err(error) = self.answer_question(&id, &text).await {
+                    self.emit(EventData::Diagnostic {
+                        message: error.to_string(),
+                    })?;
+                }
+            }
             Control::Wake => (), // The runner drains the durable inbox before dispatching work.
             Control::Pause => self.halt(
                 Status::Paused,
@@ -96,6 +106,7 @@ impl Runner {
                     text: text.clone(),
                     applied: false,
                     prior: self.session.status.clone(),
+                    revision: self.session.goal.revision,
                 });
                 self.emit(EventData::User { message: text })?;
                 if matches!(self.session.status, Status::Completed | Status::Waiting) {

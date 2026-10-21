@@ -27,9 +27,14 @@ pub struct Step {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Graph {
     pub steps: BTreeMap<String, Step>,
+    #[serde(default)]
+    generation: u64,
 }
 
 impl Graph {
+    /// Every validation runs before `self.steps` is touched: a rejected plan
+    /// must leave the previous plan intact (tests/runtime.rs relies on this
+    /// atomicity), so no early-return may follow the assignment at the end.
     pub fn install(&mut self, steps: Vec<Step>, goal: &Goal) -> anyhow::Result<()> {
         anyhow::ensure!(!steps.is_empty(), "plan cannot be empty");
         let mut proposed = BTreeMap::new();
@@ -51,14 +56,16 @@ impl Graph {
                 covered.insert(id.clone());
             }
             step.status = StepStatus::Pending;
-            step.revision = 1;
+            step.revision = self.generation.saturating_add(1);
             if let Some(old) = self.steps.get(&step.id) {
                 let unchanged = old.description == step.description
                     && old.requirements == step.requirements
                     && old.dependencies == step.dependencies
                     && old.files == step.files;
-                step.revision = old.revision + u64::from(!unchanged);
+                // A re-proposed step that changed in no way keeps its revision
+                // and status, so existing scopes and evidence stay current.
                 if unchanged {
+                    step.revision = old.revision;
                     step.status = old.status.clone();
                 }
             }
@@ -77,6 +84,10 @@ impl Graph {
                 "step references missing dependency"
             );
         }
+        // Topological flood fill: repeatedly visit every step whose
+        // dependencies are all visited. If and only if the graph is acyclic,
+        // every step becomes reachable this way; a cycle's members all keep a
+        // dependency outside `visited`, so a leftover count means a cycle.
         let mut visited = BTreeSet::new();
         loop {
             let ready: Vec<_> = proposed
@@ -91,6 +102,7 @@ impl Graph {
         }
         anyhow::ensure!(visited.len() == proposed.len(), "cyclic plan");
         self.steps = proposed;
+        self.generation = self.generation.saturating_add(1);
         Ok(())
     }
     pub fn affected(&self, requirements: &BTreeSet<String>) -> BTreeSet<String> {
@@ -114,11 +126,45 @@ impl Graph {
     }
     pub fn invalidate(&mut self, requirements: &BTreeSet<String>) -> BTreeSet<String> {
         let affected = self.affected(requirements);
+        self.generation += 1;
         for id in &affected {
             let step = self.steps.get_mut(id).expect("step from this graph");
             step.status = StepStatus::Pending;
-            step.revision += 1;
+            step.revision = self.generation;
         }
         affected
+    }
+    pub fn versions(&self) -> BTreeMap<String, u64> {
+        self.steps
+            .values()
+            .map(|s| (s.id.clone(), s.revision))
+            .collect()
+    }
+    pub fn scope(&self, id: &str, goal: &Goal) -> anyhow::Result<crate::tools::Scope> {
+        let mut scope = crate::tools::Scope {
+            readonly: true,
+            epoch: goal.epoch,
+            ..Default::default()
+        };
+        let mut pending = vec![id.to_owned()];
+        let versions = goal.active_versions();
+        while let Some(id) = pending.pop() {
+            if scope.steps.contains_key(&id) {
+                continue;
+            }
+            let step = self
+                .steps
+                .get(&id)
+                .ok_or_else(|| anyhow::anyhow!("unknown step: {id}"))?;
+            scope.steps.insert(id, step.revision);
+            for requirement in &step.requirements {
+                let version = versions
+                    .get(requirement)
+                    .ok_or_else(|| anyhow::anyhow!("inactive step requirement"))?;
+                scope.requirements.insert(requirement.clone(), *version);
+            }
+            pending.extend(step.dependencies.iter().cloned());
+        }
+        Ok(scope)
     }
 }

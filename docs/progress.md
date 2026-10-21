@@ -49,7 +49,7 @@ Spec: docs/spec.md
 - Next immediate milestone: configuration + local daemon/CLI integration, followed by workers and
   extensions. CLI entrypoint is needed to exercise real child-process detach/reconnect/restart.
 
-## Implementation watch list
+## Completed checkpoints and current work
 
 - CLI/daemon checkpoint: basic run/attach/pause/resume/stop/doctor, durable Unix-socket controls,
   detached child process, private state paths and cross-process workspace ownership are implemented.
@@ -82,13 +82,54 @@ Spec: docs/spec.md
   decomposition, dependency-specific questions, stagnation handling, durable web quotas and services.
   Browser/MCP/Skills, full interactive terminal, frozen quality experiments and release packaging remain.
 
-- Model/tool fixtures live in tests only. Actual API key still absent from execution environment.
-- Keep the 50 RMB account durable and shared; do NOT run paid inference before wiring reservations.
+- Worker checkpoint in progress: exact-quote requirement decomposition retains the original goal and
+  revision history; dependency scopes include transitive step versions. Two workers run concurrently,
+  propose patches through the central owner, and stale dependency leases reject otherwise-current files.
+- Actual correction test: an old worker deliberately ignores cancellation and replies late; its patch
+  is discarded while the unaffected interface worker keeps its context and completes. Parallel fixture
+  also exposed a one-second timer delay between local steps; scheduling now continues immediately and
+  drains controls between iterations (test improved from timeout at 1s to about 0.1s).
+- Missing inputs now have requirement scopes. An interface worker finishes while storage awaits a
+  decision, and the answer versions dependent requirements and resumes their work. Side questions can
+  use a fresh read-only context, preserving the original goal and prior paused/completed state.
+- Split runtime metadata, steering, questions, worker coordination and verification into separate files.
+  Evidence now also records step versions. Full suite passed 65 tests at this checkpoint.
+- Concurrent original-tree readability edits appeared during a turn interruption. Preserve them and
+  review semantic changes; no bulk reset or overwrite. Corrected two unsupported comments (cached-token
+  accounting and an unmeasured reasoning-quality claim) while retaining surrounding improvements.
+- Stagnation now starts a fresh diagnosis context after repeated settled observations with no new
+  information. A real-file fixture that kept reading a missing file switched to a guarded create and
+  completed without user prompting. Running commands are not treated as stuck merely due to elapsed time.
+- Main plus two busy model requests no longer starve steering: one reserved steering request lane is
+  available, still charged to the same budgets. Saturated-concurrency correction test RED→GREEN.
+- Unscoped requirement additions/replacements advance a conservative dependency epoch; old actions,
+  workers and evidence expire together. Exact initial decomposition does not advance it, and scoped
+  corrections keep unrelated work valid. Domain tests cover both behaviors.
+- Managed source-readonly services now run independently, confirm loopback HTTP readiness, write only
+  an owned `.weft-build` output directory, and stop on invalidated dependency scopes or session stop.
+  Actual Python HTTP server test verifies denied source writes, allowed build output, simultaneous
+  foreground source edits and confirmed server shutdown. Restored unbounded post-SIGKILL confirmation:
+  requesting a signal cannot release source ownership before actual process exit.
+- Browser uses Chromiumoxide 0.9.1 with an isolated Chrome profile, real click/Unicode insertion,
+  DOM/AX, console/errors and PNG screenshot artifacts. Actual Chrome test passed; visually inspected
+  artifacts/browser-proof/browser.png shows `你好 Weft` in the input and rendered result. Native image
+  parts now reach Responses tool output. The metered real Flash vision probe correctly read the
+  screenshot's Chinese input/result and Apply button (383 input + 110 output tokens). Report:
+  artifacts/campaign/vision-probe.json. Cumulative accounted peak-rate spend is **0.19371520 RMB**,
+  reserved/uncertain both zero. This is transport/vision verification, not a quality-comparison result.
+- Latest full `cargo test`: **72/72** integration tests passed, including actual Chrome, HTTP server,
+  detached daemon/SIGKILL recovery, saturated steering and stale-worker rejection. No holdout evaluation
+  has run; the frozen corpus and all four experimental conditions still need implementation.
+
+## Implementation watch list
+
+- Model/tool fixtures live in tests only. Real validation reads the ignored `.env` key into subprocess
+  environment; ordinary shell sessions still do not automatically inherit it.
+- Keep the existing 50 RMB account at artifacts/campaign/money.sqlite across every real run.
 - Current application-layer command policy is not an adversarial shell sandbox.
-- Scope currently contains requirement versions and observed file hashes. Add explicit step leases
-  for narrowly scoped workers; unknown dependencies must use all active requirements.
-- Initial goals currently have only r1. Add provenance-checked decomposition of explicit source quotes
-  before evaluating selective repair, so edits to a storage requirement need not invalidate a shortcut.
-- Current ask_user blocks the main actor; make questions requirement-scoped and allow independent work.
+- Remaining: durable web quotas, browser authorization/recovery refinements, MCP/Skills,
+  full TUI, frozen 36-task corpus/comparisons/ablations, macOS packaging and fresh final review.
+- Also verify paused side questions, clarification cancellation and stale evidence; add explicit
+  assumption/acceptance-note storage without letting model notes replace user requirements.
 - New Session snapshots have no compatibility requirement yet; keep one clean schema as implementation
   evolves. Do not add legacy readers just for these unreleased development snapshots.

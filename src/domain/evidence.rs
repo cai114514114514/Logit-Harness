@@ -18,6 +18,10 @@ pub struct Evidence {
     pub id: String,
     pub kind: EvidenceKind,
     pub requirements: BTreeMap<String, u64>,
+    #[serde(default)]
+    pub epoch: u64,
+    #[serde(default)]
+    pub steps: BTreeMap<String, u64>,
     pub files: Fingerprints,
     pub passed: bool,
     pub description: String,
@@ -25,18 +29,40 @@ pub struct Evidence {
 }
 
 impl Evidence {
+    pub fn current_at(
+        &self,
+        goal: &Goal,
+        files: &Fingerprints,
+        steps: &BTreeMap<String, u64>,
+    ) -> bool {
+        self.current(goal, files)
+            && self
+                .steps
+                .iter()
+                .all(|(id, revision)| steps.get(id) == Some(revision))
+    }
     pub fn current(&self, goal: &Goal, files: &Fingerprints) -> bool {
-        self.passed
-            && !self.requirements.is_empty()
-            && self.requirements.iter().all(|(id, revision)| {
-                goal.requirements
-                    .get(id)
-                    .is_some_and(|r| r.active && r.revision == *revision)
-            })
-            && self.files.iter().all(|(path, hash)| match files.get(path) {
-                Some(current) => current == hash,
-                None => hash == "missing",
-            })
+        // 只有实际通过的检查才能作为验收依据。
+        let passed = self.passed;
+        // 不指向任何需求的证据不构成验收覆盖。
+        let covers_any_requirement = !self.requirements.is_empty();
+        // 证据绑定的是需求当时的版本；需求一旦修订，旧证据随之过期。
+        let versions_still_match = self.requirements.iter().all(|(id, revision)| {
+            goal.requirements
+                .get(id)
+                .is_some_and(|r| r.active && r.revision == *revision)
+        });
+        // 证据记录的文件指纹必须与当前一致才仍有效。空 files 表示该证据不依赖
+        // 任何文件内容（例如纯需求评审），因此永不因文件变化而过期——保持该语义。
+        let files_still_match = self.files.iter().all(|(path, hash)| match files.get(path) {
+            Some(current) => current == hash,
+            None => hash == "missing",
+        });
+        passed
+            && covers_any_requirement
+            && versions_still_match
+            && files_still_match
+            && self.epoch == goal.epoch
     }
 }
 
@@ -47,6 +73,8 @@ impl Goal {
             .filter(|r| r.active)
             .filter(|requirement| {
                 !evidence.iter().any(|e| {
+                    // Read 只是观察，不构成"需求已被满足"的验证——否则 agent
+                    // 读完代码就算完成验收，所以阅读类证据不计入覆盖。
                     e.kind != EvidenceKind::Read
                         && e.requirements.contains_key(&requirement.id)
                         && e.current(self, files)

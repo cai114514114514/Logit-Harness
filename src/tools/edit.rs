@@ -1,14 +1,45 @@
 //! Hash-guarded edits are committed by the single workspace mutation owner.
 use super::files::{EditOperation, FileDelta, FileEdit, MISSING, Workspace, fingerprint};
-use std::{collections::BTreeSet, io::Write, path::Path};
+use std::{
+    collections::BTreeSet,
+    io::Write,
+    path::{Path, PathBuf},
+};
+
+/// One validated edit: the resolved path plus content before and after.
+struct Prepared<'a> {
+    edit: &'a FileEdit,
+    path: PathBuf,
+    before: Option<Vec<u8>>,
+    after: Option<Vec<u8>>,
+}
 
 impl Workspace {
     pub fn apply(&self, edits: &[FileEdit]) -> anyhow::Result<Vec<FileDelta>> {
         anyhow::ensure!(!edits.is_empty(), "empty patch");
+        let prepared = self.prepare(edits)?;
+        commit(&prepared)?;
+        prepared
+            .iter()
+            .map(|p| {
+                Ok(FileDelta {
+                    path: p.edit.path.clone(),
+                    before: p.edit.expected.clone(),
+                    after: fingerprint(&p.path)?,
+                })
+            })
+            .collect()
+    }
+
+    /// Validate every edit against the current tree before any write happens.
+    fn prepare<'a>(&self, edits: &'a [FileEdit]) -> anyhow::Result<Vec<Prepared<'a>>> {
         let mut prepared = vec![];
         let mut names = BTreeSet::new();
         for edit in edits {
             let path = self.resolve(&edit.path)?;
+            // Normalize components ("./a" and "a" resolve to the same entry) so
+            // spelling variants cannot slip past the duplicate detection below.
+            let path: PathBuf = path.components().collect();
             anyhow::ensure!(names.insert(path.clone()), "duplicate file in patch");
             let mut ancestor = path.as_path();
             while ancestor != self.root {
@@ -49,6 +80,8 @@ impl Workspace {
                         "replacement must match exactly once: {}",
                         edit.path
                     );
+                    // old == new is a legitimate no-op replacement: the file is
+                    // still rewritten unchanged, refreshing its mtime like any write.
                     Some(original.replacen(old, new, 1).into_bytes())
                 }
                 EditOperation::Delete => {
@@ -56,45 +89,61 @@ impl Workspace {
                     None
                 }
             };
-            prepared.push((edit, path, before, after));
+            prepared.push(Prepared {
+                edit,
+                path,
+                before,
+                after,
+            });
         }
-        let mut completed: Vec<usize> = vec![];
-        for (index, (edit, path, _, after)) in prepared.iter().enumerate() {
-            let commit = (|| -> anyhow::Result<()> {
-                // Recheck immediately before writing, including files validated earlier in this patch.
-                anyhow::ensure!(
-                    fingerprint(path)? == edit.expected,
-                    "file changed during patch: {}",
-                    edit.path
-                );
-                write(path, after.as_deref())
-            })();
-            if let Err(error) = commit {
-                for previous in completed.into_iter().rev() {
-                    let (_, path, before, after) = &prepared[previous];
-                    let own_hash = after
-                        .as_deref()
-                        .map(|b| blake3::hash(b).to_hex().to_string())
-                        .unwrap_or_else(|| MISSING.into());
-                    if fingerprint(path).is_ok_and(|h| h == own_hash) {
-                        let _ = write(path, before.as_deref());
-                    }
-                }
-                return Err(error);
-            }
-            completed.push(index);
-        }
-        prepared
-            .into_iter()
-            .map(|(edit, path, _, _)| {
-                Ok(FileDelta {
-                    path: edit.path.clone(),
-                    before: edit.expected.clone(),
-                    after: fingerprint(&path)?,
-                })
-            })
-            .collect()
+        Ok(prepared)
     }
+}
+
+/// Write each edit in order; on the first failure, roll back earlier writes.
+fn commit(prepared: &[Prepared]) -> anyhow::Result<()> {
+    let mut completed: Vec<usize> = vec![];
+    for (index, p) in prepared.iter().enumerate() {
+        let write_one = (|| -> anyhow::Result<()> {
+            // Recheck immediately before writing, including files validated earlier in this patch.
+            anyhow::ensure!(
+                fingerprint(&p.path)? == p.edit.expected,
+                "file changed during patch: {}",
+                p.edit.path
+            );
+            write(&p.path, p.after.as_deref())
+        })();
+        if let Err(error) = write_one {
+            return Err(match rollback(prepared, &completed) {
+                // Rollback failures must not vanish: the workspace is left in a
+                // partial state and the caller needs to know.
+                Some(failures) => error.context(failures),
+                None => error,
+            });
+        }
+        completed.push(index);
+    }
+    Ok(())
+}
+
+/// Best-effort restore of already-written files. Returns a description of any
+/// files whose rollback itself failed, so the caller can attach it to the error.
+fn rollback(prepared: &[Prepared], completed: &[usize]) -> Option<String> {
+    let mut failures = vec![];
+    for previous in completed.iter().rev() {
+        let p = &prepared[*previous];
+        let own_hash = p
+            .after
+            .as_deref()
+            .map(|b| blake3::hash(b).to_hex().to_string())
+            .unwrap_or_else(|| MISSING.into());
+        if fingerprint(&p.path).is_ok_and(|h| h == own_hash)
+            && let Err(error) = write(&p.path, p.before.as_deref())
+        {
+            failures.push(format!("{}: {error}", p.edit.path));
+        }
+    }
+    (!failures.is_empty()).then(|| format!("rollback also failed: {}", failures.join("; ")))
 }
 
 fn write(path: &Path, content: Option<&[u8]>) -> anyhow::Result<()> {

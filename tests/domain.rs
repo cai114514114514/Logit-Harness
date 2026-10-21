@@ -61,6 +61,8 @@ fn evidence_expires_when_code_or_requirement_changes() {
     let mut goal = Goal::new("Store notes as JSON");
     let files = BTreeMap::from([("src/storage.rs".into(), "before".into())]);
     let evidence = Evidence {
+        steps: Default::default(),
+        epoch: goal.epoch,
         id: "check1".into(),
         kind: EvidenceKind::Command,
         requirements: goal.active_versions(),
@@ -86,6 +88,8 @@ fn evidence_expires_when_code_or_requirement_changes() {
 fn reading_source_is_not_validation() {
     let goal = Goal::new("fix search");
     let observation = Evidence {
+        steps: Default::default(),
+        epoch: goal.epoch,
         id: "read1".into(),
         kind: EvidenceKind::Read,
         requirements: goal.active_versions(),
@@ -166,6 +170,8 @@ fn state_and_events_survive_reopen_with_monotonic_cursor() {
 fn deletion_evidence_expires_if_the_file_returns() {
     let goal = Goal::new("remove obsolete file");
     let evidence = Evidence {
+        steps: Default::default(),
+        epoch: goal.epoch,
         id: "delete-check".into(),
         kind: EvidenceKind::Review,
         requirements: goal.active_versions(),
@@ -179,4 +185,56 @@ fn deletion_evidence_expires_if_the_file_returns() {
         &goal,
         &BTreeMap::from([("obsolete.txt".into(), "restored".into())])
     ));
+}
+#[test]
+fn decomposition_retains_original_and_requires_exact_user_provenance() {
+    let mut goal = weft::domain::Goal::new("Use JSON storage. Render a blue interface.");
+    let ids = goal
+        .extract(&[
+            "Use JSON storage.".into(),
+            "Render a blue interface.".into(),
+        ])
+        .unwrap();
+    assert_eq!(ids.len(), 2);
+    assert!(goal.active_versions().contains_key("r1"));
+    assert!(goal.extract(&["Publish the application".into()]).is_err());
+    let first = ids[0].clone();
+    goal.revise(weft::domain::Change {
+        source: "Use SQLite instead".into(),
+        updates: std::collections::BTreeMap::from([(first.clone(), "Use SQLite storage.".into())]),
+        additions: vec![],
+        replacement: false,
+    })
+    .unwrap();
+    assert_eq!(goal.history[0].requirements["r1"].text, goal.original);
+    assert!(goal.history.iter().any(|revision| {
+        revision
+            .requirements
+            .get(&first)
+            .is_some_and(|r| r.text == "Use JSON storage.")
+    }));
+    assert_eq!(goal.requirements[&ids[1]].revision, 1);
+}
+#[test]
+fn a_new_requirement_with_unknown_dependencies_expires_prior_evidence() {
+    let mut goal = Goal::new("Build a tool");
+    let proof = Evidence {
+        id: "proof".into(),
+        kind: EvidenceKind::Command,
+        requirements: goal.active_versions(),
+        steps: Default::default(),
+        epoch: goal.epoch,
+        files: Default::default(),
+        passed: true,
+        description: "old check".into(),
+        artifact: None,
+    };
+    goal.revise(Change {
+        source: "Also support encryption everywhere".into(),
+        updates: Default::default(),
+        additions: vec!["Support encryption everywhere".into()],
+        replacement: false,
+    })
+    .unwrap();
+    assert!(!proof.current(&goal, &Default::default()));
 }

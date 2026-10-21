@@ -1,3 +1,11 @@
+//! Builds the macOS sandbox-exec profile that turns a `check` into a read-only
+//! verification: source writes are denied, declared build outputs stay writable.
+//!
+//! Threat model: `(allow default)` leaves network and process actions fully
+//! allowed — the sandbox constrains file writes only. `output.canonicalize()`
+//! implicitly requires every declared output directory to exist already.
+//! Nested or overlapping outputs are not deduplicated; the extra allow rules
+//! are harmless.
 use std::path::{Path, PathBuf};
 
 pub fn profile(root: &Path, outputs: &[PathBuf]) -> anyhow::Result<String> {

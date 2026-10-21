@@ -108,6 +108,7 @@ impl Runner {
                             cached: response.usage.cached,
                         })?;
                         let stale = job.cancel.is_cancelled()
+                            || !self.scope_current(&job.scope)
                             || job.scope.requirements.iter().any(|(id, rev)| {
                                 !self
                                     .session
@@ -118,7 +119,11 @@ impl Runner {
                             });
                         let actor = self.session.actors.get_mut(&job.actor).unwrap();
                         if stale {
-                            actor.phase = Phase::Ready;
+                            actor.phase = if actor.retired {
+                                Phase::Done
+                            } else {
+                                Phase::Ready
+                            };
                             return Ok(());
                         }
                         actor.failures = 0;
@@ -142,14 +147,16 @@ impl Runner {
                             match actor.role {
                                 Role::Main => {
                                     self.session.final_report = Some(text);
+                                    self.session.verification_pending = true;
                                     self.start_verifier();
                                 }
-                                Role::Verifier | Role::Steering => {
+                                Role::Verifier | Role::Steering | Role::Diagnosis => {
                                     actor.failures += 1;
                                     actor.context.user("Use the required structured reporting tool; prose cannot change state.");
                                     actor.phase = Phase::Ready;
                                 }
-                                _ => (),
+                                Role::Worker => self.worker_finished(&job.actor, &text)?,
+                                Role::Question => self.finish_question(&job.actor)?,
                             }
                         } else {
                             actor.pending.extend(calls.into_iter().map(|call| Pending {
@@ -161,7 +168,11 @@ impl Runner {
                     }
                     Err(error) => {
                         let actor = self.session.actors.get_mut(&job.actor).unwrap();
-                        actor.phase = Phase::Ready;
+                        actor.phase = if actor.retired {
+                            Phase::Done
+                        } else {
+                            Phase::Ready
+                        };
                         if !job.cancel.is_cancelled() {
                             actor.failures += 1;
                             let failures = actor.failures;
@@ -200,13 +211,17 @@ impl Runner {
                         return Ok(());
                     }
                 }
+                let mut images = vec![];
                 let data = match result {
-                    Ok(result) => {
+                    Ok(mut result) => {
+                        images = std::mem::take(&mut result.images);
                         let evidence_id = format!("e-{action}");
                         self.session.evidence.push(Evidence {
                             id: evidence_id.clone(),
                             kind: result.kind.clone(),
                             requirements: job.scope.requirements.clone(),
+                            epoch: job.scope.epoch,
+                            steps: job.scope.steps.clone(),
                             files: result.files.clone(),
                             passed: result.success,
                             description: record.pending.call.name.clone(),
@@ -224,9 +239,14 @@ impl Runner {
                     Err(error) => json!({"error":error.to_string()}),
                 };
                 let success = data["result"]["success"].as_bool().unwrap_or(false);
+                let observation = json!({"tool":record.pending.call.name,"outcome":data,"requirements":job.scope.requirements,"steps":job.scope.steps});
                 let actor = self.session.actors.get_mut(&job.actor).unwrap();
-                actor.context.tool_result(&record.pending.call.id, &data);
-                if actor.pending.is_empty() {
+                actor
+                    .context
+                    .tool_images(&record.pending.call.id, &data, &images);
+                if actor.retired {
+                    actor.phase = Phase::Done;
+                } else if actor.pending.is_empty() {
                     actor.phase = Phase::Ready;
                 }
                 self.emit(EventData::ActionFinished {
@@ -234,13 +254,23 @@ impl Runner {
                     result: data,
                     success,
                 })?;
+                self.record_progress(&job.actor, &observation)?;
             }
             _ => anyhow::bail!("job result kind mismatch"),
         }
         Ok(())
     }
     pub(super) fn start_verifier(&mut self) {
-        if self.has_workers() {
+        if !self.session.verification_pending
+            || self.has_workers()
+            || self.session.actions.values().any(|a| a.running)
+            || !self.blocked_requirements().is_empty()
+            || self
+                .session
+                .actors
+                .values()
+                .any(|a| a.role == Role::Verifier && !a.retired && a.phase != Phase::Done)
+        {
             return;
         }
         let id = format!("verify-{}", uuid::Uuid::new_v4());

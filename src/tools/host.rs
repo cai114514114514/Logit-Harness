@@ -1,4 +1,4 @@
-use super::files::Workspace;
+use super::files::{WORKSPACE_FINGERPRINT_KEY, Workspace};
 use crate::domain::{EvidenceKind, Fingerprints, Goal};
 use crate::model::ToolCall;
 use serde::{Deserialize, Serialize};
@@ -17,8 +17,12 @@ pub enum Effect {
     Read,
     Check,
     Write,
+    /// Source-readonly services have separate lifecycle ownership.
     Service,
+    Control,
     External,
+    /// Reserved: for tools whose effects cannot be classified; always escalates
+    /// to an approval rather than guessing.
     Unknown,
 }
 
@@ -39,6 +43,10 @@ pub struct ToolSpec {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Scope {
     pub requirements: BTreeMap<String, u64>,
+    #[serde(default)]
+    pub epoch: u64,
+    #[serde(default)]
+    pub steps: BTreeMap<String, u64>,
     pub observed: Fingerprints,
     pub readonly: bool,
     pub approvals: BTreeSet<String>,
@@ -49,6 +57,7 @@ pub struct ToolContext {
     pub workspace: Workspace,
     pub logs: PathBuf,
     pub id: String,
+    pub scope: Scope,
 }
 
 #[derive(Clone, Debug)]
@@ -63,6 +72,13 @@ pub struct ToolResult {
     pub success: bool,
     pub files: Fingerprints,
     pub kind: EvidenceKind,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<ToolImage>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ToolImage {
+    pub data_url: String,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -93,6 +109,9 @@ pub struct ToolHost {
     pub goal: Arc<RwLock<Goal>>,
     pub logs: PathBuf,
     pub mutation: Arc<Mutex<()>>,
+    pub steps: Arc<RwLock<BTreeMap<String, u64>>>,
+    pub blocked: Arc<RwLock<BTreeSet<String>>>,
+    pub services: Option<Arc<super::services::Services>>,
     registry: BTreeMap<String, Arc<dyn Tool>>,
 }
 
@@ -108,6 +127,9 @@ impl ToolHost {
             goal,
             logs,
             mutation: Arc::new(Mutex::new(())),
+            steps: Arc::new(RwLock::new(BTreeMap::new())),
+            blocked: Arc::new(RwLock::new(BTreeSet::new())),
+            services: None,
             registry,
         }
     }
@@ -141,6 +163,47 @@ impl ToolHost {
             .get(&call.name)
             .ok_or_else(|| anyhow::anyhow!("unknown tool: {}", call.name))?;
         let effect = tool.spec().effect;
+        self.authorize(tool.as_ref(), effect, &call, &scope)?;
+        // Lock order is a load-bearing invariant: the mutation mutex is always
+        // acquired before goal.read()/steps.read() in check_stale, never the other
+        // way around, so no lock cycle can form. Check also holds the mutex for
+        // its whole run — its verdict is only meaningful if no writer interleaves.
+        // Services are allowed to overlap: their OS profile forbids source writes
+        // and only permits a separate, owned build-output directory.
+        let _owner = if matches!(effect, Effect::Write | Effect::Check) {
+            Some(tokio::select! {
+                biased;
+                _ = cancel.cancelled() => anyhow::bail!("tool cancelled before mutation ownership"),
+                owner = self.mutation.lock() => owner,
+            })
+        } else {
+            None
+        };
+        if !effect.readonly() && effect != Effect::Control {
+            self.check_stale(&scope).await?;
+        }
+        anyhow::ensure!(!cancel.is_cancelled(), "tool cancelled before dispatch");
+        let mut result = self.dispatch(tool, call, scope, cancel, events).await?;
+        if effect == Effect::Write {
+            let snapshot = self.workspace.fingerprints()?;
+            let aggregate = snapshot
+                .get(WORKSPACE_FINGERPRINT_KEY)
+                .ok_or_else(|| anyhow::anyhow!("snapshot lacks an aggregate fingerprint"))?;
+            result
+                .files
+                .insert(WORKSPACE_FINGERPRINT_KEY.into(), aggregate.clone());
+        }
+        Ok(result)
+    }
+
+    /// Readonly scope, policy decision and approval gate, before any lock is taken.
+    fn authorize(
+        &self,
+        tool: &dyn Tool,
+        effect: Effect,
+        call: &ToolCall,
+        scope: &Scope,
+    ) -> anyhow::Result<()> {
         anyhow::ensure!(
             !scope.readonly || effect.readonly(),
             "worker cannot directly mutate the workspace or external state"
@@ -161,61 +224,82 @@ impl ToolHost {
             }
             super::policy::Decision::Allow => (),
         }
-        let _owner = if matches!(effect, Effect::Write | Effect::Check) {
-            Some(tokio::select! {
-                biased;
-                _ = cancel.cancelled() => anyhow::bail!("tool cancelled before mutation ownership"),
-                owner = self.mutation.lock() => owner,
+        Ok(())
+    }
+
+    /// Reject work scoped against a goal, plan or tree that has since moved on.
+    /// Runs with the mutation lock held, so the state checked here cannot change
+    /// before dispatch.
+    async fn check_stale(&self, scope: &Scope) -> anyhow::Result<()> {
+        let blocked = self.blocked.read().await;
+        anyhow::ensure!(
+            !scope.requirements.keys().any(|id| blocked.contains(id)),
+            "action depends on unanswered user input; focus an independent step"
+        );
+        drop(blocked);
+        let goal = self.goal.read().await;
+        if scope.epoch != goal.epoch
+            || scope.requirements.is_empty()
+            || scope.requirements.iter().any(|(id, version)| {
+                !goal
+                    .requirements
+                    .get(id)
+                    .is_some_and(|r| r.active && r.revision == *version)
             })
-        } else {
-            None
-        };
-        if !effect.readonly() {
-            let goal = self.goal.read().await;
-            if scope.requirements.is_empty()
-                || scope.requirements.iter().any(|(id, version)| {
-                    !goal
-                        .requirements
-                        .get(id)
-                        .is_some_and(|r| r.active && r.revision == *version)
-                })
-            {
-                return Err(ToolError::Stale("requirements changed".into()).into());
-            }
-            for (path, hash) in &scope.observed {
-                let current = if path == "$workspace" {
-                    self.workspace.fingerprints()?[path].clone()
-                } else {
-                    super::files::fingerprint(&self.workspace.resolve(path)?)?
-                };
-                if current != *hash {
-                    return Err(ToolError::Stale(format!("observed file changed: {path}")).into());
-                }
+        {
+            return Err(ToolError::Stale("requirements changed".into()).into());
+        }
+        let steps = self.steps.read().await;
+        if scope
+            .steps
+            .iter()
+            .any(|(id, revision)| steps.get(id) != Some(revision))
+        {
+            return Err(ToolError::Stale("plan dependency changed".into()).into());
+        }
+        for (path, hash) in &scope.observed {
+            let current = if path.as_str() == WORKSPACE_FINGERPRINT_KEY {
+                self.workspace
+                    .fingerprints()?
+                    .get(WORKSPACE_FINGERPRINT_KEY)
+                    .ok_or_else(|| anyhow::anyhow!("snapshot lacks an aggregate fingerprint"))?
+                    .clone()
+            } else {
+                super::files::fingerprint(&self.workspace.resolve(path)?)?
+            };
+            if current != *hash {
+                return Err(ToolError::Stale(format!("observed file changed: {path}")).into());
             }
         }
-        anyhow::ensure!(!cancel.is_cancelled(), "tool cancelled before dispatch");
-        let mut result = tool
-            .call(
-                call.arguments,
-                ToolContext {
-                    workspace: self.workspace.clone(),
-                    logs: self.logs.clone(),
-                    id: call.id,
-                },
-                cancel,
-                events,
-            )
-            .await?;
-        if effect == Effect::Write {
-            let snapshot = self.workspace.fingerprints()?;
-            result
-                .files
-                .insert("$workspace".into(), snapshot["$workspace"].clone());
-        }
-        Ok(result)
+        Ok(())
+    }
+
+    async fn dispatch(
+        &self,
+        tool: &Arc<dyn Tool>,
+        call: ToolCall,
+        scope: Scope,
+        cancel: CancellationToken,
+        events: mpsc::UnboundedSender<ToolEvent>,
+    ) -> anyhow::Result<ToolResult> {
+        tool.call(
+            call.arguments,
+            ToolContext {
+                workspace: self.workspace.clone(),
+                logs: self.logs.clone(),
+                id: call.id,
+                scope,
+            },
+            cancel,
+            events,
+        )
+        .await
     }
 }
 
+/// Stable identity of one call for approval matching. Relies on serde_json's
+/// default BTreeMap-backed object representation: keys serialize in sorted order,
+/// so equal payloads hash identically regardless of insertion order.
 pub fn approval_id(name: &str, arguments: &Value) -> String {
     blake3::hash(format!("{name}:{}", arguments).as_bytes())
         .to_hex()

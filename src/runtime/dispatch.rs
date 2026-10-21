@@ -13,8 +13,16 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 impl Runner {
-    pub(super) async fn schedule(&mut self) -> anyhow::Result<()> {
+    pub(super) async fn schedule(&mut self) -> anyhow::Result<bool> {
+        let mut progressed = false;
         self.start_steering();
+        if !self.frozen()
+            && self.session.status == Status::Running
+            && self.session.actors["main"].phase == Phase::Done
+            && self.session.final_report.is_some()
+        {
+            self.start_verifier();
+        }
         let mut ids: Vec<_> = self.session.actors.keys().cloned().collect();
         ids.sort_by_key(|id| {
             if self.session.actors[id].role == Role::Steering {
@@ -24,7 +32,31 @@ impl Runner {
             }
         });
         for id in ids {
+            if self.session.actors[&id].retired || self.session.actors[&id].phase == Phase::Blocked
+            {
+                continue;
+            }
             let role = self.session.actors[&id].role.clone();
+            if self.session.status == Status::Paused
+                && !matches!(role, Role::Steering | Role::Question)
+            {
+                continue;
+            }
+            if role == Role::Main
+                && !self.blocked_requirements().is_empty()
+                && self
+                    .session
+                    .goal
+                    .active_versions()
+                    .keys()
+                    .all(|id| self.blocked_requirements().contains(id))
+            {
+                self.session.actors.get_mut(&id).unwrap().phase = Phase::Blocked;
+                continue;
+            }
+            if role == Role::Worker && self.scope_blocked(&self.session.actors[&id].scope) {
+                continue;
+            }
             if self.frozen() && role != Role::Steering {
                 continue;
             }
@@ -39,6 +71,7 @@ impl Runner {
                 .pending
                 .pop_front()
             {
+                progressed = true;
                 match self.special_call(&id, &pending).await {
                     Ok(true) => continue,
                     Ok(false) => (),
@@ -55,6 +88,7 @@ impl Runner {
                         self.emit(EventData::Diagnostic {
                             message: format!("{} rejected: {error}", pending.call.name),
                         })?;
+                        self.record_progress(&id, &json!({"tool":pending.call.name,"error":error.to_string(),"requirements":pending.scope.requirements,"steps":pending.scope.steps}))?;
                         continue;
                     }
                 }
@@ -67,17 +101,50 @@ impl Runner {
                     .values()
                     .filter(|j| matches!(j.kind, JobKind::Model { .. }))
                     .count();
-                if active < self.settings.workers + 1 {
+                // Steering gets one reserved request lane. Long work requests must
+                // not prevent us from interpreting the user's correction.
+                let capacity = self.settings.workers + 1 + usize::from(role == Role::Steering);
+                if active < capacity {
+                    let before = self.jobs.len();
                     self.start_model(&id)?;
+                    progressed |= self.jobs.len() != before;
                 }
             }
         }
-        Ok(())
+        if !progressed
+            && self.jobs.is_empty()
+            && !self.blocked_requirements().is_empty()
+            && self.session.status == Status::Running
+        {
+            self.status(
+                Status::Waiting,
+                "independent work is settled; dependent steps await user input",
+            )?;
+            progressed = true;
+        }
+        Ok(progressed)
     }
     fn start_model(&mut self, actor_id: &str) -> anyhow::Result<()> {
+        let actor = self.session.actors.get_mut(actor_id).unwrap();
+        if matches!(
+            actor.role,
+            Role::Main | Role::Verifier | Role::Steering | Role::Question
+        ) {
+            actor.scope.epoch = self.session.goal.epoch;
+            if let Some(step) = &actor.step {
+                let scoped = self.session.graph.scope(step, &self.session.goal)?;
+                actor.scope.requirements = scoped.requirements;
+                actor.scope.steps = scoped.steps;
+            } else {
+                actor.scope.requirements = self.session.goal.active_versions();
+            }
+        }
         let mut tools = self.tools.definitions();
         let actor = &self.session.actors[actor_id];
-        if matches!(actor.role, Role::Verifier | Role::Worker | Role::Question) {
+        if matches!(
+            actor.role,
+            Role::Verifier | Role::Worker | Role::Question | Role::Diagnosis
+        ) {
             tools.retain(|v| {
                 self.tools
                     .effect(v["name"].as_str().unwrap_or(""))
@@ -88,6 +155,20 @@ impl Runner {
             tools.clear();
         }
         tools.extend(prompts::special(&actor.role));
+        if actor.role == Role::Worker {
+            if let Some(mut proposal) = self
+                .tools
+                .definitions()
+                .into_iter()
+                .find(|t| t["name"] == "apply_patch")
+            {
+                proposal["name"] = json!("propose_patch");
+                proposal["description"] = json!(
+                    "Submit a patch proposal to the central owner. The owner rechecks your original requirement, step and observed file versions before committing it."
+                );
+                tools.push(proposal);
+            }
+        }
         if actor.role == Role::Verifier {
             for tool in &mut tools {
                 if tool["name"] == "report_verification" {
@@ -108,12 +189,19 @@ impl Runner {
             instructions: if compact {
                 "ROLE: compact\nSummarize verified progress, failed attempts, unresolved requirements and source pointers. Do not invent completion or discard constraints.".into()
             } else {
-                prompts::instructions(&actor.role, &self.session)
+                format!(
+                    "{}\nActor task: {}\nActor dependency scope: {}",
+                    prompts::instructions(&actor.role, &self.session),
+                    actor.task,
+                    serde_json::to_string(&actor.scope)?
+                )
             },
             input: actor.context.items.clone(),
             tools: if compact { vec![] } else { tools },
             max_output: if compact {
                 4096
+            } else if actor.role == Role::Steering {
+                self.settings.max_output.min(8192)
             } else {
                 self.settings.max_output
             },
@@ -121,6 +209,17 @@ impl Runner {
         let reservation = match self.session.budget.reserve(request.reserve_tokens()) {
             Ok(id) => id,
             Err(_) => {
+                let available_after_settlement = self
+                    .session
+                    .budget
+                    .limit
+                    .saturating_sub(self.session.budget.used)
+                    .saturating_sub(self.session.budget.uncertain);
+                if !self.session.budget.reservations.is_empty()
+                    && request.reserve_tokens() <= available_after_settlement
+                {
+                    return Ok(());
+                }
                 self.halt(
                     Status::Exhausted,
                     "token allowance cannot cover the next request",
@@ -129,12 +228,6 @@ impl Runner {
             }
         };
         let actor = self.session.actors.get_mut(actor_id).unwrap();
-        if matches!(
-            actor.role,
-            Role::Main | Role::Verifier | Role::Steering | Role::Question
-        ) {
-            actor.scope.requirements = self.session.goal.active_versions();
-        }
         actor.phase = Phase::Busy;
         actor.busy += 1;
         actor.turns += 1;
@@ -185,7 +278,7 @@ impl Runner {
         });
         Ok(())
     }
-    async fn start_tool(
+    pub(super) async fn start_tool(
         &mut self,
         actor_id: &str,
         mut pending: super::actor::Pending,

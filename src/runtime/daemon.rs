@@ -58,6 +58,23 @@ pub async fn serve(paths: Paths, id: &str) -> anyhow::Result<()> {
         Arc::new(tokio::sync::RwLock::new(session.goal.clone())),
         paths.logs(id)?,
     );
+    let services = Arc::new(crate::tools::services::Services::new(
+        tools.workspace.clone(),
+        paths.logs(id)?.join("services"),
+    ));
+    services.recover().await?;
+    for tool in crate::tools::services::tools(services.clone()) {
+        tools.register(tool)?;
+    }
+    tools.services = Some(services.clone());
+    let browser = Arc::new(crate::tools::browser::BrowserClient::new(
+        config.chrome.clone(),
+        paths.logs(id)?.join("browser"),
+    ));
+    browser.recover().await?;
+    for tool in crate::tools::browser::tools(browser.clone()) {
+        tools.register(tool)?;
+    }
     let mut web = WebClient::new(
         config.base_url.clone(),
         key,
@@ -102,6 +119,8 @@ pub async fn serve(paths: Paths, id: &str) -> anyhow::Result<()> {
         _=tokio::signal::ctrl_c()=>{control.send(Control::Stop).await?;run_task.await?}
     };
     cancel.cancel();
+    services.shutdown().await?;
+    browser.close().await?;
     let _ = server_task.await;
     if let Err(error) = result {
         let mut state: Session = store.load(id)?;

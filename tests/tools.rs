@@ -403,3 +403,29 @@ async fn independent_checks_can_execute_but_cannot_modify_source() {
         "value = 42\n"
     );
 }
+#[tokio::test]
+async fn a_replanned_dependency_rejects_even_a_file_current_patch() {
+    let root = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let goal = Goal::new("work");
+    let host = ToolHost::new(
+        Workspace::open(root.path()).unwrap(),
+        Arc::new(tokio::sync::RwLock::new(goal.clone())),
+        state.path().to_owned(),
+    );
+    host.steps.write().await.insert("dependency".into(), 2);
+    let scope = Scope {
+        requirements: goal.active_versions(),
+        steps: BTreeMap::from([("dependency".into(), 1)]),
+        ..Scope::default()
+    };
+    let (events, _) = mpsc::unbounded_channel();
+    let result = host.execute(ToolCall { id: "late-patch".into(), name: "apply_patch".into(), arguments: json!({"edits":[{"path":"new.txt","expected":"missing","operation":"create","content":"obsolete"}]}) }, scope, CancellationToken::new(), events).await;
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("plan dependency changed")
+    );
+    assert!(!root.path().join("new.txt").exists());
+}

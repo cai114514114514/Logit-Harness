@@ -1,3 +1,4 @@
+use super::files::{MAX_READ_BYTES, WORKSPACE_FINGERPRINT_KEY};
 use super::{Effect, Tool, ToolContext, ToolEvent, ToolResult, ToolSpec};
 use crate::domain::EvidenceKind;
 use serde_json::{Value, json};
@@ -23,8 +24,22 @@ impl Tool for Search {
         } else {
             json!({"type":"object","properties":{"pattern":{"type":"string"},"limit":{"type":"integer"}},"required":["pattern"],"additionalProperties":false})
         };
-        ToolSpec { name:if self.listing {"list_files"} else {"search_text"}.into(),
-            description:if self.listing {"List workspace source paths, optionally filtered by regex."} else {"Search source with a regex. Returns paths, 1-based line numbers and file hashes. Truncated large files are reported."}.into(),parameters,effect:Effect::Read }
+        ToolSpec {
+            name: if self.listing {
+                "list_files"
+            } else {
+                "search_text"
+            }
+            .into(),
+            description: if self.listing {
+                "List workspace source paths, optionally filtered by regex."
+            } else {
+                "Search source with a regex. Returns paths, 1-based line numbers and file hashes. Truncated large files are reported."
+            }
+            .into(),
+            parameters,
+            effect: Effect::Read,
+        }
     }
     async fn call(
         &self,
@@ -51,16 +66,26 @@ impl Tool for Search {
         let paths = context.workspace.fingerprints()?;
         let mut matches = vec![];
         // A no-match result is also evidence, and expires when the searched tree changes.
-        let mut files = BTreeMap::from([("$workspace".into(), paths["$workspace"].clone())]);
+        let aggregate = paths
+            .get(WORKSPACE_FINGERPRINT_KEY)
+            .ok_or_else(|| anyhow::anyhow!("snapshot lacks an aggregate fingerprint"))?
+            .clone();
+        let mut files = BTreeMap::from([(WORKSPACE_FINGERPRINT_KEY.into(), aggregate)]);
         let mut truncated = vec![];
-        for (path, hash) in paths.iter().filter(|(p, _)| p.as_str() != "$workspace") {
+        for (path, hash) in paths
+            .iter()
+            .filter(|(p, _)| p.as_str() != WORKSPACE_FINGERPRINT_KEY)
+        {
             anyhow::ensure!(!cancel.is_cancelled(), "search cancelled");
             if self.listing {
                 if regex.is_match(path) {
                     matches.push(json!({"path":path,"hash":hash}));
                 }
             } else {
-                let Ok(read) = context.workspace.read(path, 256 * 1024) else {
+                // Unreadable files are skipped without a trace in the result. The
+                // aggregate fingerprint still expires this conclusion when the tree
+                // changes, so a silently missed file cannot make a stale answer stick.
+                let Ok(read) = context.workspace.read(path, MAX_READ_BYTES) else {
                     continue;
                 };
                 if read.truncated {
@@ -82,6 +107,7 @@ impl Tool for Search {
         }
         let limited = matches.len() == limit;
         Ok(ToolResult {
+            images: vec![],
             data: json!({"matches":matches,"limit_reached":limited,"truncated_files":truncated}),
             success: true,
             files,

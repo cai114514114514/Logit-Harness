@@ -13,6 +13,7 @@ pub enum Role {
     Verifier,
     Steering,
     Question,
+    Diagnosis,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -38,11 +39,33 @@ pub struct Actor {
     pub task: String,
     pub context: Context,
     pub scope: Scope,
+    /// Scheduling state. Ready means the actor may receive a model turn;
+    /// Busy/Awaiting mirror in-flight work (`busy`/`pending`); Blocked waits
+    /// on a user decision; Done never runs again.
     pub phase: Phase,
+    /// Queued provider tool calls not yet dispatched. Non-empty implies
+    /// phase Awaiting.
     pub pending: VecDeque<Pending>,
+    /// Number of in-flight jobs (model or tool) owned by this actor. Kept as
+    /// a counter next to the runner's job map: it persists across restarts
+    /// where the job map cannot, and recovery resets it to 0.
     pub busy: u32,
+    /// Consecutive model-level failures since the last success; reaching the
+    /// runner's failure cap halts the session as Failed. Reset by any
+    /// successful model response.
     pub failures: u32,
+    /// Lifetime count of model turns dispatched for this actor; diagnostic
+    /// only, never reset.
     pub turns: u32,
+    /// The plan step a Worker owns; None for every other role.
+    pub step: Option<String>,
+    /// A retired actor's work was invalidated by a goal/plan revision; it
+    /// receives no new work and its finished results are ignored.
+    #[serde(default)]
+    pub retired: bool,
+    #[serde(default)]
+    pub progress: super::progress::Progress,
+    pub parent: Option<String>,
 }
 impl Actor {
     pub fn new(id: String, role: Role, task: String, scope: Scope) -> Self {
@@ -59,6 +82,10 @@ impl Actor {
             busy: 0,
             failures: 0,
             turns: 0,
+            step: None,
+            retired: false,
+            progress: Default::default(),
+            parent: None,
         }
     }
 }

@@ -2,7 +2,11 @@ use crate::domain::{EventData, SessionEvent};
 use rusqlite::{Connection, params};
 use serde::{Serialize, de::DeserializeOwned};
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
+
+/// Concurrent daemons share one database file; a blocked writer waits this
+/// long for the current transaction before failing with SQLITE_BUSY.
+const BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 pub struct Store {
     connection: Mutex<Connection>,
@@ -14,7 +18,7 @@ impl Store {
             std::fs::create_dir_all(parent)?;
         }
         let connection = Connection::open(path)?;
-        connection.busy_timeout(std::time::Duration::from_secs(5))?;
+        connection.busy_timeout(BUSY_TIMEOUT)?;
         connection.execute_batch(
             "PRAGMA journal_mode=WAL;
             PRAGMA synchronous=FULL;
@@ -35,6 +39,14 @@ impl Store {
             connection: Mutex::new(connection),
         })
     }
+    /// Lock the single shared connection. A poisoned lock means a previous
+    /// holder panicked mid-transaction; every call treats that as
+    /// unrecoverable rather than risking a torn commit.
+    fn conn(&self) -> anyhow::Result<MutexGuard<'_, Connection>> {
+        self.connection
+            .lock()
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))
+    }
     /// The replay event and its resulting snapshot commit together, including tool-start intents.
     pub fn commit<T: Serialize>(
         &self,
@@ -42,10 +54,7 @@ impl Store {
         state: &T,
         data: EventData,
     ) -> anyhow::Result<SessionEvent> {
-        let mut connection = self
-            .connection
-            .lock()
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let mut connection = self.conn()?;
         let transaction = connection.transaction()?;
         let timestamp = chrono::Utc::now().to_rfc3339();
         transaction.execute(
@@ -57,7 +66,10 @@ impl Store {
             "INSERT INTO events(session, timestamp, data) VALUES(?1, ?2, ?3)",
             params![session, timestamp, serde_json::to_string(&data)?],
         )?;
-        let sequence = transaction.last_insert_rowid() as u64;
+        // AUTOINCREMENT rowids are positive monotonically increasing i64s, so
+        // this conversion cannot fail in practice; a negative rowid would be a
+        // database corruption signal worth surfacing instead of wrapping.
+        let sequence = u64::try_from(transaction.last_insert_rowid())?;
         transaction.commit()?;
         Ok(SessionEvent {
             sequence,
@@ -67,21 +79,21 @@ impl Store {
         })
     }
     pub fn load<T: DeserializeOwned>(&self, session: &str) -> anyhow::Result<T> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
-        let state: String =
-            connection.query_row("SELECT state FROM sessions WHERE id=?1", [session], |row| {
+        let connection = self.conn()?;
+        let state: String = connection
+            .query_row("SELECT state FROM sessions WHERE id=?1", [session], |row| {
                 row.get(0)
+            })
+            .map_err(|error| match error {
+                rusqlite::Error::QueryReturnedNoRows => {
+                    anyhow::anyhow!("no persisted state for session {session}")
+                }
+                error => error.into(),
             })?;
         Ok(serde_json::from_str(&state)?)
     }
     pub fn snapshot<T: DeserializeOwned>(&self, session: &str) -> anyhow::Result<(T, u64)> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let connection = self.conn()?;
         let (state, sequence): (String, u64) = connection.query_row(
             "SELECT state,
             (SELECT COALESCE(MAX(sequence),0) FROM events WHERE session=?1)
@@ -92,42 +104,36 @@ impl Store {
         Ok((serde_json::from_str(&state)?, sequence))
     }
     pub fn append(&self, session: &str, data: EventData) -> anyhow::Result<SessionEvent> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let connection = self.conn()?;
         let timestamp = chrono::Utc::now().to_rfc3339();
         connection.execute(
             "INSERT INTO events(session,timestamp,data) VALUES(?1,?2,?3)",
             params![session, timestamp, serde_json::to_string(&data)?],
         )?;
+        // See commit: rowids are positive monotonically increasing i64s.
+        let sequence = u64::try_from(connection.last_insert_rowid())?;
         Ok(SessionEvent {
-            sequence: connection.last_insert_rowid() as u64,
+            sequence,
             session: session.into(),
             timestamp,
             data,
         })
     }
     pub fn enqueue(&self, session: &str, data: &serde_json::Value) -> anyhow::Result<u64> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let connection = self.conn()?;
         connection.execute(
             "INSERT INTO controls(session,data) VALUES(?1,?2)",
             params![session, serde_json::to_string(data)?],
         )?;
-        Ok(connection.last_insert_rowid() as u64)
+        // See commit: rowids are positive monotonically increasing i64s.
+        Ok(u64::try_from(connection.last_insert_rowid())?)
     }
     pub fn queued(
         &self,
         session: &str,
         after: u64,
     ) -> anyhow::Result<Vec<(u64, serde_json::Value)>> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let connection = self.conn()?;
         let mut query = connection
             .prepare("SELECT id,data FROM controls WHERE session=?1 AND id>?2 ORDER BY id")?;
         let rows = query.query_map(params![session, after], |row| {
@@ -139,11 +145,11 @@ impl Store {
         })
         .collect()
     }
+    /// Returns every persisted session snapshot without pagination. Sessions
+    /// are rare (one per user task), so a full scan stays cheap; revisit if a
+    /// long-lived deployment accumulates thousands.
     pub fn snapshots(&self) -> anyhow::Result<Vec<(String, serde_json::Value)>> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let connection = self.conn()?;
         let mut query =
             connection.prepare("SELECT id,state FROM sessions ORDER BY updated DESC")?;
         let rows = query.query_map([], |row| {
@@ -155,11 +161,11 @@ impl Store {
         })
         .collect()
     }
+    /// Replays every event after `after` with no pagination. A chatty session
+    /// (one row per streamed delta) can make this large; subscribers use it
+    /// only to catch up after `after`, and lagged-replay bursts are short.
     pub fn events(&self, session: &str, after: u64) -> anyhow::Result<Vec<SessionEvent>> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let connection = self.conn()?;
         let mut statement = connection.prepare(
             "SELECT sequence, timestamp, data FROM events
             WHERE session=?1 AND sequence>?2 ORDER BY sequence",

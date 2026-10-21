@@ -7,6 +7,14 @@ pub enum Decision {
 
 /// An application policy, not a proof about arbitrary programs' side effects.
 /// Explicit external mutations are surfaced to the user rather than hidden in shell text.
+///
+/// This is a heuristic over whitespace-split words and is known to be bypassable:
+/// `git -c x=y push` shifts the verb out of the checked word pair, `curl -XPOST`
+/// hides the method inside one token, `env sudo …` wraps a privileged command.
+/// Defense in depth comes from the sandbox profile, not from this check.
+/// The `curl -x` case is a deliberate false positive: after lowercasing, `-x`
+/// (proxy) is indistinguishable from `-X` (method), and flagging a proxy use is
+/// the safe direction.
 pub fn shell(command: &str) -> Decision {
     let words: Vec<_> = command
         .split(|c: char| c.is_whitespace() || ";|&()".contains(c))

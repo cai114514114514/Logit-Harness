@@ -118,6 +118,8 @@ impl Runner {
         self.session.inbox.iter().any(|m| !m.applied)
     }
     pub async fn run(mut self) -> anyhow::Result<Session> {
+        self.refresh_plan().await?;
+        self.refresh_questions().await;
         if self.session.status == Status::Ready {
             self.status(Status::Running, "working toward the saved objective")?;
         }
@@ -142,9 +144,20 @@ impl Runner {
                 }
             }
             if self.session.transition.is_none()
-                && matches!(self.session.status, Status::Running | Status::Waiting)
+                && matches!(
+                    self.session.status,
+                    Status::Running | Status::Waiting | Status::Paused
+                )
             {
-                self.schedule().await?;
+                if self.schedule().await? {
+                    // Local state transitions should not wait for the wall-clock tick.
+                    // Yield to I/O, then drain durable and direct controls before more work.
+                    tokio::task::yield_now().await;
+                    while let Ok(control) = self.control.try_recv() {
+                        self.handle_control(control).await?;
+                    }
+                    continue;
+                }
             }
             tokio::select! {
                 biased;
@@ -177,7 +190,10 @@ impl Runner {
         )
     }
     pub(super) fn main_feedback(&mut self, text: &str) {
+        self.session.verification_pending = false;
         if let Some(main) = self.session.actors.get_mut("main") {
+            main.step = None;
+            main.scope.steps.clear();
             main.context.user(text);
             main.phase = super::actor::Phase::Ready;
         }
@@ -186,6 +202,6 @@ impl Runner {
         self.session
             .actors
             .values()
-            .any(|a| a.role == Role::Worker && a.phase != super::actor::Phase::Done)
+            .any(|a| a.role == Role::Worker && !a.retired && a.phase != super::actor::Phase::Done)
     }
 }
