@@ -61,6 +61,8 @@
 - 冻结语料：`eval/registered.json`；原预试验：`eval/frozen.json` 和 `artifacts/evaluation/pilot`。
 - 人工审阅表：各阶段目录的 `human-review.csv`，尚未填写。
 - 共享账本：`artifacts/campaign/money.sqlite`；会话和控制记录：同目录 `sessions.sqlite`。
+- 待核对请求清单：`artifacts/campaign/billing-review.json`，包含北京时间、12 个供应商请求 ID
+  和 1 次无请求 ID 的网络错误。费用记录只按会话关联，不虚构一一对应关系。
 - 真实完整纠正案例与工程测试见 [工程验收](acceptance.md)，不混入研究统计。
 
 保留集程序与已安装程序的 SHA-256 都是

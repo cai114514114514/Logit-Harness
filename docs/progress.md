@@ -423,3 +423,21 @@ Spec: docs/spec.md
   validation. No evaluation daemons or model reservations remain. Research remains incomplete for
   the documented budget and review reasons; the overall approved research objective is not marked
   complete.
+
+## Full-scope audit continuation
+
+- The preceding goal turn was substantive progress. The present audit reconfirmed the terminal
+  driver/process state and unchanged financial blocker; no provider request or ledger adjustment
+  was made. Full requirement-to-evidence mapping is in `docs/completion-audit.md`; engineering
+  checkboxes now reflect the verified work, while complete research and human review stay open.
+- Exported `artifacts/campaign/billing-review.json` with 13 uncertain charge records, 12 HTTP 400
+  provider request IDs and one network-send failure. `scripts/billing.py` opens both stores readonly,
+  omits credentials and bodies, and does not assume exact per-request charge attribution. The ledger
+  hash stayed unchanged during export; it is evidence for future billing review, not a refund.
+- The audit found missing dedicated HTTP 429 coverage. Added four actual localhost HTTP regressions
+  for retry integrity/notifications, attempt limit, backoff cancellation and malformed Retry-After.
+  `cargo test --locked --test rate_limit`: 4/4 passed; targeted strict Clippy passed. No execution-core,
+  dependency, frozen task, prompt, tool or scoring changes were made. Logs: `artifacts/completion-audit`.
+- The installed/research/package executable pin remains unchanged. No additional paid experiment is
+  admissible under the current account. Overall completion remains unproved; do not replace the
+  505 missing trajectories or actual human review with this offline audit.
