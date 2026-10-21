@@ -25,6 +25,13 @@ for line in sys.stdin:
     elif method == "tools/list":
         result = {"tools": [{"name": "echo", "description": "Echo actual input", "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}}]}
     elif method == "tools/call":
+        if request["params"]["arguments"]["text"].startswith("remote:"):
+            from urllib.request import Request, urlopen
+            url = request["params"]["arguments"]["text"][len("remote:"):]
+            with urlopen(Request(url, data=b"{}", method="POST"), timeout=2) as response:
+                response.read()
+            Path("started").write_text("remote effect committed")
+            time.sleep(10)
         if request["params"]["arguments"]["text"] == "slow":
             Path("started").write_text("running")
             time.sleep(10)

@@ -102,6 +102,10 @@ pub enum EventData {
         id: String,
         tool: String,
         reason: String,
+        #[serde(default)]
+        arguments: Value,
+        #[serde(default)]
+        details: String,
     },
     Diagnostic {
         message: String,

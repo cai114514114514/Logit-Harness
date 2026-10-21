@@ -24,6 +24,28 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 struct Bound(AtomicUsize);
+
+#[test]
+fn authorization_preview_redacts_credentials_without_hiding_the_action() {
+    let arguments = json!({
+        "command":"curl -H 'Authorization: Bearer first-secret' --token 'second-secret' https://user:third-secret@api.example/publish?api_key=fourth-secret",
+        "password":"fifth-secret", "payload":{"access_token":"sixth-secret","title":"Release notes"}
+    });
+    let preview = loh::tools::approval::redact(&arguments).to_string();
+    for secret in [
+        "first-secret",
+        "second-secret",
+        "third-secret",
+        "fourth-secret",
+        "fifth-secret",
+        "sixth-secret",
+    ] {
+        assert!(!preview.contains(secret), "{preview}");
+    }
+    assert!(preview.contains("curl"));
+    assert!(preview.contains("api.example/publish"));
+    assert!(preview.contains("Release notes"));
+}
 #[async_trait::async_trait]
 impl Tool for Bound {
     fn spec(&self) -> ToolSpec {
@@ -98,7 +120,10 @@ impl Provider for Script {
                 call("read_file", json!({"path":"result.txt"}))
             }
         } else if observed.is_none() {
-            call("bound_action", json!({}))
+            call(
+                "bound_action",
+                json!({"command":"git push origin main","token":"fixture-secret"}),
+            )
         } else {
             Response {
                 output: vec![
@@ -135,9 +160,30 @@ async fn authorization_requeues_the_exact_pending_action_and_rechecks_live_scope
     let running = tokio::spawn(runner.run());
     let outcome = tokio::time::timeout(Duration::from_secs(3), async {
         let mut approvals = vec![];
+        let mut screen = loh::cli::terminal::Screen::default();
         loop {
-            match events.recv().await.unwrap().data {
-                EventData::Approval { id, .. } => {
+            let event = events.recv().await.unwrap();
+            screen.receive(loh::runtime::ipc::ServerMessage::Event {
+                event: event.clone(),
+            });
+            match event.data {
+                EventData::Approval { id, tool, .. } => {
+                    let mut terminal =
+                        ratatui::Terminal::new(ratatui::backend::TestBackend::new(120, 35))
+                            .unwrap();
+                    terminal
+                        .draw(|frame| loh::cli::terminal::render(frame, &screen))
+                        .unwrap();
+                    let text = terminal
+                        .backend()
+                        .buffer()
+                        .content()
+                        .iter()
+                        .map(|cell| cell.symbol())
+                        .collect::<String>();
+                    assert_eq!(tool, "bound_action");
+                    assert!(text.contains("git push origin main"));
+                    assert!(!text.contains("fixture-secret"));
                     assert!(!root.path().join("result.txt").exists());
                     approvals.push(id.clone());
                     control.send(Control::Approve { id }).await.unwrap();

@@ -28,6 +28,11 @@ combining marks and joined emoji. PageUp/PageDown scroll the transcript.
 | `/detach` or Ctrl-D | Disconnect this terminal; background execution continues |
 | `/help` | Show command usage |
 
+An authorization request displays the concrete tool, redacted arguments, current origin where
+applicable, and a private JSON review-file path for the full preview. The ID binds the original
+action; approving it queues that action for a fresh scope check. A changed origin requires a new
+approval. Known credential fields and common credential forms are redacted in the preview.
+
 Closing the terminal only disconnects the client. Controls become durable when the socket server
 acknowledges them. If delivery is unconfirmed, the interface restores message text where possible;
 inspect the session before resubmitting to avoid duplicates. The display does not rewind its state

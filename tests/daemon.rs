@@ -226,6 +226,69 @@ async fn respond(mut socket: tokio::net::TcpStream, gate: Arc<Semaphore>) {
 struct Cleanup {
     paths: Paths,
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cli_resume_persists_intent_before_starting_a_stopped_daemon() {
+    let workspace = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let paths = Paths::new(state.path().join("state"));
+    paths.prepare().unwrap();
+    let _cleanup = Cleanup {
+        paths: paths.clone(),
+    };
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    std::fs::write(
+        paths.home.join("config.toml"),
+        format!(
+            "base_url = \"http://{}\"\nmax_output = 1024\n",
+            listener.local_addr().unwrap()
+        ),
+    )
+    .unwrap();
+    let server = tokio::spawn(async move {
+        loop {
+            let (socket, _) = listener.accept().await.unwrap();
+            tokio::spawn(respond(socket, Arc::new(Semaphore::new(1))));
+        }
+    });
+    let mut session = Session::new(workspace.path().into(), "Write result.txt", 1_000_000, 60);
+    session.status = Status::Stopped;
+    let store = Store::open(&paths.database()).unwrap();
+    store
+        .commit(
+            &session.id,
+            &session,
+            loh::domain::EventData::Status {
+                status: Status::Stopped,
+                reason: "fixture".into(),
+            },
+        )
+        .unwrap();
+    let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_loh"))
+        .args([
+            "--home",
+            paths.home.to_str().unwrap(),
+            "resume",
+            &session.id,
+        ])
+        .env("DEEPSEEK_API_KEY", "fixture")
+        .output()
+        .await
+        .unwrap();
+    let completed = tokio::time::timeout(Duration::from_secs(4), async {
+        while store.load::<Session>(&session.id).unwrap().status != Status::Completed {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await;
+    server.abort();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(completed.is_ok());
+}
 impl Drop for Cleanup {
     fn drop(&mut self) {
         if !self.paths.database().exists() {

@@ -282,3 +282,39 @@ Spec: docs/spec.md
 - Current checks: cargo clippy --all-targets -- -D warnings passed; cargo test --all-targets passed
   **119/119**; cargo build --release --locked passed. Release doctor reports source hash
   b3efcf59a650ea4f94efad1bc6b0f36ae5c9f92b352cd65d9bf417180ad06728. Packaging and final review are next.
+
+- Staged macOS ARM64 package: dist/engineering-checkpoint/loh-macos-arm64-0.1.0.tar.gz,
+  with source/binary hashes, docs and SHA-256 sidecar; no credentials, campaign state or project
+  artifacts are included. Mach-O architecture and ad-hoc signature integrity verified. Release-mode
+  daemon and actual PTY tests passed 8/8. This is a checkpoint, pending fresh review fixes.
+- Real official Search and Fetch calls succeeded through WebClient and the shared account: two
+  search results, 10,687 bytes of the requested Responses documentation. Artifacts: artifacts/web-live.
+  Configured-rate cost was 0.01000000 RMB. Ledger now 10.37972104 RMB accounted +25.952256 RMB uncertain,
+  no reservations. examples/web_probe.rs and the release doctor provide reproducible integration checks.
+- The one fresh whole-branch reviewer is active against 7759471. Preliminary reproduced issues include
+  stopped-session CLI resume, TERM-resistant descendants after leader exit, and uncertain external
+  effects through stdio MCP. Final classification and the required regression/fix pass are pending;
+  do not label the staged package production-ready or install it as the final delivery yet.
+
+## Final engineering review fix pass
+
+- Fresh reviewer completed the whole-branch review at 7759471: four Important findings, no Critical
+  finding, no deferred minors. Findings and all declined-to-judge rulings are recorded in
+  docs/final-review.md. Review did not establish research effectiveness.
+- Final: fixed stopped-session CLI resume — durable intent before launch, acknowledgement after
+  consumption; cli_resume_persists_intent_before_starting_a_stopped_daemon RED→GREEN.
+- Final: fixed evaluator recovery after daemon stop — finalize without starting new model work;
+  real_daemon_trial_grades_rescues_and_resumes_without_duplicate_model_calls RED→GREEN.
+- Final: fixed uncertain external/unknown stdio MCP effects — preserve concrete effect provenance
+  and pending receipts across cancellation/restart/config changes; real localhost mutation regression
+  RED→GREEN, a retry remains blocked until reconciliation.
+- Final: fixed process-group settlement after leader exit — track validated surviving members,
+  retain an inherited ownership marker for orphan recovery, escalate and confirm exit before saving
+  tool completion. Stubborn descendant regression RED→GREEN; normal completion, persisted ownership
+  and mismatched kernel process identities also pass.
+- Final: fixed opaque approval display — exact tool plus redacted parameters and full private preview
+  are reviewable before /approve; original arguments still determine the approval ID. Rendered
+  authorization regression RED→GREEN; common credential forms remain hidden in its preview.
+- Strict Clippy and the full development suite passed **126/126**. Release-mode daemon, terminal,
+  process-group and MCP tests passed **20/20**, followed by a clean default release build. No
+  re-review was dispatched: the skill calls for one author fix pass with covering regressions.

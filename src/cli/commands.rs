@@ -143,8 +143,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         }
         Command::Resume { id } => {
             let id = resolve(&paths, &id)?;
-            daemon::launch(&paths, &id).await?;
-            daemon::command(&paths, &id, Control::Resume).await?;
+            daemon::resume(&paths, &id).await?;
             println!("resume requested: {id}");
         }
         Command::Eval { command } => crate::eval::cli::run(command, &paths, &config).await?,

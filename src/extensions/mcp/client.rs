@@ -1,4 +1,5 @@
 use super::{Server, Transport, journal};
+use crate::tools::group::{Group, OWNER_ENV};
 use crate::tools::identity::Identity;
 use rmcp::{
     Peer, RoleClient,
@@ -22,7 +23,7 @@ pub struct McpClient {
     peer: Peer<RoleClient>,
     service: Mutex<RunningService<RoleClient, ()>>,
     catalog: Vec<Tool>,
-    identity: Option<Identity>,
+    group: Option<Group>,
     journal: PathBuf,
     closed: AtomicBool,
 }
@@ -65,7 +66,7 @@ impl McpClient {
         let journal = logs.join("process.json");
         // The caller holds the workspace owner lock before recovering extension processes.
         Self::recover(logs).await?;
-        let mut identity = None;
+        let mut group = None;
         let service: RunningService<RoleClient, ()> = match &server.transport {
             Transport::Stdio {
                 command,
@@ -73,6 +74,7 @@ impl McpClient {
                 environment,
             } => {
                 let mut child = tokio::process::Command::new(command);
+                let token = uuid::Uuid::new_v4().to_string();
                 child
                     .args(args)
                     .current_dir(workspace)
@@ -87,13 +89,22 @@ impl McpClient {
                         child.env(name, value);
                     }
                 }
+                child.env(OWNER_ENV, &token);
                 let stderr = std::fs::OpenOptions::new()
                     .create(true)
                     .append(true)
                     .open(logs.join("stderr.log"))?;
                 let (transport, _) = TokioChildProcess::builder(child).stderr(stderr).spawn()?;
-                identity = transport.id().map(Identity::capture).transpose()?.flatten();
-                let owned = identity
+                group = transport
+                    .id()
+                    .map(Identity::capture)
+                    .transpose()?
+                    .flatten()
+                    .map(|leader| Group {
+                        leader,
+                        token: Some(token),
+                    });
+                let owned = group
                     .as_ref()
                     .ok_or_else(|| anyhow::anyhow!("MCP server exited during startup"))?;
                 journal::save(&journal, owned)?;
@@ -105,7 +116,7 @@ impl McpClient {
                 {
                     Ok(Ok(service)) => service,
                     result => {
-                        owned.stop_group().await?;
+                        owned.stop().await?;
                         anyhow::bail!("MCP stdio discovery failed: {result:?}");
                     }
                 }
@@ -152,8 +163,8 @@ impl McpClient {
             match tokio::time::timeout(Duration::from_secs(30), service.list_all_tools()).await {
                 Ok(Ok(catalog)) => catalog,
                 result => {
-                    if let Some(owned) = &identity {
-                        owned.stop_group().await?;
+                    if let Some(owned) = &group {
+                        owned.stop().await?;
                     }
                     anyhow::bail!("MCP tool discovery failed: {result:?}");
                 }
@@ -162,7 +173,7 @@ impl McpClient {
             peer: service.peer().clone(),
             service: Mutex::new(service),
             catalog,
-            identity,
+            group,
             journal,
             closed: AtomicBool::new(false),
         })
@@ -210,8 +221,8 @@ impl McpClient {
 
     pub async fn close(&self) -> anyhow::Result<()> {
         self.closed.store(true, Ordering::SeqCst);
-        if let Some(identity) = &self.identity {
-            identity.stop_group().await?;
+        if let Some(group) = &self.group {
+            group.stop().await?;
         }
         self.service.lock().await.close().await?;
         journal::remove(&self.journal)?;
@@ -221,8 +232,8 @@ impl McpClient {
     pub async fn recover(logs: &Path) -> anyhow::Result<()> {
         let path = logs.join("process.json");
         if path.exists() {
-            let identity: Identity = serde_json::from_slice(&std::fs::read(&path)?)?;
-            identity.stop_group().await?;
+            let group: Group = serde_json::from_slice(&std::fs::read(&path)?)?;
+            group.stop().await?;
             journal::remove(&path)?;
         }
         Ok(())

@@ -84,7 +84,8 @@ impl Registry {
         let server = self.server(name)?;
         let mut slot = tokio::select! { biased; _ = cancel.cancelled() => anyhow::bail!("MCP call cancelled before ownership"), slot = server.client.lock() => slot };
         let pending = server.directory.join("pending.json");
-        let mutation = !server.config.effect(tool).readonly();
+        let effect = server.config.effect(tool);
+        let mutation = !effect.readonly();
         if mutation && pending.exists() {
             anyhow::bail!(
                 "MCP mutation has an uncertain outcome. Inspect remote state with read tools, then use mcp_resolve with explicit user authorization. Pending record: {}",
@@ -99,7 +100,7 @@ impl Registry {
         if mutation {
             journal::save(
                 &pending,
-                &json!({"server":name,"tool":tool,"arguments":arguments}),
+                &json!({"server":name,"tool":tool,"arguments":arguments,"effect":effect}),
             )?;
         }
         let result = client.call(tool, arguments, cancel).await;
@@ -107,7 +108,7 @@ impl Registry {
         if !complete && matches!(server.config.transport, Transport::Stdio { .. }) {
             // No replacement writer may run while a cancelled/failed server can still write.
             client.close().await?;
-            if mutation {
+            if mutation && !matches!(effect, Effect::External | Effect::Unknown) {
                 journal::remove(&pending)?;
             }
         } else if mutation && complete {
@@ -156,8 +157,17 @@ impl Registry {
         for server in self.servers.values() {
             McpClient::recover(&server.directory).await?;
             if matches!(server.config.transport, Transport::Stdio { .. }) {
-                // Local writers are now stopped; the runner separately reconciles actual files.
-                journal::remove(&server.directory.join("pending.json"))?;
+                let path = server.directory.join("pending.json");
+                if path.exists() {
+                    let record: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+                    let effect: Effect =
+                        serde_json::from_value(record["effect"].clone()).unwrap_or(Effect::Unknown);
+                    // Transport locality proves nothing about remote side effects.
+                    // Missing provenance is conservatively unknown, even if config changed.
+                    if !matches!(effect, Effect::External | Effect::Unknown) {
+                        journal::remove(&path)?;
+                    }
+                }
             }
         }
         Ok(())

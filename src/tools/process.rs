@@ -1,4 +1,4 @@
-use portable_pty::{CommandBuilder, ExitStatus, PtySize, native_pty_system};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -13,8 +13,6 @@ use tokio_util::sync::CancellationToken;
 /// PTY dimensions reported to the child: an ordinary small terminal window.
 const PTY_ROWS: u16 = 24;
 const PTY_COLS: u16 = 100;
-/// Grace period between SIGTERM and SIGKILL when a run must end early.
-const SIGTERM_GRACE: Duration = Duration::from_secs(2);
 /// PTY read chunk; also the granularity of streamed output events.
 const READ_BUFFER: usize = 4096;
 /// Log files stop growing past this point; streaming events and the tail continue.
@@ -50,12 +48,22 @@ pub struct ProcessOutput {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProcessRecord {
     pub identity: super::identity::Identity,
+    #[serde(default)]
+    pub group_token: Option<String>,
     pub command: String,
     pub cwd: PathBuf,
     pub output: Option<ProcessOutput>,
 }
 
 impl ProcessRecord {
+    pub async fn stop(&self) -> anyhow::Result<()> {
+        super::group::Group {
+            leader: self.identity.clone(),
+            token: self.group_token.clone(),
+        }
+        .stop()
+        .await
+    }
     fn save(&self, path: &std::path::Path) -> anyhow::Result<()> {
         let parent = path
             .parent()
@@ -98,12 +106,13 @@ pub async fn run(
     let gate = gate_dir.path().join("release");
     // Before the release file exists, no user command can execute. A crash before
     // journaling leaves only a short-lived harmless gate waiter.
-    let command = build_command(&spec, &gate);
+    let token = uuid::Uuid::new_v4().to_string();
+    let command = build_command(&spec, &gate, &token);
     let mut child = pair.slave.spawn_command(command)?;
     let pid = child
         .process_id()
         .ok_or_else(|| anyhow::anyhow!("child has no process ID"))?;
-    let mut guard = ProcessGroup { pid, armed: true };
+    let mut guard = ProcessGroup { owner: None };
     drop(pair.slave);
     let _writer = pair.master.take_writer()?;
     let reader = pair.master.try_clone_reader()?;
@@ -115,10 +124,15 @@ pub async fn run(
     let mut record = ProcessRecord {
         identity: super::identity::Identity::capture(pid)?
             .ok_or_else(|| anyhow::anyhow!("process exited before journal commit"))?,
+        group_token: Some(token),
         command: spec.command,
         cwd: spec.cwd,
         output: None,
     };
+    guard.owner = Some(super::group::Group {
+        leader: record.identity.clone(),
+        token: record.group_token.clone(),
+    });
     record.save(&spec.log.with_extension("process.json"))?;
     std::fs::File::create(&gate)?.sync_all()?;
     let _ = events.send(ProcessEvent::Started { pid });
@@ -131,22 +145,13 @@ pub async fn run(
         _ = cancel.cancelled() => (true, false, None),
         _ = tokio::time::sleep(spec.timeout) => (false, true, None),
     };
+    record.stop().await?;
     let status = if let Some(status) = completed {
         status??
     } else {
-        reap(&mut wait, pid).await?
+        wait.await??
     };
-    // A shell must not leave undeclared background writers alive after reporting
-    // success. The leader has been reaped by now, so capture() returns Some only
-    // if the PID (== pgid) was already recycled by an unrelated process — in that
-    // case signalling the group could kill strangers, and we must stand down.
-    // None means at most our own orphans remain in the group.
-    let recycled =
-        super::identity::Identity::capture(pid)?.is_some_and(|current| current != record.identity);
-    if !recycled {
-        signal_group(pid, libc::SIGKILL);
-    }
-    guard.armed = false;
+    guard.owner = None;
     drained.store(true, Ordering::Release);
     let text = output.await??;
     let result = ProcessOutput {
@@ -163,7 +168,7 @@ pub async fn run(
 
 /// Assemble the gated command line and scrub credentials from the inherited
 /// environment: anything ending in API_KEY or ACCESS_TOKEN stays out of the child.
-fn build_command(spec: &ProcessSpec, gate: &Path) -> CommandBuilder {
+fn build_command(spec: &ProcessSpec, gate: &Path, token: &str) -> CommandBuilder {
     let mut command = if let Some(profile) = &spec.profile {
         let mut command = CommandBuilder::new("/usr/bin/sandbox-exec");
         command.args(["-p", profile, "/bin/zsh", "-f", "-c", GATE_BARRIER]);
@@ -178,6 +183,7 @@ fn build_command(spec: &ProcessSpec, gate: &Path) -> CommandBuilder {
     command.arg(&spec.command);
     command.cwd(&spec.cwd);
     command.env("TERM", "xterm-256color");
+    command.env(super::group::OWNER_ENV, token);
     for (key, _) in std::env::vars_os() {
         let name = key.to_string_lossy().to_uppercase();
         if name.ends_with("API_KEY") || name.ends_with("ACCESS_TOKEN") {
@@ -202,23 +208,6 @@ fn set_nonblocking(fd: std::os::unix::io::RawFd) -> anyhow::Result<()> {
         );
     }
     Ok(())
-}
-
-/// End a run early: SIGTERM the group, escalate to SIGKILL after the grace
-/// period, then confirm exit before releasing source ownership. A signal request
-/// is not proof of exit: a blocked syscall may still finish writing before reaping.
-async fn reap(
-    wait: &mut tokio::task::JoinHandle<std::io::Result<ExitStatus>>,
-    pid: u32,
-) -> anyhow::Result<ExitStatus> {
-    signal_group(pid, libc::SIGTERM);
-    match tokio::time::timeout(SIGTERM_GRACE, &mut *wait).await {
-        Ok(status) => Ok(status??),
-        Err(_) => {
-            signal_group(pid, libc::SIGKILL);
-            Ok(wait.await??)
-        }
-    }
 }
 
 fn drain(
@@ -265,21 +254,13 @@ fn drain(
     Ok(String::from_utf8_lossy(&tail).into_owned())
 }
 
-fn signal_group(pid: u32, signal: i32) {
-    // portable-pty creates a session/process group for this child; never signal the parent's group.
-    unsafe {
-        libc::kill(-(pid as i32), signal);
-    }
-}
-
 struct ProcessGroup {
-    pid: u32,
-    armed: bool,
+    owner: Option<super::group::Group>,
 }
 impl Drop for ProcessGroup {
     fn drop(&mut self) {
-        if self.armed {
-            signal_group(self.pid, libc::SIGKILL);
+        if let Some(owner) = &self.owner {
+            let _ = owner.kill();
         }
     }
 }

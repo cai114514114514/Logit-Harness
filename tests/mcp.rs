@@ -19,6 +19,93 @@ use tokio_util::sync::CancellationToken;
 
 #[derive(Clone)]
 struct Echo;
+
+#[tokio::test]
+async fn stdio_external_effect_stays_uncertain_after_cancellation_and_restart() {
+    use loh::extensions::mcp::Registry;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let root = tempfile::tempdir().unwrap();
+    let logs = tempfile::tempdir().unwrap();
+    let count = Arc::new(AtomicUsize::new(0));
+    let counted = count.clone();
+    let app = axum::Router::new().route(
+        "/",
+        axum::routing::post(move || {
+            let count = counted.clone();
+            async move {
+                count.fetch_add(1, Ordering::SeqCst);
+                "committed"
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}/", listener.local_addr().unwrap());
+    let serving = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let mut server = config(Transport::Stdio {
+        command: "python3".into(),
+        args: vec![
+            "-u".into(),
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/mcp_server.py")
+                .to_string_lossy()
+                .into_owned(),
+        ],
+        environment: vec![],
+    });
+    server.effects.insert("echo".into(), Effect::External);
+    let config = BTreeMap::from([("remote".into(), server)]);
+    let registry = Arc::new(Registry::new(
+        config.clone(),
+        root.path().into(),
+        logs.path().into(),
+    ));
+    let cancel = CancellationToken::new();
+    let pending = {
+        let registry = registry.clone();
+        let cancel = cancel.clone();
+        tokio::spawn(async move {
+            registry
+                .call(
+                    "remote",
+                    "echo",
+                    json!({"text":format!("remote:{url}")}),
+                    cancel,
+                )
+                .await
+        })
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        while !root.path().join("started").exists() {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    cancel.cancel();
+    assert!(pending.await.unwrap().is_err());
+    let saved = registry.pending("remote").await.unwrap();
+    registry.close().await.unwrap();
+    let recovered = Registry::new(config, root.path().into(), logs.path().into());
+    recovered.recover().await.unwrap();
+    let restored = recovered.pending("remote").await.unwrap();
+    let retry = recovered
+        .call(
+            "remote",
+            "echo",
+            json!({"text":"retry"}),
+            CancellationToken::new(),
+        )
+        .await;
+    recovered.close().await.unwrap();
+    serving.abort();
+    assert_eq!(count.load(Ordering::SeqCst), 1);
+    assert!(
+        !saved.is_null(),
+        "stopping local transport cannot erase a remote effect"
+    );
+    assert_eq!(saved, restored);
+    assert!(retry.is_err());
+}
 impl ServerHandler for Echo {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
@@ -80,6 +167,12 @@ impl ServerHandler for SlowMutation {
 
 #[tokio::test]
 async fn uncertain_http_mutation_remains_blocked_after_registry_restart() {
+    for effect in [Effect::External, Effect::Write] {
+        check_http_uncertainty(effect).await;
+    }
+}
+
+async fn check_http_uncertainty(effect: Effect) {
     use loh::extensions::mcp::Registry;
     use std::sync::atomic::{AtomicUsize, Ordering};
     let count = Arc::new(AtomicUsize::new(0));
@@ -102,7 +195,7 @@ async fn uncertain_http_mutation_remains_blocked_after_registry_restart() {
         url,
         headers: BTreeMap::new(),
     });
-    server.effects.insert("echo".into(), Effect::External);
+    server.effects.insert("echo".into(), effect);
     server.effects.insert("status".into(), Effect::Read);
     let settings = BTreeMap::from([("remote".into(), server)]);
     let registry = Arc::new(Registry::new(
@@ -136,7 +229,11 @@ async fn uncertain_http_mutation_remains_blocked_after_registry_restart() {
             .is_err()
     );
     registry.close().await.unwrap();
-    let resumed = Registry::new(settings, root.path().to_owned(), logs.path().to_owned());
+    let resumed = Registry::new(
+        settings.clone(),
+        root.path().to_owned(),
+        logs.path().to_owned(),
+    );
     resumed.recover().await.unwrap();
     let pending = resumed.pending("remote").await.unwrap();
     assert_eq!(pending["record"]["arguments"]["text"], "charge once");
@@ -168,6 +265,19 @@ async fn uncertain_http_mutation_remains_blocked_after_registry_restart() {
     );
     assert_eq!(count.load(Ordering::SeqCst), 1);
     resumed.close().await.unwrap();
+    let mut changed = settings;
+    changed.get_mut("remote").unwrap().transport = Transport::Stdio {
+        command: "must-not-start".into(),
+        args: vec![],
+        environment: vec![],
+    };
+    let changed = Registry::new(changed, root.path().into(), logs.path().into());
+    changed.recover().await.unwrap();
+    assert_eq!(
+        changed.pending("remote").await.unwrap(),
+        pending,
+        "configuration changes cannot rewrite the pending effect's provenance"
+    );
     serving.abort();
 }
 fn config(transport: Transport) -> Server {

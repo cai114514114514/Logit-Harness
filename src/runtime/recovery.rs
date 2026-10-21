@@ -30,7 +30,7 @@ pub async fn reconcile(session: &mut Session, store: &Store, logs: &Path) -> any
             }
             let record: ProcessRecord = serde_json::from_slice(&std::fs::read(&path)?)?;
             if record.output.is_none() {
-                record.identity.stop_group().await?;
+                record.stop().await?;
             }
         }
     }

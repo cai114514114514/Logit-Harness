@@ -48,7 +48,8 @@ Effects are declarations by the person configuring the server, not guarantees in
 annotations. Unlisted or unsupported effects require approval. Readonly workers cannot invoke
 mutating MCP tools. Local writes share the central source lock and version/hash checks. Cancelling
 a local call stops its owned process group and waits for exit; remote writes cannot provide that
-guarantee. An interrupted remote mutation leaves a durable pending record and blocks further writes
+guarantee, including remote operations performed by a stdio server. External or unknown effects
+remain uncertain independently of transport. An interrupted remote mutation leaves a durable pending record and blocks further writes
 to that server. Read tools remain available to inspect reality. `mcp_pending` reports the record;
 `mcp_resolve` requires explicit approval of the exact record hash and reconciliation evidence.
 

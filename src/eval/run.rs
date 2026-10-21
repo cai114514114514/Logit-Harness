@@ -278,7 +278,13 @@ impl Engine {
             trial.started = Some(chrono::Utc::now().to_rfc3339());
             trial.save()?;
         }
-        daemon::launch_with(&self.paths, &trial.session, &self.study.binary).await?;
+        let saved: Session = store.load(&trial.session)?;
+        let settled_stop = saved.status == Status::Stopped
+            && saved.actions.values().all(|action| !action.running)
+            && saved.actors.values().all(|actor| actor.busy == 0);
+        if !settled_stop {
+            daemon::launch_with(&self.paths, &trial.session, &self.study.binary).await?;
+        }
         let correction = Correction::new(trial.spec()?, trial.session.clone(), store.clone());
         let mut silence = tokio::time::Instant::now();
         let mut last_sequence = 0;

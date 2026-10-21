@@ -339,6 +339,15 @@ async fn real_daemon_trial_grades_rescues_and_resumes_without_duplicate_model_ca
         .await
         .unwrap()
         .unwrap();
+    // A driver may die after the daemon stopped but before marking the trial finished.
+    let mut stopped = result.clone();
+    stopped.finished = None;
+    let recovered = engine.execute(stopped).await;
+    assert!(
+        recovered.is_ok(),
+        "settled trial must finalize without launching a stopped daemon: {recovered:?}"
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), count);
     rusqlite::Connection::open(paths.database())
         .unwrap()
         .execute("DELETE FROM sessions WHERE id=?1", [&result.session])

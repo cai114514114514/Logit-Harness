@@ -231,12 +231,26 @@ impl Runner {
                 {
                     record.running = false;
                     record.approval = Some(id.clone());
+                    let tool = record.pending.call.name.clone();
+                    let preview_reason = crate::tools::approval::redact(&json!(reason))
+                        .as_str()
+                        .unwrap_or("authorization required")
+                        .to_owned();
+                    let (arguments, details) = crate::tools::approval::save(
+                        &self.tools.logs,
+                        id,
+                        &tool,
+                        &record.pending.call.arguments,
+                        &preview_reason,
+                    )?;
                     self.session.actions.insert(action, record);
                     self.session.actors.get_mut(&job.actor).unwrap().phase = Phase::Blocked;
                     self.emit(EventData::Approval {
                         id: id.clone(),
-                        tool: "external action".into(),
-                        reason: reason.clone(),
+                        tool,
+                        reason: preview_reason,
+                        arguments,
+                        details: details.display().to_string(),
                     })?;
                     self.status(Status::Waiting, "waiting for scoped authorization")?;
                     return Ok(());

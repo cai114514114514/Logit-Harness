@@ -191,6 +191,31 @@ pub async fn launch(paths: &Paths, id: &str) -> anyhow::Result<()> {
     launch_with(paths, id, &std::env::current_exe()?).await
 }
 
+pub async fn resume(paths: &Paths, id: &str) -> anyhow::Result<()> {
+    let store = Store::open(&paths.database())?;
+    // Resume is idempotent. Save it before startup: a Stopped runner otherwise
+    // exits before a client can reach the socket and deliver the instruction.
+    let sequence = store.enqueue(id, &serde_json::to_value(Control::Resume)?)?;
+    for _ in 0..3 {
+        launch(paths, id).await?;
+        for _ in 0..200 {
+            if store.load::<Session>(id)?.cursor >= sequence {
+                return Ok(());
+            }
+            if tokio::net::UnixStream::connect(paths.socket(id)?)
+                .await
+                .is_err()
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+        // An old server can exit just after launch observed its socket. Retry
+        // startup of the same session, without enqueueing a second instruction.
+    }
+    anyhow::bail!("resume intent saved but not acknowledged; inspect the session before retrying")
+}
+
 pub async fn launch_with(paths: &Paths, id: &str, executable: &Path) -> anyhow::Result<()> {
     let socket = paths.socket(id)?;
     if tokio::net::UnixStream::connect(&socket).await.is_ok() {

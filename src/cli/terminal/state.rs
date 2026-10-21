@@ -96,8 +96,19 @@ impl Screen {
                         self.note(format!("{} › {reason}", label(&status)))
                     }
                     EventData::Diagnostic { message } => self.note(format!("系统 › {message}")),
-                    EventData::Approval { id, reason, .. } => {
-                        self.note(format!("需要授权 › {reason}\n确认后输入 /approve {id}"))
+                    EventData::Approval {
+                        id,
+                        tool,
+                        reason,
+                        arguments,
+                        details,
+                    } => {
+                        let preview = serde_json::to_string_pretty(&arguments).unwrap_or_default();
+                        let shortened = preview.chars().take(10_000).collect::<String>();
+                        self.note(format!("需要授权 › {tool}\n{reason}\n完整审阅文件：{details}\n/approve {id}\n请求参数：\n{shortened}"));
+                        if shortened.len() < preview.len() {
+                            self.note("参数预览已截断，请先查看上面的完整审阅文件。");
+                        }
                     }
                     EventData::Revised { revision, changed } => {
                         self.note(format!("需求修订 {revision} › {}", changed.join(", ")))

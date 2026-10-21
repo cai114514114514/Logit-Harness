@@ -95,49 +95,13 @@ impl Identity {
         }))
     }
 
-    /// Refuse uncertain ownership. A replacement writer may start only after this succeeds.
+    /// An in-memory group observation also tracks descendants that survive TERM.
     pub async fn stop_group(&self) -> anyhow::Result<()> {
-        anyhow::ensure!(
-            self.group == self.pid,
-            "saved process was not its own group leader"
-        );
-        match Self::capture(self.pid)? {
-            Some(current) if current != *self => {
-                anyhow::bail!("process identity changed; refusing to signal reused PID")
-            }
-            Some(_) => {
-                unsafe {
-                    libc::kill(-(self.group as i32), libc::SIGTERM);
-                }
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                if Self::capture(self.pid)?.as_ref() == Some(self) {
-                    unsafe {
-                        libc::kill(-(self.group as i32), libc::SIGKILL);
-                    }
-                }
-            }
-            None => (),
+        super::group::Group {
+            leader: self.clone(),
+            token: None,
         }
-        for _ in 0..100 {
-            if !group_alive(self.group)? {
-                return Ok(());
-            }
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-        anyhow::bail!(
-            "process group {} still has live members; reconciliation required",
-            self.group
-        )
+        .stop()
+        .await
     }
-}
-
-fn group_alive(group: u32) -> anyhow::Result<bool> {
-    let output = std::process::Command::new("/bin/ps")
-        .args(["-axo", "pid=,pgid=,stat="])
-        .output()?;
-    anyhow::ensure!(output.status.success(), "cannot inspect process groups");
-    Ok(String::from_utf8(output.stdout)?.lines().any(|line| {
-        let fields: Vec<_> = line.split_whitespace().collect();
-        fields.len() >= 3 && fields[1].parse::<u32>() == Ok(group) && !fields[2].starts_with('Z')
-    }))
 }
