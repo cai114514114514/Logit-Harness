@@ -20,4 +20,10 @@ Spec: docs/spec.md
   omitted criteria and budget reservation behavior are exercised.
 - Ruling: use `Goal::missing_evidence` rather than a boolean `can_finish`; the runtime needs the
   missing requirement IDs to continue useful work. Cost if wrong: interface rename only.
-- Next: actual provider transport and context management. No real model call has been made.
+- Task 2: provider/context core complete — local HTTP transport and fragmented SSE exercised;
+  watched four transport/context tests fail, then malformed-call identity regression fail.
+  `cargo test`: 16/16 passed. Real DeepSeek calls remain unperformed.
+- Ruling: rate-limit retries happen in transport; potentially billable 5xx retries require a new
+  runtime budget reservation rather than hiding several uncertain calls behind one allowance.
+  Cost if wrong: fewer automatic retries, not unaccounted spend.
+- Next: workspace/process tools. Runtime will integrate metering and compaction.
