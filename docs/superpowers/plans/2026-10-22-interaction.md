@@ -59,6 +59,8 @@
 - [ ] Add failing projection and PTY regressions for raw tool output, late/interleaved events, no duplicate settlements and history older than 300 entries.
 - [ ] Append settled blocks once with source and start time; redraw only active area. Provide native scrollback, stable resize/reconnect and a recent-context replay of 20 blocks capped at 200 lines.
 - [ ] Implement temporary paginated/searchable history with per-entry expansion/copy, wire Ctrl+O and /history, and integrate all command families in welcome/live/archive states.
+- [ ] Implement the user's added visible-activity requirement: authoritative current model/tool/worker/verifier state, measured duration/output age, distinct workspace/user/approval waits and actionable owner navigation. Settle the indicator on actual completion, including tool-only model responses; do not retain the last request label.
+- [ ] Keep Enter startup/connection failures visible with recoverable draft/session state, without silently retrying possibly delivered requests.
 - [ ] Test Chinese input, paste, resize, /setup masking, navigation to a new chat without stopping old work, local commands during active tasks and close/detach behavior.
 - [ ] Run terminal/projection/CLI tests and actual PTY capture; inspect the rendered grids; commit.
 
