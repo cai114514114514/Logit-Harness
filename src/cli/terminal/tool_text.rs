@@ -1,13 +1,35 @@
 //! Tool output is data, never Markdown. Preserve command bytes and typed results.
 use serde_json::Value;
 
-pub(super) fn truncated(result: &Value) -> bool {
-    let data = result
+fn data(result: &Value) -> &Value {
+    result
         .get("result")
         .and_then(|value| value.get("data"))
         .or_else(|| result.get("data"))
-        .unwrap_or(result);
+        .unwrap_or(result)
+}
+
+pub(super) fn truncated(result: &Value) -> bool {
+    let data = data(result);
     data["truncated"] == true || data["process"]["truncated"] == true
+}
+
+/// Source limits are metadata, not ordinary output rows. Compact presentation
+/// must retain them even when all but one result row is folded by the UI.
+pub(super) fn limitation(result: &Value) -> Option<&'static str> {
+    if truncated(result) {
+        return Some("工具结果已截断");
+    }
+    let data = data(result);
+    if data["limit_reached"] == true
+        || data["truncated_files"]
+            .as_array()
+            .is_some_and(|files| !files.is_empty())
+    {
+        Some("搜索结果受限")
+    } else {
+        None
+    }
 }
 pub(super) fn title(tool: &str, arguments: &Value) -> String {
     let arguments = crate::tools::approval::redact(arguments);
@@ -46,11 +68,7 @@ pub(super) fn result(result: &Value) -> String {
     if let Some(error) = result["error"].as_str() {
         return error.into();
     }
-    let data = result
-        .get("result")
-        .and_then(|v| v.get("data"))
-        .or_else(|| result.get("data"))
-        .unwrap_or(result);
+    let data = data(result);
     if let Some(content) = data["content"]
         .as_str()
         .filter(|_| data["path"].is_string())

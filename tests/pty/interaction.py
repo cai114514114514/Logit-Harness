@@ -1,8 +1,7 @@
 """Isolated actual macOS PTY checks with local HTTP responses and durable replay."""
-import argparse, copy, hashlib, json, os, socket, sqlite3, subprocess, sys, tempfile, threading, time, uuid
+import argparse, copy, hashlib, json, os, socket, sqlite3, subprocess, tempfile, threading, time, uuid
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-sys.path.insert(0, '/tmp/loh-terminal-inspection')
 import pexpect, pyte
 ROOT = Path(__file__).resolve().parents[2]
 from grid import shot

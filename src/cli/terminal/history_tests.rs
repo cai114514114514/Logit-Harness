@@ -112,3 +112,79 @@ fn quiet_and_nonstream_results_remain_searchable_with_metadata() {
     );
     assert!(selected_text(&transcript, "quiet-").is_err());
 }
+
+#[test]
+fn compact_results_keep_source_limits_separate_from_display_folding() {
+    let cases = [
+        (
+            json!({"result":{"data":{"path":"large.txt","content":"first\nsecond","truncated":true}}}),
+            "工具结果已截断",
+        ),
+        (
+            json!({"result":{"data":{"process":{"output":"first\nsecond","truncated":true}}}}),
+            "工具结果已截断",
+        ),
+        (
+            json!({"data":{"output":"","truncated":true}}),
+            "工具结果已截断",
+        ),
+        (
+            json!({"data":{"matches":[{"path":"a","line":1,"text":"hit"}],"limit_reached":true,"truncated_files":["a"]}}),
+            "搜索结果受限",
+        ),
+    ];
+    for (index, (result, notice)) in cases.into_iter().enumerate() {
+        let mut transcript = Transcript::default();
+        transcript.receive(&SessionEvent {
+            session: "limits".into(),
+            sequence: 1,
+            timestamp: String::new(),
+            data: EventData::ActionFinished {
+                id: index.to_string(),
+                success: true,
+                result: result.clone(),
+            },
+        });
+        let entry = &transcript.entries()[0];
+        let rows = entry.lines(80, false);
+        let compact = rows
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            compact.contains(notice),
+            "source limit hidden by compact summary: {compact}"
+        );
+        assert!(
+            compact.contains("折叠"),
+            "fixture must exercise display folding"
+        );
+        assert!(
+            rows.len() < 10,
+            "limit notice must keep the summary compact"
+        );
+        assert_eq!(entry.result.as_ref(), Some(&result));
+    }
+    let mut transcript = Transcript::default();
+    transcript.receive(&SessionEvent {
+        session: "complete".into(),
+        sequence: 1,
+        timestamp: String::new(),
+        data: EventData::ActionFinished {
+            id: "complete".into(),
+            success: true,
+            result: json!({"data":{"output":"first\nsecond\nthird"}}),
+        },
+    });
+    let compact = transcript
+        .lines(80, false)
+        .iter()
+        .map(ToString::to_string)
+        .collect::<String>();
+    assert!(compact.contains("折叠"));
+    assert!(
+        !compact.contains("已截断"),
+        "UI folding must not imply lost source output"
+    );
+}

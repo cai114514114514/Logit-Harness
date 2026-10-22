@@ -8,14 +8,12 @@ from pathlib import Path
 import socket
 import sqlite3
 import subprocess
-import sys
 import tempfile
 import threading
 import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-sys.path.insert(0, '/tmp/loh-terminal-inspection')
 import pexpect
 import pyte
 from grid import shot

@@ -499,6 +499,15 @@ impl Entry {
                 body.len() - limit
             )));
         }
+        if !expanded
+            && self.kind == Kind::Tool
+            && let Some(notice) = self.result.as_ref().and_then(super::tool_text::limitation)
+        {
+            lines.push(Line::styled(
+                format!("  {notice} · /history"),
+                Style::default().fg(text::MUTED),
+            ));
+        }
         lines.push(Line::default());
         lines
             .into_iter()
