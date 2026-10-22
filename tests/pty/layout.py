@@ -118,6 +118,13 @@ class Client:
     def all_text(self):
         return '\n'.join(self.history() + self.rows())
 
+    def settled_rows(self, last):
+        """Include blanks and role headings, not just unique reply markers."""
+        rows = [row.rstrip() for row in self.history() + self.rows()]
+        start = next(i for i, row in enumerate(rows) if 'REPLY-001' in row) - 1
+        end = next(i for i, row in enumerate(rows) if f'REPLY-{last:03d}' in row) + 1
+        return rows[start:end]
+
     def wait(self, predicate, seconds=12):
         end = time.monotonic() + seconds
         while time.monotonic() < end:
@@ -186,6 +193,49 @@ with tempfile.TemporaryDirectory(prefix='loh-layout-') as tmp:
         gaps = [b - a for a, b in zip(reply_rows, reply_rows[1:])]
         if not args.baseline:
             assert max(gaps) <= 10, gaps
+        # Menu growth may move existing rows into native scrollback, but closing
+        # it must never insert blank rows into that completed row sequence.
+        settled = client.settled_rows(7)
+        spacing = []
+
+        def record_spacing(name):
+            rows = client.settled_rows(7)
+            run = longest = 0
+            for row in rows:
+                run = run + 1 if not row.strip() else 0
+                longest = max(longest, run)
+            spacing.append(dict(stage=name, history_rows=len(client.history()),
+                                settled_rows=len(rows), max_blank_run=longest,
+                                unchanged=rows == settled))
+            (out / 'spacing.json').write_text(json.dumps(spacing, indent=2) + '\n')
+            (out / (name + '-all.txt')).write_text(client.all_text() + '\n')
+            client.save(name)
+
+        record_spacing('menu-before')
+        for cycle in range(1, 4):
+            client.send('/')
+            client.send('\x1b\x15')
+            record_spacing(f'menu-after-{cycle}')
+        if not args.baseline:
+            assert client.settled_rows(7) == settled, 'menu cycles changed settled history; see spacing.json'
+            assert len({row['history_rows'] for row in spacing[1:]}) == 1, spacing
+        for cycle in range(1, 4):
+            client.send('\x1b[200~/\n中文草稿一\n中文草稿二\n中文草稿三\x1b[201~')
+            client.save(f'nested-open-{cycle}')
+            client.send('\x1b\x15')
+            record_spacing(f'nested-after-{cycle}')
+        if not args.baseline:
+            assert client.settled_rows(7) == settled, 'nested editor/menu cycles changed settled history'
+        for index in range(8, 10):
+            client.send(f'hello {index}\r')
+            client.wait(lambda: f'REPLY-{index:03d}' in client.all_text())
+            client.drain(.15)
+        record_spacing('after-new-replies')
+        complete = client.settled_rows(9)
+        if not args.baseline:
+            assert complete[:len(settled)] == settled
+            assert all(complete[index - 1] == '● Logit' for index, row in enumerate(complete) if 'REPLY-' in row)
+            assert not any(not a.strip() and not b.strip() for a, b in zip(complete, complete[1:])), complete
         client.send('/')
         client.save('04-menu')
         client.send('\x1b\x15')

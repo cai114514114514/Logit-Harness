@@ -14,6 +14,9 @@ pub(super) struct Surface {
     size: (u16, u16),
     modal: bool,
     docked: bool,
+    /// First reusable row after committed output. This can sit above the editor
+    /// after a menu closes; that space belongs to the next append, not history.
+    committed: u16,
 }
 
 impl Surface {
@@ -26,9 +29,8 @@ impl Surface {
         if crossterm::terminal::size()? != self.size {
             self.layout(self.area.height, conversation)?;
         }
-        // Settlement replaces its active preview. Append using the *new* region
-        // height before layout, so a completed tool does not scroll down then up
-        // and accumulate blank rows in native history on every completion.
+        // Settlement replaces its active preview. Append using the new height,
+        // consuming any free rows left by a menu/editor that has since shrunk.
         if self.docked && !lines.is_empty() {
             self.append_height(lines, height)?;
         } else {
@@ -59,26 +61,31 @@ impl Surface {
             .y
             .saturating_sub(self.size.1.saturating_sub(size.1))
             .min(size.1.saturating_sub(1));
+        self.committed = self
+            .committed
+            .saturating_sub(self.size.1.saturating_sub(size.1))
+            .min(size.1.saturating_sub(1));
         if self.docked {
             let top = size.1.saturating_sub(height);
-            // Growing the active region pushes settled rows into real scrollback
-            // using full-screen LF. Shrinking shifts existing visible rows down;
-            // only obsolete active rows can fall off the bottom. Never replay or
-            // clear a settled record, and never establish a DECSTBM scroll region.
-            if top < row {
+            // Erase only the old active region. Shrink leaves reusable rows;
+            // growing consumes them before it moves any settled output. Never
+            // reverse-index history: RI would insert blanks at its boundary.
+            crossterm::execute!(
+                std::io::stdout(),
+                crossterm::cursor::MoveTo(0, row),
+                crossterm::terminal::Clear(crossterm::terminal::ClearType::FromCursorDown)
+            )?;
+            if top < self.committed {
                 crossterm::execute!(
                     std::io::stdout(),
                     crossterm::cursor::MoveTo(0, size.1.saturating_sub(1)),
-                    crossterm::style::Print("\r\n".repeat((row - top) as usize))
+                    crossterm::style::Print("\r\n".repeat((self.committed - top) as usize))
                 )?;
-            } else if top > row && !entering {
-                scroll_down(&mut std::io::stdout(), top - row)?;
+                self.committed = top;
             } else if entering {
-                crossterm::execute!(
-                    std::io::stdout(),
-                    crossterm::cursor::MoveTo(0, row),
-                    crossterm::terminal::Clear(crossterm::terminal::ClearType::FromCursorDown)
-                )?;
+                // Only the initial transition from welcome positions the first
+                // conversation at the bottom. Later transitions retain output.
+                self.committed = top;
             }
             self.area = Rect::new(0, top, size.0, height);
             self.size = size;
@@ -92,6 +99,7 @@ impl Surface {
         )?;
         let overflow = row.saturating_add(height).saturating_sub(size.1);
         self.area = Rect::new(0, row.saturating_sub(overflow), size.0, height);
+        self.committed = self.committed.saturating_sub(overflow);
         self.size = size;
         self.reset(self.area)
     }
@@ -135,7 +143,7 @@ impl Surface {
         let mut output = std::io::stdout();
         crossterm::execute!(
             output,
-            MoveTo(0, self.area.y),
+            MoveTo(0, self.committed),
             Clear(ClearType::FromCursorDown)
         )?;
         for line in lines {
@@ -143,20 +151,30 @@ impl Surface {
             crossterm::execute!(output, Print("\r\n"))?;
         }
         let size = crossterm::terminal::size()?;
-        let row =
-            (self.area.y as usize + lines.len()).min(size.1.saturating_sub(1) as usize) as u16;
+        self.committed =
+            (self.committed as usize + lines.len()).min(size.1.saturating_sub(1) as usize) as u16;
         let height = height.min(size.1).max(1);
-        crossterm::execute!(
-            output,
-            Print("\r\n".repeat(height.saturating_sub(1) as usize))
-        )?;
-        let overflow = row.saturating_add(height).saturating_sub(size.1);
-        self.area = Rect::new(0, row.saturating_sub(overflow), size.0, height);
-        if self.docked && self.area.bottom() < size.1 {
-            let gap = size.1 - self.area.bottom();
-            scroll_down(&mut output, gap)?;
-            self.area.y += gap;
-        }
+        let top = if self.docked {
+            let top = size.1.saturating_sub(height);
+            if self.committed > top {
+                crossterm::execute!(
+                    output,
+                    MoveTo(0, size.1.saturating_sub(1)),
+                    Print("\r\n".repeat((self.committed - top) as usize))
+                )?;
+                self.committed = top;
+            }
+            top
+        } else {
+            crossterm::execute!(
+                output,
+                Print("\r\n".repeat(height.saturating_sub(1) as usize))
+            )?;
+            let overflow = self.committed.saturating_add(height).saturating_sub(size.1);
+            self.committed = self.committed.saturating_sub(overflow);
+            self.committed
+        };
+        self.area = Rect::new(0, top, size.0, height);
         self.size = size;
         self.reset(self.area)?;
         Ok(())
@@ -245,19 +263,10 @@ pub(super) fn open(welcome: bool) -> std::io::Result<Surface> {
         size,
         modal: false,
         docked: !welcome,
+        committed: area.y,
     })
 }
 
 fn height(rows: u16, welcome: bool) -> u16 {
     if welcome { 1 } else { rows.max(1) }
-}
-
-fn scroll_down(output: &mut impl std::io::Write, rows: u16) -> std::io::Result<()> {
-    // VT reverse-index at the physical top moves existing visible rows without
-    // replaying their bytes. The discarded bottom rows belong to the old editor.
-    crossterm::execute!(
-        output,
-        crossterm::cursor::MoveTo(0, 0),
-        crossterm::style::Print("\x1bM".repeat(rows as usize))
-    )
 }

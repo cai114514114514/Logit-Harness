@@ -162,5 +162,7 @@ The subsequent conversation-layout correction is exercised by `tests/pty/layout.
 mode prompts, CJK editing, menu/detail return, resizing, setup masking and cancellation.
 Current colored grid captures and machine-readable receipts are in `artifacts/terminal-layout`
 and `artifacts/terminal-layout-integrated`. Native terminal reflow remains owned by the terminal;
-opening/closing a tall menu can insert a bounded blank band at the viewport/scrollback boundary,
-but completing ordinary replies does not insert blank screens between records.
+opening a taller menu can move settled rows into scrollback. Closing it clears only the old
+active area and leaves reusable space above the bottom input; later output fills that space.
+Repeated menu/editor toggles do not add blank rows to completed records or separate their
+headings from their text.
