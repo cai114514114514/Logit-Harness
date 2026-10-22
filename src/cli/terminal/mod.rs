@@ -11,6 +11,7 @@ mod launch;
 mod render;
 mod setup;
 mod state;
+mod submission;
 mod surface;
 mod text;
 mod tool_text;

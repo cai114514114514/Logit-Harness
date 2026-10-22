@@ -16,17 +16,23 @@ use tokio::task::JoinSet;
 
 pub(super) enum Reply {
     Command {
+        context: Context,
         outcome: Outcome,
         draft: String,
-        revision: u64,
     },
     Catalog(Vec<Completion>),
     Open {
+        context: Context,
         session: Box<Session>,
         transcript: Transcript,
         recent: Vec<super::Recent>,
     },
+    OpenFailed {
+        context: Context,
+        error: String,
+    },
     Created {
+        context: Context,
         id: String,
         error: Option<String>,
         draft: String,
@@ -62,33 +68,48 @@ impl Context {
         }
     }
     pub fn command(self, jobs: &mut Jobs, command: Command, draft: String) {
-        let generation = self.generation;
-        jobs.spawn(async move {
-            (
-                generation,
-                tokio::task::spawn_blocking(move || {
-                    crate::commands::Service::new(
-                        &self.paths,
-                        &self.workspace,
-                        self.session.as_deref(),
-                    )
-                    .execute(command)
-                    .map(|outcome| Reply::Command {
-                        outcome,
-                        draft: draft.clone(),
-                        revision: self.revision,
-                    })
-                    .or_else(|error| {
-                        Ok(Reply::Failed {
-                            text: error.to_string(),
-                            draft,
-                            revision: self.revision,
-                        })
-                    })
-                })
-                .await
-                .unwrap_or_else(|e| Err(e.into())),
+        self.execute(jobs, draft, move |context| {
+            crate::commands::Service::new(
+                &context.paths,
+                &context.workspace,
+                context.session.as_deref(),
             )
+            .execute(command)
+        });
+    }
+    /// Keep the same captured origin through service work and result dispatch.
+    /// Tests inject delayed local work here without a provider or daemon.
+    pub fn execute(
+        self,
+        jobs: &mut Jobs,
+        draft: String,
+        operation: impl FnOnce(&Context) -> anyhow::Result<Outcome> + Send + 'static,
+    ) {
+        let generation = self.generation;
+        let revision = self.revision;
+        jobs.spawn(async move {
+            let retained = draft.clone();
+            let result = tokio::task::spawn_blocking(move || match operation(&self) {
+                Ok(outcome) => Ok(Reply::Command {
+                    context: self,
+                    outcome,
+                    draft,
+                }),
+                Err(error) => Ok(Reply::Failed {
+                    text: error.to_string(),
+                    draft,
+                    revision,
+                }),
+            })
+            .await
+            .unwrap_or_else(|error| {
+                Ok(Reply::Failed {
+                    text: format!("本地命令中断：{error}"),
+                    draft: retained,
+                    revision,
+                })
+            });
+            (generation, result)
         });
     }
     pub fn catalog(self, jobs: &mut Jobs) {
@@ -114,26 +135,35 @@ impl Context {
     pub fn open(self, jobs: &mut Jobs, id: String) {
         let generation = self.generation;
         jobs.spawn(async move {
+            let context = self.clone();
+            let loaded = tokio::task::spawn_blocking(move || {
+                let session: Session = Store::open(&self.paths.database())?.load(&id)?;
+                let transcript = super::history::load(&self.paths, &id)?;
+                let recent = super::launch::recent(&self.paths, &session.workspace)?;
+                Ok(Reply::Open {
+                    context: self,
+                    session: Box::new(session),
+                    transcript,
+                    recent,
+                })
+            })
+            .await
+            .unwrap_or_else(|error| Err(error.into()));
             (
                 generation,
-                tokio::task::spawn_blocking(move || {
-                    let session: Session = Store::open(&self.paths.database())?.load(&id)?;
-                    let transcript = super::history::load(&self.paths, &id)?;
-                    let recent = super::launch::recent(&self.paths, &session.workspace)?;
-                    Ok(Reply::Open {
-                        session: Box::new(session),
-                        transcript,
-                        recent,
+                loaded.or_else(|error: anyhow::Error| {
+                    Ok(Reply::OpenFailed {
+                        context,
+                        error: error.to_string(),
                     })
-                })
-                .await
-                .unwrap_or_else(|e| Err(e.into())),
+                }),
             )
         });
     }
     pub fn create(self, jobs: &mut Jobs, control: Control, draft: String) {
         let generation = self.generation;
         jobs.spawn(async move {
+            let context = self.clone();
             let paths = self.paths.clone();
             let saved = tokio::task::spawn_blocking(move || -> anyhow::Result<String> {
                 let config = Config::load(&paths.home)?;
@@ -171,6 +201,7 @@ impl Context {
                         .err()
                         .map(|e| e.to_string());
                     Ok(Reply::Created {
+                        context,
                         id,
                         error,
                         draft,
@@ -182,7 +213,11 @@ impl Context {
                     draft,
                     revision: self.revision,
                 }),
-                Err(error) => Err(error.into()),
+                Err(error) => Ok(Reply::Failed {
+                    text: format!("创建会话中断：{error}"),
+                    draft,
+                    revision: self.revision,
+                }),
             };
             (generation, result)
         });

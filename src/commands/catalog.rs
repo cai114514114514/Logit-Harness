@@ -219,9 +219,9 @@ pub const DIRECTORY: &[Entry] = &[
     entry!(
         Export,
         "/export",
-        "导出会话与完整事件，拒绝覆盖",
+        "导出 Markdown（.json 为完整事件），拒绝覆盖",
         "/export <文件路径>",
-        "/export session.json",
+        "/export session.md",
         Required,
         Local
     ),

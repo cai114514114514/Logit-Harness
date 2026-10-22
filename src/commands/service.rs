@@ -318,9 +318,17 @@ impl<'a> Service<'a> {
             .collect::<Vec<_>>();
         let path = self.workspace.join(destination);
         // create_new rejects existing files and symlinks; never truncate a user's export.
-        let data = serde_json::to_vec_pretty(
-            &json!({"state":state,"through_sequence":sequence,"events":events}),
-        )?;
+        let data = if path
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
+        {
+            serde_json::to_vec_pretty(
+                &json!({"state":state,"through_sequence":sequence,"events":events}),
+            )?
+        } else {
+            super::export::markdown(&state, sequence, &events).into_bytes()
+        };
         let mut file = std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)

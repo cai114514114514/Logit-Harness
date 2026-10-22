@@ -6,8 +6,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 pub(super) fn edit(screen: &mut Screen, key: KeyEvent) -> bool {
     let control = key.modifiers.contains(KeyModifiers::CONTROL);
     let menu = screen.menu();
-    let choices = if let Some((entries, _)) = &screen.skill_choices {
-        entries.len()
+    let choices = if let Some(choice) = &screen.skill_choices {
+        choice.entries.len()
     } else if screen.picker {
         screen.recent.len()
     } else {

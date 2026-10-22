@@ -3,6 +3,7 @@
 mod capabilities;
 mod catalog;
 mod completion;
+mod export;
 mod inspect;
 mod parse;
 mod service;

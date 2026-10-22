@@ -27,7 +27,7 @@ pub struct Screen {
     pub(super) menu_hidden: bool,
     pub(super) activity: String,
     pub(super) completions: Option<Vec<crate::commands::Completion>>,
-    pub(super) skill_choices: Option<(Vec<crate::extensions::skills::Entry>, String)>,
+    pub(super) skill_choices: Option<super::submission::Choice>,
     pub(super) history: Option<super::history::Browser>,
     pub(super) setup: Option<super::setup::Form>,
     sequence: u64,
@@ -76,9 +76,18 @@ impl Screen {
             return true;
         };
         let name = command.name.clone();
-        let ready = crate::commands::parse(&name).is_ok();
+        let skill = matches!(
+            crate::commands::parse(&name),
+            Ok(crate::commands::Command::Skill { .. })
+        );
+        let insertion = if skill {
+            command.insert.as_str()
+        } else {
+            name.as_str()
+        };
+        let ready = crate::commands::parse(insertion).is_ok();
         self.input
-            .replace(if ready { &name } else { &command.insert });
+            .replace(if ready { insertion } else { &command.insert });
         self.menu_hidden = true;
         self.selection = 0;
         ready
@@ -222,5 +231,24 @@ pub(super) fn label(status: &Status) -> &'static str {
         Status::Failed => "需要恢复",
         Status::Pausing => "正在暂停",
         Status::Stopping => "正在停止",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn selected_skill_completion_preserves_qualified_insertion() {
+        let mut screen = Screen::default();
+        screen.input.insert("/rev");
+        screen.completions = Some(vec![crate::commands::Completion {
+            name: "/review".into(),
+            description: "review".into(),
+            source: "project/second".into(),
+            timing: crate::commands::Timing::Runtime,
+            insert: "/skills run project-second ".into(),
+        }]);
+        assert!(screen.complete());
+        assert_eq!(screen.input.text(), "/skills run project-second ");
     }
 }

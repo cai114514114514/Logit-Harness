@@ -112,3 +112,51 @@ fn optional_argument_commands_execute_without_erasing_literal_tails() {
     assert!(screen.complete());
     assert_eq!(screen.input.text(), "/review  '$literal' `text`\n中文  ");
 }
+
+#[test]
+fn cancellation_settlement_stays_visible_alongside_work_after_reconnect() {
+    use loh::runtime::view::{Activity, SessionView};
+    for status in [Status::Pausing, Status::Stopping] {
+        for reconnect in [false, true] {
+            let mut screen = Screen::default();
+            let mut session = Session::conversation(std::env::temp_dir(), "cancel", 10000, 60);
+            session.status = status.clone();
+            let mut view = SessionView::from(session);
+            view.activities.push(Activity {
+                id: "draining-tool".into(),
+                actor: "main".into(),
+                title: "shell sleep 30".into(),
+            });
+            if !reconnect {
+                event(
+                    &mut screen,
+                    1,
+                    EventData::ActionStarted {
+                        id: "draining-tool".into(),
+                        tool: "shell".into(),
+                        arguments: json!({"command":"sleep 30"}),
+                    },
+                );
+            }
+            screen.receive(ServerMessage::View {
+                state: Box::new(view),
+                sequence: 2,
+            });
+            let rows = screen.activity_lines().join("\n");
+            assert!(rows.contains("等待活动结算"), "{status:?}: {rows}");
+            assert!(
+                rows.contains("draining-too"),
+                "remaining work must stay visible: {rows}"
+            );
+            event(
+                &mut screen,
+                3,
+                EventData::Status {
+                    status: Status::Paused,
+                    reason: "settled".into(),
+                },
+            );
+            assert!(!screen.activity_lines().join("\n").contains("等待活动结算"));
+        }
+    }
+}

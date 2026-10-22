@@ -3,6 +3,7 @@ use super::{
     Screen,
     jobs::{Context, Jobs, Reply},
     render,
+    submission::{self, Initial},
 };
 use crate::{
     commands::{Command, Navigation, Outcome},
@@ -82,6 +83,7 @@ pub(super) async fn run(
     let mut screen = fresh(paths, &config, cwd)?;
     let mut generation = 0;
     let mut jobs = Jobs::new();
+    let mut initial = Initial::default();
     let mut connection = Connection(None);
     let (sender, mut incoming) = mpsc::channel(128);
     let mut opening = id.is_some();
@@ -154,9 +156,9 @@ pub(super) async fn run(
                 // never edit the fresh conversation or its unsubmitted draft.
                 if origin != generation { continue; }
                 match reply {
-                    Err(error) => { screen.note(format!("操作失败：{error}")); screen.activity.clear(); opening = false; }
+                    Err(error) => { screen.note(format!("操作失败：{error}")); screen.activity.clear(); }
                     Ok(Reply::Catalog(entries)) => { screen.completions = Some(entries); catalog_loading = false; }
-                    Ok(Reply::Open { session, transcript, recent }) => {
+                    Ok(Reply::Open { context, session, transcript, recent }) => {
                         let sequence = transcript.sequence(); let id = session.id.clone();
                         screen.activity.clear(); screen.transcript = transcript; screen.recent = recent;
                         screen.receive(ServerMessage::Snapshot { state: session, sequence }); screen.connected = false;
@@ -166,20 +168,26 @@ pub(super) async fn run(
                             restore_draft(&mut screen, draft, revision);
                         }
                         connection.open(paths, &id, sequence, generation, sender.clone())?;
+                        initial.finish(context.revision);
                         opening = false;
                     }
-                    Ok(Reply::Created { id, error, draft, revision }) => {
+                    Ok(Reply::OpenFailed { context, error }) => {
+                        screen.note(format!("打开会话失败：{error}"));
+                        initial.finish(context.revision); opening = false;
+                    }
+                    Ok(Reply::Created { context, id, error, draft, revision }) => {
                         if let Some(error) = error { failure_after_open = Some((error, draft, revision)); }
-                        Context::new(generation, paths, &screen).open(&mut jobs, id); opening = true;
+                        context.open(&mut jobs, id); opening = true;
                     }
                     Ok(Reply::Message(message)) => screen.receive(message),
                     Ok(Reply::Sent) => { screen.activity.clear(); if !screen.connected { reconnect = true; } }
-                    Ok(Reply::Failed { text, draft, revision }) => { screen.activity.clear(); screen.note(text); restore_draft(&mut screen, draft, revision); opening = false; }
+                    Ok(Reply::Failed { text, draft, revision }) => { screen.activity.clear(); screen.note(text); restore_draft(&mut screen, draft, revision); if initial.finish(revision) { opening = false; } }
                     Ok(Reply::History(browser)) => screen.history = Some(browser),
                     Ok(Reply::Copied) => screen.note("已复制所选记录原文。"),
-                    Ok(Reply::Command { outcome, draft, revision }) => {
-                        let mut context = Context::new(generation, paths, &screen);
-                        context.revision = revision;
+                    Ok(Reply::Command { context, outcome, draft }) => {
+                        if !matches!(&outcome, Outcome::Control(_) | Outcome::Skill(_)) {
+                            initial.finish(context.revision);
+                        }
                         match outcome {
                         Outcome::Local { title, text } => {
                             screen.note(format!("{title}\n{text}"));
@@ -191,7 +199,7 @@ pub(super) async fn run(
                         Outcome::Setup => super::setup::open(&mut screen, paths),
                         Outcome::Navigate(Navigation::Detach) => break,
                         Outcome::Navigate(Navigation::New) => {
-                            generation += 1; connection.close(); opening = false; reconnect = false; catalog_loading = false;
+                            generation += 1; connection.close(); initial = Initial::default(); failure_after_open = None; opening = false; reconnect = false; catalog_loading = false;
                             let cwd = screen.workspace.clone();
                             screen = fresh(paths, &Config::load(&paths.home)?, &cwd)?;
                             screen.note("新对话 · 原任务继续后台；/sessions 可切回。");
@@ -202,21 +210,25 @@ pub(super) async fn run(
                             if screen.recent.is_empty() { screen.note("当前工作区还没有保存的会话。"); }
                         }
                         Outcome::Control(control) => {
-                            if screen.session.is_none() {
+                            if !initial.owns(&context) { screen.note("原请求已失去会话归属；未执行，请重新提交。"); continue; }
+                            if context.session.is_none() {
                                 context.clone().create(&mut jobs, control, draft); opening = true;
                             } else { context.clone().control(&mut jobs, control, draft, screen.connected); }
                             screen.activity = "正在提交（输入尚未确认处理）".into();
                         }
                         Outcome::Skill(invocation) => {
                             let control = invocation.control();
-                            if screen.session.is_none() { context.clone().create(&mut jobs, control, draft); opening = true; }
+                            if !initial.owns(&context) { screen.note("原技能请求已失去会话归属；未执行，请重新提交。"); continue; }
+                            if context.session.is_none() { context.clone().create(&mut jobs, control, draft); opening = true; }
                             else { context.clone().control(&mut jobs, control, draft, screen.connected); }
                         }
-                        Outcome::ChooseSkill { entries, arguments } => { screen.skill_choices = Some((entries, arguments)); screen.selection = 0; }
-                        Outcome::History(history) => Context::new(generation, paths, &screen).history(&mut jobs, history.query, history.tools_only),
+                        Outcome::ChooseSkill { entries, arguments } => {
+                            submission::install_choice(&mut screen, context, entries, arguments, &draft);
+                        }
+                        Outcome::History(history) => context.history(&mut jobs, history.query, history.tools_only),
                         Outcome::Copy { selector } => {
-                            if selector.is_empty() { Context::new(generation, paths, &screen).history(&mut jobs, String::new(), false); }
-                            else { Context::new(generation, paths, &screen).copy_selector(&mut jobs, selector); }
+                            if selector.is_empty() { context.history(&mut jobs, String::new(), false); }
+                            else { context.copy_selector(&mut jobs, selector); }
                         }
                         }
                     },
@@ -242,6 +254,7 @@ pub(super) async fn run(
                     if setup_only && screen.setup.is_none() { terminal.append(&screen.transcript.drain_settled(terminal.width() as usize))?; break; }
                     continue;
                 }
+                submission::clear_stale_choice(&mut screen);
                 match event {
                     Event::Paste(text) => { screen.input.insert(&text); screen.menu_hidden = false; }
                     Event::Key(key) if key.kind != KeyEventKind::Release => {
@@ -252,16 +265,19 @@ pub(super) async fn run(
                         if screen.picker && key.code == KeyCode::Enter {
                             if let Some(recent) = screen.recent.get(screen.selection) {
                                 let id = recent.id.clone(); let workspace = screen.workspace.clone();
-                                generation += 1; connection.close(); screen = fresh(paths, &Config::load(&paths.home)?, &workspace)?;
+                                generation += 1; connection.close(); initial = Initial::default(); failure_after_open = None; screen = fresh(paths, &Config::load(&paths.home)?, &workspace)?;
                                 Context::new(generation, paths, &screen).open(&mut jobs, id); opening = true; reconnect = false; catalog_loading = false;
                             }
                             continue;
                         }
                         if screen.skill_choices.is_some() && key.code == KeyCode::Enter {
-                            let (entries, arguments) = screen.skill_choices.take().unwrap();
-                            if let Some(entry) = entries.get(screen.selection) {
-                                let command = Command::Skill { selector: entry.id.clone(), arguments: arguments.clone() };
-                                Context::new(generation, paths, &screen).command(&mut jobs, command, format!("/skills run {} {}", entry.id, arguments));
+                            let choice = screen.skill_choices.take().unwrap();
+                            if let Some(entry) = choice.entries.get(screen.selection) {
+                                let command = Command::Skill { selector: entry.id.clone(), arguments: choice.arguments.clone() };
+                                let draft = format!("/skills run {} {}", entry.id, choice.arguments);
+                                if let Some(context) = initial.prepare(&mut screen, choice.context, &command, opening) {
+                                    context.command(&mut jobs, command, draft);
+                                }
                             }
                             continue;
                         }
@@ -272,11 +288,13 @@ pub(super) async fn run(
                         } else if key.code == KeyCode::Enter && screen.complete() {
                             let draft = screen.input.text().to_owned();
                             if super::setup::reject_inline(&mut screen, &draft) || draft.trim().is_empty() { continue; }
-                            if opening { screen.note("正在打开会话；草稿保留，请稍后发送。"); continue; }
                             match crate::commands::parse(&draft) {
                                 Ok(command) => {
-                                    screen.input.take(); screen.input.remember(&draft); screen.menu_hidden = true;
-                                    Context::new(generation, paths, &screen).command(&mut jobs, command, draft);
+                                    let context = Context::new(generation, paths, &screen);
+                                    if let Some(context) = initial.prepare(&mut screen, context, &command, opening) {
+                                        screen.input.remember(&draft); screen.menu_hidden = true;
+                                        context.command(&mut jobs, command, draft);
+                                    }
                                 }
                                 Err(error) => screen.note(error.to_string()),
                             }
@@ -284,6 +302,7 @@ pub(super) async fn run(
                     }
                     _ => (),
                 }
+                submission::clear_stale_choice(&mut screen);
                 if screen.input.text().starts_with('/') && screen.completions.is_none() && !catalog_loading {
                     catalog_loading = true; Context::new(generation, paths, &screen).catalog(&mut jobs);
                 }

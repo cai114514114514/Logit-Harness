@@ -24,8 +24,8 @@ pub(super) fn height(screen: &Screen, columns: u16, rows: u16) -> u16 {
     } else {
         screen.transcript.active_lines(width).len().clamp(1, 8)
     };
-    let choices = if let Some((entries, _)) = &screen.skill_choices {
-        entries.len()
+    let choices = if let Some(choice) = &screen.skill_choices {
+        choice.entries.len()
     } else if screen.picker {
         screen.recent.len()
     } else {
@@ -57,8 +57,8 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
     let input_lines = wrap(screen.input.text(), width.saturating_sub(2));
     let input_height = (input_lines.len() as u16 + 2).clamp(3, (area.height / 3).max(3));
     let menu = screen.menu();
-    let choices = if let Some((entries, _)) = &screen.skill_choices {
-        entries.len()
+    let choices = if let Some(choice) = &screen.skill_choices {
+        choice.entries.len()
     } else if screen.picker {
         screen.recent.len()
     } else {
@@ -107,8 +107,9 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
         let visible = menu_area.height.saturating_sub(1) as usize;
         let first = selected.saturating_sub(visible.saturating_sub(1));
         let mut rows = vec![];
-        let labels = if let Some((entries, _)) = &screen.skill_choices {
-            entries
+        let labels = if let Some(choice) = &screen.skill_choices {
+            choice
+                .entries
                 .iter()
                 .map(|e| format!("{} · {} · {}", e.name, e.source, e.path.display()))
                 .collect()

@@ -3,6 +3,15 @@ use super::{Screen, transcript::Kind};
 pub(super) fn lines(screen: &Screen) -> Vec<String> {
     let mut lines = vec![];
     if let Some(session) = &screen.session {
+        if matches!(
+            session.status,
+            crate::domain::Status::Pausing | crate::domain::Status::Stopping
+        ) {
+            lines.push(format!(
+                "{} · 等待活动结算 · /tasks",
+                super::state::label(&session.status)
+            ));
+        }
         if let Some(owner) = &session.owner {
             let title = screen
                 .recent
