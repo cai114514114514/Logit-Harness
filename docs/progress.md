@@ -537,3 +537,42 @@ Spec: docs/spec.md
 - No real key was entered or copied into the user's settings by these tests, and no paid request
   was made. This validates configuration and transport handling, not the user's live authentication
   or an improvement in real-model reliability. The research-budget blocker remains unchanged.
+
+## Lightweight interaction delivery — runtime checkpoint
+
+- Implementing the approved [interaction design](superpowers/specs/2026-10-22-interaction-design.md).
+  Runtime commits `0a6ae73` and `1e1ea5a` separate ordinary conversations from engineering goals,
+  defer project discovery, preserve plan mode, archive independent goals, queue unrelated tasks,
+  and correlate actual user turns, responses and actions. Engineering completion still requires
+  independent verification.
+- The user-reported Enter failure was reproduced on the installed old binary: a completed daemon
+  retained the workspace lock and prevented new startup. Execution-scoped ownership fixes that
+  lifecycle error. Read the [incident and verification record](incidents/2026-10-22-enter.md).
+- Initial full regression: 168 passed. Review corrections: 53 covering tests passed; strict Clippy,
+  formatting, locked release build and signature checks pass. Independent scoped review has no
+  open findings. Actual installed-binary PTY Enter check passes with an isolated local HTTP fixture.
+- Interim runtime installed at `/opt/homebrew/bin/loh`; source hash
+  `caa2d3919041ade4808e73bbe093638a682bfcd25a186f0ae8150efc20a6f0cf`.
+  Unified command services and native scrollback/history integration are still in progress.
+- Real installed-runtime Flash greeting `044ab632e08542a0`: one response, zero tools and goals,
+  Conversation/Waiting. Input 1822, output 10, cached 0, configured-rate charge ¥0.003724.
+  Shared 50 RMB ledger: used 19.76786032, uncertain 28.114944, reserved 0, conservative available
+  2.11719568. No historical uncertainty or cap was changed. This is one greeting sample; broader
+  model routing and reliability remain separate from fixture engineering tests.
+
+## Command backend checkpoint — public development snapshot
+
+- Commit `b80da9f` adds the shared command directory/parser/service, source-aware Markdown workflows,
+  configuration snapshots, and MCP controls. Its complete regression has 190 passing tests; strict
+  Clippy and formatting pass. These results do not establish terminal integration or close review.
+- Independent review found two open issues: `/tools` currently selects tool-call history rather
+  than exposing the requested capability catalog; the new read-only Git inspection path can invoke
+  repository-configured helpers. Both require correction before this backend is accepted. Scalar
+  argument whitespace and several help descriptions also need small corrections.
+- User feedback adds an explicit terminal acceptance requirement: show actual current activities,
+  measured elapsed/wait time and blocking owner, instead of retaining the last model-request label.
+  The runtime waiting-status correction is covered by a regression; the activity panel and complete
+  native history remain Task 3.
+- The GitHub upload is a source-history checkpoint, not a release or a claim that the approved
+  interaction plan is complete. Local credentials, session databases, provider logs, build outputs
+  and packaged experiment artifacts are excluded from tracked uploads.
