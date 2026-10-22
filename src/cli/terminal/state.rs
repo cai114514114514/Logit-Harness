@@ -53,12 +53,22 @@ impl Screen {
                     match &event.data {
                         EventData::Status { status, .. } => session.status = status.clone(),
                         EventData::Elapsed { seconds } => session.elapsed = *seconds,
-                        EventData::Usage { input, output, .. } => {
+                        EventData::Usage {
+                            input,
+                            output,
+                            cached,
+                            ..
+                        } => {
                             session.budget.used = session
                                 .budget
                                 .used
                                 .saturating_add(*input)
-                                .saturating_add(*output)
+                                .saturating_add(*output);
+                            session.budget.reported.accumulate(&crate::domain::Usage {
+                                input: *input,
+                                output: *output,
+                                cached: *cached,
+                            });
                         }
                         _ => (),
                     }
@@ -126,16 +136,39 @@ impl Screen {
     pub fn budget(&self) -> String {
         match &self.session {
             Some(session) => format!(
-                "Token：已用 {} / 上限 {}，未确定 {}，预留 {}。运行时间：{} / {} 秒。\n/budget <总 token 上限> [总秒数上限]，调整后 /resume。实验总金额上限不会随此命令改变。",
+                "Token：已用 {} / 上限 {}，未确定 {}，预留 {}。运行时间：{} / {} 秒。\n{}\n/budget <总 token 上限> [总秒数上限]，调整后 /resume。实验总金额上限不会随此命令改变。",
                 session.budget.used,
                 session.budget.limit,
                 session.budget.uncertain,
                 session.budget.reservations.values().sum::<u64>(),
                 session.elapsed,
-                session.seconds
+                session.seconds,
+                self.cache(),
             ),
             None => "正在读取会话预算…".into(),
         }
+    }
+    pub fn cache(&self) -> String {
+        let Some(budget) = self.session.as_ref().map(|session| &session.budget) else {
+            return "KV Cache Hit：等待用量数据".into();
+        };
+        let usage = &budget.reported;
+        let Some(hit) = usage.cache_hit() else {
+            return "KV Cache Hit：暂无已报告输入用量".into();
+        };
+        let coverage = if usage.tokens() < budget.used || budget.uncertain != 0 {
+            "；不含缺失用量"
+        } else {
+            ""
+        };
+        format!(
+            "KV Cache Hit：{:.2}%（命中 {} / 已报告输入 {}，未命中 {}{}）",
+            hit * 100.0,
+            usage.cached,
+            usage.input,
+            usage.input.saturating_sub(usage.cached),
+            coverage,
+        )
     }
     pub fn status(&self) -> String {
         match &self.session {

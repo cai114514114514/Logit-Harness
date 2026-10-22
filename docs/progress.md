@@ -441,3 +441,27 @@ Spec: docs/spec.md
 - The installed/research/package executable pin remains unchanged. No additional paid experiment is
   admissible under the current account. Overall completion remains unproved; do not replace the
   505 missing trajectories or actual human review with this offline audit.
+
+## KV cache follow-up after study freeze
+
+- The user's cache requirement prompted a separate engineering change. The baseline contains 944
+  reported calls with a token-weighted input hit rate of 50.29% (holdout 44.47%). In 789 adjacent main
+  requests, 474 changed the first system instructions. `scripts/cache_report.py` reproduces the
+  read-only usage and prefix audit; totals match an independent SQL aggregation.
+- Stable role instructions now precede append-only runtime state updates. Unchanged state is not
+  resent; changed sections explicitly replace old sections, preserving empty values/deletions.
+  Compaction re-seeds full current state. Tool-batch pairing, full reasoning history, provenance,
+  cancellation and file guards remain enforced. `/budget` and the terminal expose provider cache
+  usage, with replay deduplication and missing-usage labels.
+- A failing real-runner prefix regression was captured before the fix. The complete current
+  `cargo test --all-targets` suite passes 138 tests; strict all-target Clippy and the locked release
+  build pass. The recovery/worker fixtures now read task state from the chronological input rather
+  than assuming it appears in `instructions`. Logs and baseline: `artifacts/cache/`.
+- Installed `/opt/homebrew/bin/loh` now has source hash
+  `9c60ee2a39aa7bf3596d75417efb81f210411525331a73c34fcd931f9fccd7d2`.
+  Its doctor and ad-hoc signature verify. The previous frozen research executable and
+  `dist/delivery` remain unchanged. The cache build is packaged separately under `dist/cache`;
+  any bundled SQLite correction replay predates this change and is historical evidence only.
+- No paid request was made. A real-provider cache/latency/quality comparison remains pending the
+  existing budget blocker. Request-prefix equality does not prove a particular hit rate or speedup.
+  Full design, measurements and limitations: `docs/cache.md`. The overall research goal stays open.

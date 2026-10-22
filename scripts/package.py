@@ -31,6 +31,7 @@ def main():
     shutil.copytree("docs", directory / "docs")
     (directory / "scripts").mkdir()
     shutil.copy2("scripts/replay.py", directory / "scripts/replay.py")
+    shutil.copy2("scripts/cache_report.py", directory / "scripts/cache_report.py")
     if args.replay:
         replay = args.replay.resolve(strict=True)
         destination = directory / "artifacts" / replay.name

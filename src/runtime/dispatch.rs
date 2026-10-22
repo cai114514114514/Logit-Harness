@@ -195,16 +195,15 @@ impl Runner {
         }
         let compact = actor.role != Role::Steering
             && serde_json::to_vec(&actor.context.items)?.len() > self.settings.context_limit;
+        let state = prompts::state(&self.session, actor, &guidance);
+        let instructions = prompts::instructions(&actor.role, &self.session);
+        let actor = self.session.actors.get_mut(actor_id).unwrap();
+        actor.context.sync_state(state)?;
         let request = Request {
             instructions: if compact {
                 "ROLE: compact\nSummarize verified progress, failed attempts, unresolved requirements and source pointers. Do not invent completion or discard constraints.".into()
             } else {
-                format!(
-                    "{}{guidance}\nActor task: {}\nActor dependency scope: {}",
-                    prompts::instructions(&actor.role, &self.session),
-                    actor.task,
-                    serde_json::to_string(&actor.scope)?
-                )
+                instructions
             },
             input: actor.context.request_items()?,
             tools: if compact { vec![] } else { tools },

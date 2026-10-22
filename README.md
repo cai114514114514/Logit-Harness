@@ -54,6 +54,9 @@ search_limit = 50
 所有角色共享任务 token 和时间限额。达到限额后保存未完成状态；`/budget <tokens> [seconds]`
 设置绝对限额，再 `/resume`。搜索与抓取计次单独持久化。只有配置了明确费率时才计算费用估计。
 
+终端顶栏显示 `KV hit`；`/budget` 查看输入缓存命中率和命中/未命中 token。固定指令与变化状态
+分离，状态追加到历史末尾，减少前缀变化。统计口径、缓存基线与验证边界见 [KV Cache](docs/cache.md)。
+
 内置文件搜索、读取、结构化补丁、终端、受管理的服务、联网搜索/抓取、Chrome DOM/无障碍树/
 截图与输入操作。MCP 使用官方 Rust SDK，支持 stdio 和 Streamable HTTP。项目和用户的
 `SKILL.md` 按需加载。说明见 [扩展配置](docs/extensions.md) 和 [终端操作](docs/terminal.md)。
@@ -69,8 +72,9 @@ cargo test --all-targets
 loh eval status
 ```
 
-工程测试、真实 API 冒烟和对照实验分别记录，不能相互代替。130 项完整测试、36 项发布模式
-测试，以及真实 JSON→SQLite 中途纠正验收已通过。完整对照实验受本次总预算限制，**尚未证明
+工程测试、真实 API 冒烟和对照实验分别记录，不能相互代替。当前 138 项完整工程测试通过。
+缓存优化前的冻结版本通过了 36 项发布模式测试和真实 JSON→SQLite 中途纠正验收；缓存优化
+后的真实 API 命中率尚待测量。完整对照实验受本次总预算限制，**尚未证明
 动态纠偏比最强基线更可靠或更省人工**。开发集完成 20/180 次、保留集完成 15/360 次；原始
 失败记录、冻结清单和账本均保留。详见 [工程验收](docs/acceptance.md) 和
 [研究结果](docs/research-results.md)。运行与离线回放方式见 [实验执行](docs/eval-execution.md)。

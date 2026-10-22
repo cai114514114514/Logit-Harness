@@ -2,9 +2,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
+mod state;
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Context {
     pub items: Vec<Value>,
+    /// Last harness state sent in this history. Persisted with the transcript so
+    /// reconnecting does not append the same snapshot again.
+    #[serde(default)]
+    state: Option<serde_json::Map<String, Value>>,
 }
 
 impl Context {
@@ -67,6 +73,9 @@ impl Context {
         );
         anyhow::ensure!(!summary.trim().is_empty(), "empty context summary");
         self.items = vec![json!({"role":"user", "content":summary})];
+        // A summary is not an authoritative state snapshot. The next normal
+        // request must re-seed every current section after this cache boundary.
+        self.state = None;
         Ok(())
     }
     pub fn tool_images(&mut self, id: &str, result: &Value, images: &[crate::tools::ToolImage]) {

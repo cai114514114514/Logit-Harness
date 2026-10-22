@@ -48,9 +48,15 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
         .session
         .as_ref()
         .map(|state| {
+            let cache = state
+                .budget
+                .reported
+                .cache_hit()
+                .map(|hit| format!("{:.1}%", hit * 100.0))
+                .unwrap_or_else(|| "—".into());
             format!(
-                "{} / {} token   ·   {} 秒   ·   随时输入纠正或补充",
-                state.budget.used, state.budget.limit, state.elapsed
+                "{} / {} token   ·   {} 秒   ·   KV hit {}   ·   /budget 详情",
+                state.budget.used, state.budget.limit, state.elapsed, cache
             )
         })
         .unwrap_or_default();

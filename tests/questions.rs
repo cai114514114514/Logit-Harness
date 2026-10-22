@@ -19,6 +19,9 @@ use std::{
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+#[path = "fixtures/state.rs"]
+mod state;
+
 fn call(name: &str, args: Value) -> Response {
     Response {
         output: vec![
@@ -59,7 +62,10 @@ impl Provider for Script {
             .filter_map(|s| serde_json::from_str(s).ok())
             .collect();
         if request.instructions.starts_with("ROLE: main") {
-            if request.instructions.contains("SQLite") {
+            if state::current(&request)["questions"]
+                .to_string()
+                .contains("SQLite")
+            {
                 return Ok(if self.answered.fetch_add(1, Ordering::SeqCst) == 0 {
                     call("apply_patch", patch("storage.txt"))
                 } else {

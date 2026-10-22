@@ -22,6 +22,9 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
+#[path = "fixtures/state.rs"]
+mod state;
+
 fn response(name: &str, args: Value) -> Response {
     Response {
         output: vec![
@@ -88,10 +91,7 @@ impl Provider for Parallel {
             }
             // This barrier can only open if both real worker contexts are scheduled concurrently.
             self.rendezvous.wait().await;
-            let storage = request
-                .input
-                .iter()
-                .any(|v| v["content"].as_str().is_some_and(|s| s.contains("storage")));
+            let storage = state::current(&request)["task"] == "Build storage";
             return Ok(response(
                 "propose_patch",
                 json!({"edits":[{"path":if storage {"storage.txt"} else {"ui.txt"},"expected":"missing","operation":"create","content":"done"}]}),
@@ -199,7 +199,7 @@ impl Provider for Steered {
         }
         if self.hold_main
             && request.instructions.starts_with("ROLE: main")
-            && !request.instructions.contains("Build SQLite storage.")
+            && state::current(&request)["requirements"]["r2"]["text"] != "Build SQLite storage."
             && self.inner.main.load(Ordering::SeqCst) >= 3
         {
             self.arrivals.add_permits(1);
@@ -207,7 +207,7 @@ impl Provider for Steered {
             return Ok(done());
         }
         if request.instructions.starts_with("ROLE: main")
-            && request.instructions.contains("Build SQLite storage.")
+            && state::current(&request)["requirements"]["r2"]["text"] == "Build SQLite storage."
         {
             return Ok(if !self.replacement.swap(true, Ordering::SeqCst) {
                 response(

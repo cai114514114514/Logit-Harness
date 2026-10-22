@@ -34,7 +34,10 @@ fn model_response(request: &Value) -> Value {
             ("read_file", json!({"path":"result.txt"}))
         }
     } else if outputs.is_empty() {
-        if instruction.contains("Crash recovery fixture") {
+        if history
+            .first()
+            .is_some_and(|item| item["content"] == "Crash recovery fixture")
+        {
             return json!([{"type":"function_call","call_id":"append-once","name":"shell","arguments":json!({"command":"printf x >> marker.txt; sleep 30; printf y >> marker.txt","timeout_seconds":40}).to_string()}]);
         }
         (

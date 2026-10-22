@@ -36,9 +36,8 @@ async fn main() -> anyhow::Result<()> {
     );
     let bytes = std::fs::read(&source)?;
     let raw: Value = serde_json::from_slice(&bytes)?;
-    let context = Context {
-        items: serde_json::from_value(raw["input"].clone())?,
-    };
+    let mut context = Context::default();
+    context.append(&serde_json::from_value::<Vec<Value>>(raw["input"].clone())?);
     let input = context.request_items()?;
     let request = Request {
         instructions: serde_json::from_value(raw["instructions"].clone())?,

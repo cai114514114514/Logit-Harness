@@ -133,6 +133,78 @@ fn replayed_history_does_not_revert_the_latest_snapshot_status_or_budget() {
     assert!(text.replace(' ', "").contains("已暂停"));
 }
 
+#[test]
+fn cache_display_weights_input_and_does_not_count_replayed_usage_twice() {
+    let mut session = Session::new(std::env::temp_dir(), "cache", 10000, 60);
+    let reservation = session.budget.reserve(1000).unwrap();
+    session
+        .budget
+        .settle(
+            &reservation,
+            Some(&loh::domain::Usage {
+                input: 100,
+                cached: 90,
+                output: 200,
+            }),
+        )
+        .unwrap();
+    let mut screen = Screen::default();
+    screen.receive(ServerMessage::Snapshot {
+        state: session.clone().into(),
+        sequence: 5,
+    });
+    let usage = SessionEvent {
+        sequence: 6,
+        session: session.id,
+        timestamp: String::new(),
+        data: EventData::Usage {
+            actor: "worker".into(),
+            input: 900,
+            cached: 0,
+            output: 300,
+        },
+    };
+    screen.receive(ServerMessage::Event {
+        event: usage.clone(),
+    });
+    screen.receive(ServerMessage::Event { event: usage });
+    assert!(screen.budget().contains("KV Cache Hit：9.00%"));
+    assert!(
+        screen
+            .cache()
+            .contains("命中 90 / 已报告输入 1000，未命中 910")
+    );
+    assert_eq!(screen.session.as_ref().unwrap().budget.used, 1500);
+    let latest = screen.session.clone().unwrap();
+    let mut reattached = Screen::default();
+    reattached.receive(ServerMessage::View {
+        state: latest,
+        sequence: 6,
+    });
+    reattached.receive(ServerMessage::Event {
+        event: SessionEvent {
+            sequence: 5,
+            session: "old".into(),
+            timestamp: String::new(),
+            data: EventData::Usage {
+                actor: "main".into(),
+                input: 100,
+                cached: 90,
+                output: 200,
+            },
+        },
+    });
+    assert_eq!(reattached.cache(), screen.cache());
+    reattached.session.as_mut().unwrap().budget.uncertain = 500;
+    assert!(reattached.cache().contains("不含缺失用量"));
+    let unknown = Session::new(std::env::temp_dir(), "unknown", 10000, 60);
+    reattached.receive(ServerMessage::Snapshot {
+        state: unknown.into(),
+        sequence: 7,
+    });
+    assert!(reattached.cache().contains("暂无已报告"));
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn actual_pty_accepts_multiline_corrections_pauses_and_detaches_without_stopping_runner() {
     use loh::{

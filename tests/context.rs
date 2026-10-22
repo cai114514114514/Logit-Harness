@@ -37,3 +37,73 @@ fn incomplete_or_orphan_tool_history_is_rejected_before_dispatch() {
     context.tool_result("one", &json!({"duplicate":true}));
     assert!(context.request_items().is_err());
 }
+
+#[test]
+fn state_updates_preserve_history_and_explicitly_replace_empty_sections() {
+    let mut context = Context::default();
+    context.user("Build a CLI");
+    let initial = json!({"requirements":{"r1":"JSON"},"guidance":"old guidance","questions":{"q":"storage?"}});
+    assert!(context.sync_state(initial.clone()).unwrap());
+    let prefix = context.items.clone();
+    let mut restored: Context =
+        serde_json::from_value(serde_json::to_value(&context).unwrap()).unwrap();
+    assert!(
+        !restored.sync_state(initial).unwrap(),
+        "reconnect must not duplicate state"
+    );
+    let current = json!({"requirements":{"r1":"SQLite"},"questions":{}});
+    assert!(restored.sync_state(current.clone()).unwrap());
+    assert!(restored.items.starts_with(&prefix));
+    let update: serde_json::Value = serde_json::from_str(
+        restored.items.last().unwrap()["content"]
+            .as_str()
+            .unwrap()
+            .strip_prefix("Logit- Harness state\n")
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(update["kind"], "update");
+    assert_eq!(update["set"]["requirements"]["r1"], "SQLite");
+    assert_eq!(update["set"]["questions"], json!({}));
+    assert_eq!(update["remove"], json!(["guidance"]));
+    restored.compact("summary may be incomplete").unwrap();
+    assert!(restored.sync_state(current.clone()).unwrap());
+    let snapshot: serde_json::Value = serde_json::from_str(
+        restored.items[1]["content"]
+            .as_str()
+            .unwrap()
+            .strip_prefix("Logit- Harness state\n")
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(snapshot["kind"], "snapshot");
+    assert_eq!(
+        snapshot["set"], current,
+        "compaction must restore exact current requirements"
+    );
+}
+
+#[test]
+fn state_cannot_split_a_tool_batch_or_change_history_on_failure() {
+    let mut context = Context::default();
+    context.append(&[
+        json!({"type":"function_call","call_id":"one","name":"read_file","arguments":"{}"}),
+    ]);
+    let before = serde_json::to_value(&context).unwrap();
+    assert!(
+        context
+            .sync_state(json!({"requirements":{"r1":"SQLite"}}))
+            .is_err()
+    );
+    assert_eq!(before, serde_json::to_value(&context).unwrap());
+    context.user("Use SQLite");
+    context.tool_result("one", &json!({"cancelled":true}));
+    context
+        .sync_state(json!({"requirements":{"r1":"SQLite"}}))
+        .unwrap();
+    let wire = context.request_items().unwrap();
+    assert_eq!(wire[1]["type"], "function_call_output");
+    assert_eq!(wire[2]["content"], "Use SQLite");
+    assert_eq!(wire[3]["role"], "developer");
+    assert!(context.sync_state(json!(null)).is_err());
+}

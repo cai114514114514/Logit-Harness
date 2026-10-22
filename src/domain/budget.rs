@@ -14,6 +14,16 @@ impl Usage {
         // 此处计算 token 数量；缓存与非缓存的不同费率由 Money 单独结算。
         self.input.saturating_add(self.output)
     }
+    pub fn accumulate(&mut self, usage: &Self) {
+        self.input = self.input.saturating_add(usage.input);
+        self.output = self.output.saturating_add(usage.output);
+        self.cached = self.cached.saturating_add(usage.cached);
+    }
+    /// Weighted by input tokens, never by requests. Output is not cache-eligible
+    /// input and must not dilute the denominator. No report is distinct from 0%.
+    pub fn cache_hit(&self) -> Option<f64> {
+        (self.input != 0).then(|| self.cached as f64 / self.input as f64)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -22,6 +32,10 @@ pub struct Budget {
     pub used: u64,
     pub uncertain: u64,
     pub reservations: BTreeMap<String, u64>,
+    /// Provider-reported totals. Older snapshots may only have `used`; their
+    /// absent cache measurements must not be reconstructed from token estimates.
+    #[serde(default)]
+    pub reported: Usage,
 }
 
 impl Budget {
@@ -33,6 +47,7 @@ impl Budget {
             used: 0,
             uncertain: 0,
             reservations: BTreeMap::new(),
+            reported: Usage::default(),
         }
     }
     /// 预留没有过期机制：reserve 之后永不 settle（例如进程崩溃且状态丢失）
@@ -57,6 +72,7 @@ impl Budget {
             .ok_or_else(|| anyhow::anyhow!("unknown reservation"))?;
         if let Some(usage) = usage {
             self.used = self.used.saturating_add(usage.tokens());
+            self.reported.accumulate(usage);
         } else {
             // Lost streams can still be billable. Never reclaim unknown spend as free credit.
             self.uncertain = self.uncertain.saturating_add(reserved);
