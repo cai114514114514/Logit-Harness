@@ -2,13 +2,13 @@ use super::{
     Screen,
     input::wrap,
     state::label,
-    text::{ACCENT, BRAND, MUTED},
+    text::{ACCENT, MUTED},
 };
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
+    style::{Modifier, Style},
+    text::Line,
     widgets::{Block, Borders, Paragraph},
 };
 
@@ -38,7 +38,7 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
         Constraint::Length(1),
     ])
     .areas(area);
-    header_view(frame, screen, inset(header, 2));
+    super::brand::render(frame, screen, inset(header, 2));
 
     let content = inset(body, 2);
     let mut lines = screen.transcript.lines(width, screen.expanded);
@@ -190,45 +190,6 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
     frame.render_widget(
         Paragraph::new(hint).style(Style::default().fg(MUTED)),
         inset(footer, 2),
-    );
-}
-
-fn header_view(frame: &mut Frame, screen: &Screen, area: Rect) {
-    let model = if screen.model.is_empty() {
-        "deepseek-flash"
-    } else {
-        &screen.model
-    };
-    let directory = screen.workspace.display().to_string();
-    let directory = std::env::var("HOME")
-        .ok()
-        .and_then(|home| directory.strip_prefix(&home).map(|rest| format!("~{rest}")))
-        .unwrap_or(directory);
-    frame.render_widget(
-        Paragraph::new(vec![
-            Line::from(vec![
-                Span::styled(
-                    " L ",
-                    Style::default()
-                        .fg(Color::White)
-                        .bg(BRAND)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(
-                    "  Logit- Harness",
-                    Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(
-                    format!("  {}", env!("CARGO_PKG_VERSION")),
-                    Style::default().fg(MUTED),
-                ),
-            ]),
-            Line::styled(
-                format!("   {model} · {directory}"),
-                Style::default().fg(MUTED),
-            ),
-        ]),
-        area,
     );
 }
 

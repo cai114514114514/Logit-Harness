@@ -1,6 +1,7 @@
 //! Terminal lifetime never owns the runner. All control goes through the durable socket inbox.
 mod actions;
 mod archive;
+mod brand;
 mod edit;
 mod input;
 mod launch;

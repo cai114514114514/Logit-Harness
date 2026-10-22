@@ -500,3 +500,13 @@ Spec: docs/spec.md
 - The 14 existing CLI/terminal/layout checks pass, including actual PTY input and detach. This is a
   small branding change; no model protocol, execution policy, evaluation corpus or billing ledger
   changed. The earlier complete 143-test terminal validation remains separately recorded above.
+
+## Terminal-native L mark
+
+- Replaced the single-cell L badge with a three-row blue block-character L, placed beside the
+  product name, model and project directory like the requested Claude Code startup composition.
+  The mark retains its silhouette without color, and its half-height right tip echoes the app icon.
+- Extracted the header into `src/cli/terminal/brand.rs`. Existing 14 CLI/terminal/layout tests pass;
+  actual PTY checks and visual review at 100 and 54 columns pass. Logs: `artifacts/terminal/mark-*`.
+  Locked macOS release build and executable signature verification pass; installed `loh` updated.
+  No execution, model, cache or evaluation behavior changed.

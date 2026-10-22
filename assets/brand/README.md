@@ -5,10 +5,11 @@ files remain in their generation directory. This workspace copy is the project a
 in packaged releases.
 
 The white geometric L has a diagonal right terminal suggesting forward motion. Use the full blue
-tile as the app mark. In text terminals, use the ` L ` badge, not an attempt to rasterize the icon
-into characters. The CLI keeps success green and errors red; identity, selection and progress use blue.
+tile as the app mark. The terminal uses a three-row blue block-character L beside the product,
+model and project, similar in placement to Claude Code's startup mark. Its shape remains visible
+without ANSI color. The CLI keeps success green and errors red; identity, selection and progress use blue.
 
-- Icon / badge blue: `#1459E8`.
+- Icon blue: `#1459E8`.
 - Dark terminal accent: `#5B9CFF`.
 - Glyph: white.
 

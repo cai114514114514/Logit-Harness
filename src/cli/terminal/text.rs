@@ -5,9 +5,8 @@ use ratatui::{
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-/// Bright enough for the dark terminal demo; the solid badge uses the icon's blue.
+/// Shared blue for the terminal mark, selections and progress.
 pub const ACCENT: Color = Color::Rgb(91, 156, 255);
-pub const BRAND: Color = Color::Rgb(20, 89, 232);
 pub const MUTED: Color = Color::DarkGray;
 
 /// Small, predictable terminal Markdown: headings, fenced code, inline code and
