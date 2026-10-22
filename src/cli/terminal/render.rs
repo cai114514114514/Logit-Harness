@@ -15,14 +15,17 @@ use ratatui::{
 /// Reserve only content that is currently interactive; completed text belongs
 /// to native scrollback, so idle sessions do not keep a screenful of blank rows.
 pub(super) fn height(screen: &Screen, columns: u16, rows: u16) -> u16 {
+    if screen.setup.is_some() {
+        return rows.min(18);
+    }
     let width = columns.saturating_sub(4) as usize;
-    let body = if screen.session.is_none() {
+    let body = if screen.session.is_none() && !screen.entered {
         welcome_lines(screen)
             .into_iter()
             .flat_map(|line| super::text::wrap(line.spans, width))
             .count()
     } else {
-        screen.transcript.active_lines(width).len().clamp(1, 8)
+        screen.transcript.active_lines(width).len().min(8)
     };
     let choices = if let Some(choice) = &screen.skill_choices {
         choice.entries.len()
@@ -33,9 +36,9 @@ pub(super) fn height(screen: &Screen, columns: u16, rows: u16) -> u16 {
     };
     let menu = choices.min(6) + usize::from(choices > 0);
     let composer = (wrap(screen.input.text(), width.saturating_sub(2)).len() + 2).clamp(3, 6);
-    let activity = screen.activity_lines().len().clamp(1, 6);
-    (3 + body + activity + menu + composer + 1)
-        .clamp(10, rows.max(10) as usize)
+    let activity = activity_lines(screen, width, 6).len();
+    (body + activity + menu + composer + 1)
+        .max(5)
         .min(rows as usize) as u16
 }
 
@@ -49,13 +52,15 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
         return;
     }
     let area = frame.area();
-    if area.width < 24 || area.height < 10 {
+    if area.width < 24 || area.height < 5 {
         frame.render_widget("Logit- Harness\n请扩大终端窗口", area);
         return;
     }
     let width = area.width.saturating_sub(4) as usize;
     let input_lines = wrap(screen.input.text(), width.saturating_sub(2));
-    let input_height = (input_lines.len() as u16 + 2).clamp(3, (area.height / 3).max(3));
+    let input_height = (input_lines.len() as u16 + 2)
+        .clamp(3, 6)
+        .min(area.height - 2);
     let menu = screen.menu();
     let choices = if let Some(choice) = &screen.skill_choices {
         choice.entries.len()
@@ -65,23 +70,25 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
         menu.len()
     };
     let menu_height = (choices.min(6) as u16 + u16::from(choices > 0))
-        .min(area.height.saturating_sub(input_height + 7));
-    let activities = screen.activity_lines();
-    let activity_height = (activities.len() as u16).clamp(1, (area.height / 3).max(1));
-    let [header, body, progress, menu_area, composer, footer] = Layout::vertical([
-        Constraint::Length(3),
-        Constraint::Min(1),
+        .min(area.height.saturating_sub(input_height + 2));
+    let capacity = area
+        .height
+        .saturating_sub(input_height + menu_height + 1)
+        .min(6);
+    let activities = activity_lines(screen, width, capacity as usize);
+    let activity_height = activities.len() as u16;
+    let [body, progress, menu_area, composer, footer] = Layout::vertical([
+        Constraint::Min(0),
         Constraint::Length(activity_height),
         Constraint::Length(menu_height),
         Constraint::Length(input_height),
         Constraint::Length(1),
     ])
     .areas(area);
-    super::brand::render(frame, screen, inset(header, 2));
 
     let content = inset(body, 2);
     let mut lines = screen.transcript.active_lines(width);
-    if lines.is_empty() && screen.session.is_none() {
+    if lines.is_empty() && screen.session.is_none() && !screen.entered {
         lines = welcome_lines(screen)
             .into_iter()
             .flat_map(|line| super::text::wrap(line.spans, width))
@@ -89,16 +96,16 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
     }
     let end = lines.len();
     let start = end.saturating_sub(content.height as usize);
+    let content = Rect::new(
+        content.x,
+        content.bottom().saturating_sub((end - start) as u16),
+        content.width,
+        (end - start) as u16,
+    );
     frame.render_widget(Paragraph::new(lines[start..end].to_vec()), content);
 
     frame.render_widget(
-        Paragraph::new(
-            activities
-                .into_iter()
-                .map(|line| Line::raw(super::state::clean(&line)))
-                .collect::<Vec<_>>(),
-        )
-        .style(Style::default().fg(ACCENT)),
+        Paragraph::new(activities).style(Style::default().fg(ACCENT)),
         inset(progress, 2),
     );
 
@@ -130,8 +137,11 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
             menu.iter()
                 .map(|command| {
                     format!(
-                        "{:<12} {} [{} · {:?}]",
-                        command.name, command.description, command.source, command.timing
+                        "{:<12} {} [{} · {}]",
+                        command.name,
+                        command.description,
+                        command.source,
+                        super::present::timing(command.timing)
                     )
                 })
                 .collect()
@@ -181,11 +191,7 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
     let offset = cursor_y.saturating_sub(text_area.height.saturating_sub(1) as usize);
     let rows = if screen.input.text().is_empty() {
         vec![Line::styled(
-            if screen.session.is_some() {
-                "补充要求、纠正方向，或输入 /"
-            } else {
-                "输入消息、问题，或需要实现的目标…"
-            },
+            super::present::placeholder(screen),
             Style::default().fg(MUTED),
         )]
     } else {
@@ -271,6 +277,35 @@ fn welcome_lines(screen: &Screen) -> Vec<Line<'static>> {
                 recent.objective.lines().next().unwrap_or("")
             )));
         }
+    }
+    lines
+}
+
+fn activity_lines(screen: &Screen, width: usize, capacity: usize) -> Vec<Line<'static>> {
+    let groups = screen
+        .activity_lines()
+        .into_iter()
+        .map(|line| {
+            super::text::wrap(
+                vec![ratatui::text::Span::raw(super::state::clean(&line))],
+                width,
+            )
+        })
+        .collect::<Vec<_>>();
+    if groups.iter().map(Vec::len).sum::<usize>() <= capacity {
+        return groups.into_iter().flatten().collect();
+    }
+    let mut lines = vec![];
+    for group in groups {
+        // Keep an actionable ID whole, including its wrapped continuation. A
+        // small editor/menu leaves a clear details route, never half a command.
+        if lines.len() + group.len() >= capacity {
+            break;
+        }
+        lines.extend(group);
+    }
+    if capacity > 0 {
+        lines.push(Line::raw("… 完整状态 /status"));
     }
     lines
 }

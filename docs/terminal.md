@@ -4,14 +4,17 @@ The executable is `loh`. In a development checkout, build with `cargo build` and
 `./target/debug/loh run "任务描述"`. Configure credentials with `loh setup` or `/setup` in the UI.
 Configuration and session state default to `~/.loh`, configurable with `LOH_HOME` or `--home`.
 
-Running `loh` alone opens the blue L, current model, project directory,
-conversation editor and recent sessions. It remains usable without an API key: commands and saved
+Running `loh` alone prints the blue L, current model and project directory once, then opens a
+compact welcome editor and recent sessions. The brand is never redrawn between replies or tools,
+including after `/new`, session switching, resize or reconnect. It remains usable without an API key: commands and saved
 conversations can be inspected, while starting/resuming model work requires the key. Missing-key
 submission retains the draft and does not create a task or issue a provider request.
 
 The main interface occupies the normal terminal buffer. Completed responses and tool results
 are appended once to native scrollback; only active work and the composer are redrawn. The
-interface stays compact when idle. Resizing or reconnecting does not replay completed output.
+conversation editor and usage footer stay at the physical terminal bottom when running or idle.
+The most recent response sits above the measured activity and input. `/new` keeps that bottom
+layout without reopening welcome copy. Resizing or reconnecting does not replay completed output.
 Cursor position is queried only before asynchronous input starts. A new client shows up to 20
 settled blocks / 200 wrapped lines with a recovery marker; the rest remains in `/history`.
 Your terminal controls its own scrolling and reflow; cross-terminal scroll-position preservation
@@ -48,9 +51,13 @@ verification, plus measured elapsed time and time since output. Workspace wait, 
 approval, cancellation settlement, pause and completion have distinct labels and relevant commands.
 It does not infer progress from the last model-request text or display invented percentages.
 
-Tool activity is grouped by action, with source and local start time. Shell output is literal;
+Input prompts follow the saved session mode: continue a conversation, add read-only Plan context,
+or correct an Engineering task. Tool activity is grouped by action; full source, identity and local
+start time are in details. Shell output is literal;
 read/search/patch results have their own formatting. Normal results show a summary; failures retain
-the useful tail and truncation is labeled. Interrupted actions with an unknown result never acquire
+the useful tail and folding is labeled. Known routine diagnostics stay in full history, while failures,
+unknown outcomes and required actions stay visible. Question and approval commands retain exact IDs.
+Interrupted actions with an unknown result never acquire
 a success marker. Display text cannot execute terminal escapes; explicitly copied content retains
 its original bytes. The footer shows reported token usage and KV input hit rate; `/usage` and
 `/budget` provide details. Context size estimates are separate from provider-reported token usage.
@@ -149,3 +156,11 @@ The subsequent CLI redesign was compared with locally installed Claude Code (unl
 Codex. Its PTY captures, interaction receipt and validation logs are under `artifacts/terminal`.
 These images render actual PTY character grids; they are not native Terminal-window screenshots.
 See [the UI review](terminal-review.md) for the comparison and scope.
+
+The subsequent conversation-layout correction is exercised by `tests/pty/layout.py` and
+`tests/pty/interaction.py`: bottom docking, one startup brand, once-only settled scrollback,
+mode prompts, CJK editing, menu/detail return, resizing, setup masking and cancellation.
+Current colored grid captures and machine-readable receipts are in `artifacts/terminal-layout`
+and `artifacts/terminal-layout-integrated`. Native terminal reflow remains owned by the terminal;
+opening/closing a tall menu can insert a bounded blank band at the viewport/scrollback boundary,
+but completing ordinary replies does not insert blank screens between records.

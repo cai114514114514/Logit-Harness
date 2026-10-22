@@ -166,6 +166,9 @@ with tempfile.TemporaryDirectory(prefix='loh-task3-') as tmp:
         f.send('/config tokens 123456\r');f.wait(lambda:'默认值已保存' in ''.join(f.chunks))
         f.send('/new\r');f.drain(.3);f.send('new defaults hello\r');f.wait(lambda:len(failed_sessions())==2)
         f.wait(lambda:any(st['budget']['limit']==123456 for i,st in failed_sessions()))
+        # SQLite creation precedes the asynchronous client attachment. Local
+        # export needs that rendered session context, not merely a database row.
+        f.wait(lambda:'new defaults hello' in f.grid() and 'Ctrl+O' in f.grid())
         f.send('/export fixture-export.json\r');f.wait(lambda:(cwd/'fixture-export.json').exists())
         before=len(requests);f.send('/new\r');f.drain(.2);f.send('/plan\r');f.wait(lambda:any(st['mode']=='plan' for i,st in failed_sessions()))
         f.drain(.4);assert len(requests)==before, 'bare /plan must remain model-idle'

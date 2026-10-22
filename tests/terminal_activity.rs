@@ -82,7 +82,10 @@ fn quiet_commands_and_parallel_actors_have_measured_independent_activity() {
             .iter()
             .any(|line| line.to_string().contains("sleep 30"))
     );
-    assert!(rows.contains("command-a"));
+    assert!(
+        !rows.contains("command-a"),
+        "internal action IDs belong in details"
+    );
     assert!(rows.contains("独立验收"));
     assert!(rows.contains("已用12s"));
     assert!(rows.contains("距输出12s"));
@@ -145,7 +148,12 @@ fn cancellation_settlement_stays_visible_alongside_work_after_reconnect() {
             let rows = screen.activity_lines().join("\n");
             assert!(rows.contains("等待活动结算"), "{status:?}: {rows}");
             assert!(
-                rows.contains("draining-too"),
+                rows.contains("sleep 30")
+                    || screen
+                        .transcript
+                        .active_lines(80)
+                        .iter()
+                        .any(|line| line.to_string().contains("sleep 30")),
                 "remaining work must stay visible: {rows}"
             );
             event(

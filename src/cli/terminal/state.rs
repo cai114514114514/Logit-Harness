@@ -30,6 +30,9 @@ pub struct Screen {
     pub(super) skill_choices: Option<super::submission::Choice>,
     pub(super) history: Option<super::history::Browser>,
     pub(super) setup: Option<super::setup::Form>,
+    /// Welcome copy is only for the first entry in this client. `/new` keeps
+    /// the conversation layout even while no session has been created yet.
+    pub(super) entered: bool,
     sequence: u64,
     snapshot: u64,
 }
@@ -100,6 +103,7 @@ impl Screen {
             }),
             ServerMessage::View { state, sequence } => {
                 if sequence >= self.snapshot.max(self.sequence) {
+                    self.entered = true;
                     self.transcript.reconcile(&state.activities);
                     self.workspace = state.workspace.clone();
                     self.session = Some(*state);

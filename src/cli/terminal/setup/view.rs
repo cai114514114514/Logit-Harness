@@ -1,6 +1,6 @@
 use super::Form;
 use crate::cli::terminal::{
-    Screen, brand,
+    Screen,
     text::{ACCENT, MUTED},
 };
 use ratatui::{
@@ -11,28 +11,13 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-pub(crate) fn render(frame: &mut Frame, screen: &Screen, form: &Form) {
+pub(crate) fn render(frame: &mut Frame, _screen: &Screen, form: &Form) {
     let area = frame.area();
-    if area.width < 24 || area.height < 17 {
+    if area.width < 24 || area.height < 14 {
         frame.render_widget("API 设置\n请扩大终端窗口 · Esc 返回", area);
         return;
     }
-    let [header, body, footer] = Layout::vertical([
-        Constraint::Length(4),
-        Constraint::Min(6),
-        Constraint::Length(2),
-    ])
-    .areas(area);
-    brand::render(
-        frame,
-        screen,
-        Rect::new(
-            header.x + 2,
-            header.y,
-            header.width.saturating_sub(4),
-            header.height,
-        ),
-    );
+    let [body, footer] = Layout::vertical([Constraint::Min(6), Constraint::Length(2)]).areas(area);
     let body = Rect::new(
         body.x + 2,
         body.y,

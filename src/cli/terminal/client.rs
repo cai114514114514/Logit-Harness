@@ -95,6 +95,7 @@ pub(super) async fn run(
     }
     let _restore = Restore;
     let mut terminal = super::surface::open(true)?;
+    terminal.append(&super::brand::lines(&screen, terminal.width()))?;
     crossterm::execute!(std::io::stdout(), EnableBracketedPaste)?;
     let mut keys = EventStream::new();
     let mut frames = tokio::time::interval(Duration::from_millis(80));
@@ -119,9 +120,8 @@ pub(super) async fn run(
                     terminal.modal(modal)?;
                     if !modal {
                         let (columns, rows) = crossterm::terminal::size()?;
-                        terminal.layout(super::render::height(&screen, columns, rows))?;
                         let lines = screen.transcript.drain_settled(terminal.width().saturating_sub(4) as usize);
-                        terminal.append(&lines)?;
+                        terminal.present(super::render::height(&screen, columns, rows), screen.session.is_some(), &lines)?;
                     }
                     terminal.draw(|frame| render(frame, &screen))?;
                     dirty = false;
@@ -162,7 +162,9 @@ pub(super) async fn run(
                         let sequence = transcript.sequence(); let id = session.id.clone();
                         screen.activity.clear(); screen.transcript = transcript; screen.recent = recent;
                         screen.receive(ServerMessage::Snapshot { state: session, sequence }); screen.connected = false;
-                        terminal.append(&screen.transcript.recent(terminal.width().saturating_sub(4) as usize))?;
+                        let (columns, rows) = crossterm::terminal::size()?;
+                        let recent = screen.transcript.recent(columns.saturating_sub(4) as usize);
+                        terminal.present(super::render::height(&screen, columns, rows), true, &recent)?;
                         if let Some((error, draft, revision)) = failure_after_open.take() {
                             screen.note(format!("后台启动失败：{error}\n会话 {id} 与输入已保存。/resume 恢复；请先核对记录，避免重复发送。"));
                             restore_draft(&mut screen, draft, revision);
@@ -200,8 +202,9 @@ pub(super) async fn run(
                         Outcome::Navigate(Navigation::Detach) => break,
                         Outcome::Navigate(Navigation::New) => {
                             generation += 1; connection.close(); initial = Initial::default(); failure_after_open = None; opening = false; reconnect = false; catalog_loading = false;
-                            let cwd = screen.workspace.clone();
+                            let cwd = screen.workspace.clone(); let entered = screen.entered;
                             screen = fresh(paths, &Config::load(&paths.home)?, &cwd)?;
+                            screen.entered = entered;
                             screen.note("新对话 · 原任务继续后台；/sessions 可切回。");
                         }
                         Outcome::Navigate(Navigation::Sessions) => {
@@ -264,8 +267,9 @@ pub(super) async fn run(
                         }
                         if screen.picker && key.code == KeyCode::Enter {
                             if let Some(recent) = screen.recent.get(screen.selection) {
-                                let id = recent.id.clone(); let workspace = screen.workspace.clone();
+                                let id = recent.id.clone(); let workspace = screen.workspace.clone(); let entered = screen.entered;
                                 generation += 1; connection.close(); initial = Initial::default(); failure_after_open = None; screen = fresh(paths, &Config::load(&paths.home)?, &workspace)?;
+                                screen.entered = entered;
                                 Context::new(generation, paths, &screen).open(&mut jobs, id); opening = true; reconnect = false; catalog_loading = false;
                             }
                             continue;

@@ -8,6 +8,8 @@ mod history;
 mod input;
 mod jobs;
 mod launch;
+mod output;
+mod present;
 mod render;
 mod setup;
 mod state;

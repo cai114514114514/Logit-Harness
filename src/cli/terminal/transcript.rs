@@ -33,6 +33,7 @@ pub struct Entry {
     pub success: Option<bool>,
     pub settled: Option<u64>,
     printed: bool,
+    quiet: bool,
 }
 #[derive(Clone, Default)]
 struct Identity {
@@ -82,6 +83,7 @@ impl Transcript {
             success: None,
             settled: None,
             printed: false,
+            quiet: false,
         });
         self.entries.len() - 1
     }
@@ -234,9 +236,17 @@ impl Transcript {
                 }
                 if *status != Status::Running {
                     self.note(&format!("{} · {reason}", super::state::label(status)));
+                    // Normal lifecycle transitions already have a live status
+                    // above the composer. Keep their raw reason in details only.
+                    if reason == "response complete; waiting for user input" {
+                        self.entries.last_mut().unwrap().quiet = true;
+                    }
                 }
             }
-            EventData::Diagnostic { message } => self.note(message),
+            EventData::Diagnostic { message } => {
+                self.note(message);
+                self.entries.last_mut().unwrap().quiet = super::present::routine(message);
+            }
             EventData::Approval {
                 id,
                 tool,
@@ -386,6 +396,9 @@ impl Entry {
         if expanded {
             return self.full_text();
         }
+        if self.kind == Kind::Note {
+            return super::present::notice(&self.body);
+        }
         if let Some(result) = &self.result {
             let final_text = super::tool_text::result(result);
             if !final_text.is_empty() {
@@ -398,6 +411,9 @@ impl Entry {
     }
 
     pub fn lines(&self, width: usize, expanded: bool) -> Vec<Line<'static>> {
+        if self.quiet && !expanded {
+            return vec![];
+        }
         if self.kind == Kind::Assistant && self.body.is_empty() {
             return vec![];
         }
@@ -417,17 +433,36 @@ impl Entry {
                     .to_string()
             })
             .unwrap_or_else(|_| self.started.clone());
+        let heading = if expanded {
+            format!(
+                "{marker} {} · {} · {time}",
+                clean(&self.title),
+                clean(&self.source)
+            )
+        } else if self.kind == Kind::Note {
+            // The notice itself supplies its subject; do not repeat 系统 twice.
+            String::new()
+        } else {
+            format!("{marker} {}", clean(&self.title))
+        };
+        let heading_width = if !expanded && self.kind == Kind::Tool {
+            width.saturating_sub(2)
+        } else {
+            width
+        };
         let mut lines = text::wrap(
-            vec![Span::styled(
-                format!(
-                    "{marker} {} · {} · {time}",
-                    clean(&self.title),
-                    clean(&self.source)
-                ),
-                Style::default().fg(color),
-            )],
-            width,
+            vec![Span::styled(heading, Style::default().fg(color))],
+            heading_width,
         );
+        if !expanded && self.kind == Kind::Tool && lines.len() > 1 {
+            lines.truncate(1);
+            lines[0]
+                .spans
+                .push(Span::styled(" …", Style::default().fg(color)));
+        }
+        if !expanded && self.kind == Kind::Note {
+            lines.clear();
+        }
         let content = self.display_text(expanded);
         let body = if self.kind == Kind::Assistant {
             text::markdown(&clean(&content), width.saturating_sub(2), Style::default())
@@ -442,7 +477,7 @@ impl Entry {
         let limit = if expanded || self.kind == Kind::Note {
             body.len()
         } else if self.kind == Kind::Tool {
-            if self.success == Some(false) { 8 } else { 3 }
+            if self.success == Some(false) { 8 } else { 1 }
         } else {
             body.len().min(100)
         };

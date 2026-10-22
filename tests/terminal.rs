@@ -138,7 +138,7 @@ fn replayed_history_does_not_revert_the_latest_snapshot_status_or_budget() {
         .iter()
         .map(|cell| cell.symbol())
         .collect::<String>();
-    assert!(text.contains("Logit- Harness"));
+    assert!(!text.contains("████"));
     // Each CJK glyph occupies two cells; the test backend stores a blank continuation cell.
     assert!(text.replace(' ', "").contains("中途纠正"));
     assert!(text.replace(' ', "").contains("已暂停"));

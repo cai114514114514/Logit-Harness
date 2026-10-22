@@ -21,11 +21,11 @@ pub(super) fn lines(screen: &Screen) -> Vec<String> {
                 .unwrap_or("工作区拥有者");
             lines.push(format!(
                 "等待工作区 · /sessions · /tasks · [{}] {}",
-                short(owner),
-                title
+                owner, title
             ));
         }
         for approval in &session.approval_actions {
+            // SessionView already supplies the tool and exact /approve command.
             lines.push(format!("等待授权 · {approval}"));
         }
         for (id, question) in &session.questions {
@@ -47,8 +47,10 @@ pub(super) fn lines(screen: &Screen) -> Vec<String> {
     for entry in &active {
         let elapsed = age(&entry.started, now);
         let idle = age(&entry.updated, now);
-        let work = if entry.kind == Kind::Assistant {
+        let work = if entry.kind == Kind::Assistant && entry.body.is_empty() {
             "等待模型响应"
+        } else if entry.kind == Kind::Assistant {
+            "正在回复"
         } else {
             "执行工具"
         };
@@ -58,9 +60,7 @@ pub(super) fn lines(screen: &Screen) -> Vec<String> {
             format!("{} · ", entry.title)
         };
         lines.push(format!(
-            "{work} · {title}已用{elapsed} · 距输出{idle} · [{}] · /tasks {}",
-            short(&entry.source),
-            short(&entry.id)
+            "{work} · {title}已用{elapsed} · 距输出{idle} · /tasks"
         ));
     }
     if let Some(session) = &screen.session {
@@ -70,9 +70,8 @@ pub(super) fn lines(screen: &Screen) -> Vec<String> {
                 .any(|e| e.id == activity.id || e.source == activity.id)
             {
                 lines.push(format!(
-                    "{} [{}] · {} · /tasks",
+                    "{} · {} · /tasks",
                     super::transcript::actor_label(&activity.actor),
-                    short(&activity.id),
                     activity.title
                 ));
             }
@@ -82,7 +81,8 @@ pub(super) fn lines(screen: &Screen) -> Vec<String> {
                 "等待独立验收调度 · /tasks".into()
             } else {
                 format!(
-                    "{}{}",
+                    "{} · {}{}",
+                    super::present::mode(screen),
                     super::state::label(&session.status),
                     if screen.connected {
                         ""
@@ -106,7 +106,4 @@ fn age(value: &str, now: chrono::DateTime<chrono::Utc>) -> String {
         .ok()
         .map(|t| format!("{}s", now.signed_duration_since(t).num_seconds().max(0)))
         .unwrap_or_else(|| "未知".into())
-}
-fn short(value: &str) -> String {
-    value.chars().take(12).collect()
 }

@@ -4,18 +4,15 @@ use super::{
     text::{ACCENT, MUTED},
 };
 use ratatui::{
-    Frame,
-    layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::Paragraph,
 };
 
 // Block characters retain the silhouette when NO_COLOR disables ANSI styling.
 // The half-height tip echoes the diagonal terminal of the app icon.
 const MARK: [&str; 3] = ["██      ", "██      ", "██████▀ "];
 
-pub(super) fn render(frame: &mut Frame, screen: &Screen, area: Rect) {
+pub(super) fn lines(screen: &Screen, width: u16) -> Vec<Line<'static>> {
     let model = if screen.model.is_empty() {
         "deepseek-flash"
     } else {
@@ -30,15 +27,14 @@ pub(super) fn render(frame: &mut Frame, screen: &Screen, area: Rect) {
                 .map(|path| format!("~/{}", path.display()))
         })
         .unwrap_or_else(|| screen.workspace.display().to_string());
-    let compact = area.width < 34;
+    let compact = width < 34;
     let title = if compact {
         "loh".into()
     } else {
         format!("Logit- Harness  {}", env!("CARGO_PKG_VERSION"))
     };
     let details = [title, model.to_owned(), directory];
-    let lines = MARK
-        .iter()
+    MARK.iter()
         .zip(details)
         .enumerate()
         .map(|(row, (mark, detail))| {
@@ -54,6 +50,15 @@ pub(super) fn render(frame: &mut Frame, screen: &Screen, area: Rect) {
                 ),
             ])
         })
-        .collect::<Vec<_>>();
-    frame.render_widget(Paragraph::new(lines), area);
+        .map(|line| {
+            line.spans
+                .into_iter()
+                .map(|mut span| {
+                    span.content = super::state::clean(&span.content).into();
+                    span
+                })
+                .collect::<Vec<_>>()
+        })
+        .flat_map(|spans| super::text::wrap(spans, width as usize))
+        .collect()
 }

@@ -13,22 +13,77 @@ pub(super) struct Surface {
     area: Rect,
     size: (u16, u16),
     modal: bool,
+    docked: bool,
 }
 
 impl Surface {
+    pub fn present(
+        &mut self,
+        height: u16,
+        conversation: bool,
+        lines: &[ratatui::text::Line<'_>],
+    ) -> std::io::Result<()> {
+        if crossterm::terminal::size()? != self.size {
+            self.layout(self.area.height, conversation)?;
+        }
+        // Settlement replaces its active preview. Append using the *new* region
+        // height before layout, so a completed tool does not scroll down then up
+        // and accumulate blank rows in native history on every completion.
+        if self.docked && !lines.is_empty() {
+            self.append_height(lines, height)?;
+        } else {
+            self.layout(height, conversation)?;
+            self.append(lines)?;
+        }
+        Ok(())
+    }
     pub fn width(&self) -> u16 {
         crossterm::terminal::size().map_or(self.size.0, |s| s.0)
     }
-    pub fn layout(&mut self, height: u16) -> std::io::Result<()> {
+    pub fn layout(&mut self, height: u16, conversation: bool) -> std::io::Result<()> {
         if self.modal {
             return Ok(());
         }
         let size = crossterm::terminal::size()?;
         let height = height.max(1).min(size.1);
-        if height == self.area.height && size == self.size {
+        let entering = conversation && !self.docked;
+        self.docked |= conversation;
+        if height == self.area.height && size == self.size && !entering {
             return Ok(());
         }
-        let row = self.area.y.min(size.1.saturating_sub(1));
+        // The terminal clips/reflows its normal buffer on a height shrink.
+        // Track that movement before reserving the new bottom region, otherwise
+        // the old editor can be mistaken for settled output and left in history.
+        let row = self
+            .area
+            .y
+            .saturating_sub(self.size.1.saturating_sub(size.1))
+            .min(size.1.saturating_sub(1));
+        if self.docked {
+            let top = size.1.saturating_sub(height);
+            // Growing the active region pushes settled rows into real scrollback
+            // using full-screen LF. Shrinking shifts existing visible rows down;
+            // only obsolete active rows can fall off the bottom. Never replay or
+            // clear a settled record, and never establish a DECSTBM scroll region.
+            if top < row {
+                crossterm::execute!(
+                    std::io::stdout(),
+                    crossterm::cursor::MoveTo(0, size.1.saturating_sub(1)),
+                    crossterm::style::Print("\r\n".repeat((row - top) as usize))
+                )?;
+            } else if top > row && !entering {
+                scroll_down(&mut std::io::stdout(), top - row)?;
+            } else if entering {
+                crossterm::execute!(
+                    std::io::stdout(),
+                    crossterm::cursor::MoveTo(0, row),
+                    crossterm::terminal::Clear(crossterm::terminal::ClearType::FromCursorDown)
+                )?;
+            }
+            self.area = Rect::new(0, top, size.0, height);
+            self.size = size;
+            return self.reset(self.area);
+        }
         crossterm::execute!(
             std::io::stdout(),
             crossterm::cursor::MoveTo(0, row),
@@ -61,6 +116,14 @@ impl Surface {
     /// Remove only the active region, append completed lines using normal LF,
     /// then reserve a fresh active region. No cursor query and no scroll-region CSI.
     pub fn append(&mut self, lines: &[ratatui::text::Line<'_>]) -> std::io::Result<()> {
+        self.append_height(lines, self.area.height)
+    }
+
+    fn append_height(
+        &mut self,
+        lines: &[ratatui::text::Line<'_>],
+        height: u16,
+    ) -> std::io::Result<()> {
         use crossterm::{
             cursor::MoveTo,
             style::Print,
@@ -76,22 +139,24 @@ impl Surface {
             Clear(ClearType::FromCursorDown)
         )?;
         for line in lines {
-            crossterm::execute!(
-                output,
-                Print(super::state::clean(&line.to_string())),
-                Print("\r\n")
-            )?;
+            super::output::line(&mut output, line)?;
+            crossterm::execute!(output, Print("\r\n"))?;
         }
         let size = crossterm::terminal::size()?;
         let row =
             (self.area.y as usize + lines.len()).min(size.1.saturating_sub(1) as usize) as u16;
-        let height = self.area.height.min(size.1).max(1);
+        let height = height.min(size.1).max(1);
         crossterm::execute!(
             output,
             Print("\r\n".repeat(height.saturating_sub(1) as usize))
         )?;
         let overflow = row.saturating_add(height).saturating_sub(size.1);
         self.area = Rect::new(0, row.saturating_sub(overflow), size.0, height);
+        if self.docked && self.area.bottom() < size.1 {
+            let gap = size.1 - self.area.bottom();
+            scroll_down(&mut output, gap)?;
+            self.area.y += gap;
+        }
         self.size = size;
         self.reset(self.area)?;
         Ok(())
@@ -115,21 +180,18 @@ impl Surface {
     }
     pub fn draw(&mut self, draw: impl FnOnce(&mut Frame)) -> std::io::Result<()> {
         let size = crossterm::terminal::size()?;
+        if self.modal {
+            // A history-browser resize must not change our saved normal-buffer
+            // geometry. On return, layout accounts for that resize exactly once.
+            let area = Rect::new(0, 0, size.0, size.1);
+            if self.terminal.get_frame().area() != area {
+                self.reset(area)?;
+            }
+            self.terminal.draw(draw)?;
+            return Ok(());
+        }
         if size != self.size {
-            let height = self.area.height.min(size.1).max(1);
-            self.area = Rect::new(
-                0,
-                self.area.y.min(size.1.saturating_sub(height)),
-                size.0,
-                height,
-            );
-            let area = if self.modal {
-                Rect::new(0, 0, size.0, size.1)
-            } else {
-                self.area
-            };
-            self.reset(area)?;
-            self.size = size;
+            self.layout(self.area.height, self.docked)?;
         }
         self.terminal.draw(draw)?;
         Ok(())
@@ -182,10 +244,20 @@ pub(super) fn open(welcome: bool) -> std::io::Result<Surface> {
         area,
         size,
         modal: false,
+        docked: !welcome,
     })
 }
 
 fn height(rows: u16, welcome: bool) -> u16 {
-    let height = rows.saturating_sub(1).max(1);
-    if welcome { height.min(19) } else { height }
+    if welcome { 1 } else { rows.max(1) }
+}
+
+fn scroll_down(output: &mut impl std::io::Write, rows: u16) -> std::io::Result<()> {
+    // VT reverse-index at the physical top moves existing visible rows without
+    // replaying their bytes. The discarded bottom rows belong to the old editor.
+    crossterm::execute!(
+        output,
+        crossterm::cursor::MoveTo(0, 0),
+        crossterm::style::Print("\x1bM".repeat(rows as usize))
+    )
 }
