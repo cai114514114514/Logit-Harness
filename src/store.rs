@@ -94,7 +94,7 @@ impl Store {
                 }
                 error => error.into(),
             })?;
-        Ok(serde_json::from_str(&state)?)
+        decode(&state, session)
     }
     pub fn has_session(&self, session: &str) -> anyhow::Result<bool> {
         Ok(self.conn()?.query_row(
@@ -112,7 +112,7 @@ impl Store {
             [session],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
-        Ok((serde_json::from_str(&state)?, sequence))
+        Ok((decode(&state, session)?, sequence))
     }
     pub fn append(&self, session: &str, data: EventData) -> anyhow::Result<SessionEvent> {
         let connection = self.conn()?;
@@ -248,4 +248,31 @@ impl Store {
             })
             .collect()
     }
+}
+
+/// Legacy rows had no goal/turn IDs. Derive their initial identities from the
+/// saved session and actor keys, so repeated read-only loads agree before the
+/// first new commit persists the migrated fields. Event rows are never rewritten.
+fn decode<T: DeserializeOwned>(state: &str, session: &str) -> anyhow::Result<T> {
+    let mut value: serde_json::Value = serde_json::from_str(state)?;
+    if let Some(goal) = value
+        .get_mut("goal")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        goal.entry("id")
+            .or_insert_with(|| serde_json::json!(format!("{session}:goal")));
+    }
+    if let Some(actors) = value
+        .get_mut("actors")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        for (id, actor) in actors {
+            if let Some(actor) = actor.as_object_mut() {
+                actor
+                    .entry("turn")
+                    .or_insert_with(|| serde_json::json!(format!("{session}:{id}:turn")));
+            }
+        }
+    }
+    Ok(serde_json::from_value(value)?)
 }

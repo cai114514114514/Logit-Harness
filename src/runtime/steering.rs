@@ -38,7 +38,23 @@ impl Runner {
             .ok_or_else(|| anyhow::anyhow!("message missing"))?
             .text
             .clone();
+        let reconciliation = self
+            .session
+            .implementation
+            .as_ref()
+            .is_some_and(|task| task.id == message_id);
+        anyhow::ensure!(
+            !reconciliation || matches!(input.intent.as_str(), "refine" | "nudge"),
+            "planning reconciliation must selectively refine actual requirement changes, or nudge if none; questions and greetings are not requirements"
+        );
         match input.intent.as_str() {
+            "queue" => self.queue_goal(message.clone(), message_id.into())?,
+            "replace" if self.session.interactive => {
+                self.request_boundary(super::conversation::Boundary::Goal {
+                    text: message.clone(),
+                    turn: message_id.into(),
+                })?;
+            }
             "answer" => {
                 let id = input
                     .question_id
@@ -155,6 +171,13 @@ impl Runner {
         self.emit(EventData::Diagnostic {
             message: "user input classified and applied".into(),
         })?;
+        if reconciliation {
+            let task = self.session.implementation.take().unwrap();
+            self.request_boundary(super::conversation::Boundary::ResumeGoal {
+                text: task.text,
+                turn: task.turn,
+            })?;
+        }
         Ok(())
     }
 

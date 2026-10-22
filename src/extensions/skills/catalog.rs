@@ -24,6 +24,7 @@ pub struct Loaded {
     pub content: String,
 }
 
+#[derive(Default)]
 pub struct Skills {
     pub entries: Vec<Entry>,
     pub warnings: Vec<String>,

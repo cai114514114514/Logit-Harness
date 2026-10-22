@@ -20,6 +20,18 @@ impl Context {
     pub fn append(&mut self, output: &[Value]) {
         self.items.extend_from_slice(output);
     }
+    /// Joining a planning conversation preserves its full paired transcript, but
+    /// its last state snapshot may differ from this context's cached projection.
+    /// Re-seed authoritative state on the next request instead of emitting a delta
+    /// against the wrong branch of history.
+    pub fn extend_history(&mut self, other: &Context) -> anyhow::Result<()> {
+        self.request_items()?;
+        other.request_items()?;
+        self.items.extend_from_slice(&other.items);
+        self.state = None;
+        self.request_items()?;
+        Ok(())
+    }
     /// The event history preserves when a correction arrived. The Responses
     /// wire must keep every assistant tool batch adjacent to all its outputs:
     /// inserting a user message between them starts a new message and loses the

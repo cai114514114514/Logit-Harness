@@ -157,6 +157,11 @@ impl ToolHost {
     pub fn effect(&self, name: &str) -> Option<Effect> {
         self.registry.get(name).map(|tool| tool.spec().effect)
     }
+    pub fn call_effect(&self, call: &ToolCall) -> Option<Effect> {
+        self.registry
+            .get(&call.name)
+            .map(|tool| tool.effect(&call.arguments))
+    }
     pub async fn execute(
         &self,
         call: ToolCall,

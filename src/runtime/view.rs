@@ -9,6 +9,14 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SessionView {
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub mode: super::conversation::Mode,
+    #[serde(default)]
+    pub owner: Option<String>,
+    #[serde(default)]
+    pub queue: Vec<super::conversation::Task>,
     pub id: String,
     pub workspace: PathBuf,
     pub goal: Goal,
@@ -22,6 +30,18 @@ pub struct SessionView {
 impl From<Session> for SessionView {
     fn from(session: Session) -> Self {
         Self {
+            title: if session.title.is_empty() {
+                if session.goal.original.is_empty() {
+                    "新对话".into()
+                } else {
+                    session.goal.original.clone()
+                }
+            } else {
+                session.title
+            },
+            mode: session.mode,
+            owner: session.owner,
+            queue: session.queue,
             id: session.id,
             workspace: session.workspace,
             goal: session.goal,

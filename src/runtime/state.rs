@@ -41,6 +41,35 @@ pub struct Question {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Session {
+    /// Missing fields in historical sessions retain explicit engineering behavior.
+    #[serde(default)]
+    pub mode: super::conversation::Mode,
+    #[serde(default)]
+    pub interactive: bool,
+    #[serde(default)]
+    pub archives: Vec<super::conversation::Archive>,
+    #[serde(default)]
+    pub queue: Vec<super::conversation::Task>,
+    #[serde(default)]
+    pub boundary: Option<super::conversation::Boundary>,
+    #[serde(default)]
+    pub owner: Option<String>,
+    #[serde(default)]
+    pub owner_status: Option<Status>,
+    #[serde(default)]
+    pub compact_pending: bool,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub plan_input: Option<String>,
+    #[serde(default)]
+    pub plan_turns: Vec<String>,
+    #[serde(default)]
+    pub implementation: Option<super::conversation::Task>,
+    #[serde(default)]
+    pub suspended: Option<Actor>,
+    #[serde(default)]
+    pub turns: Vec<super::conversation::Turn>,
     #[serde(default)]
     pub evaluation: Option<crate::eval::trial::Spec>,
     #[serde(default)]
@@ -61,6 +90,8 @@ pub struct Session {
     pub graph: Graph,
     pub actors: BTreeMap<String, Actor>,
     pub actions: BTreeMap<String, Action>,
+    #[serde(default)]
+    pub settled_actions: BTreeMap<String, Action>,
     pub questions: BTreeMap<String, Question>,
     pub budget: Budget,
     pub evidence: Vec<Evidence>,
@@ -98,7 +129,25 @@ impl Session {
                 ..Scope::default()
             },
         );
+        let turns = vec![super::conversation::Turn {
+            id: main.turn.clone(),
+            text: objective.into(),
+        }];
         Self {
+            mode: Default::default(),
+            interactive: false,
+            archives: vec![],
+            queue: vec![],
+            boundary: None,
+            owner: None,
+            owner_status: None,
+            compact_pending: false,
+            title: objective.into(),
+            plan_input: None,
+            plan_turns: vec![],
+            implementation: None,
+            suspended: None,
+            turns,
             evaluation: None,
             condition: Default::default(),
             prompt_pending: false,
@@ -113,6 +162,7 @@ impl Session {
             graph: Graph::default(),
             actors: BTreeMap::from([("main".into(), main)]),
             actions: BTreeMap::new(),
+            settled_actions: BTreeMap::new(),
             questions: BTreeMap::new(),
             budget: Budget::new(tokens),
             evidence: vec![],
@@ -132,6 +182,16 @@ impl Session {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Control {
+    Plan {
+        text: Option<String>,
+    },
+    Goal {
+        text: String,
+    },
+    Side {
+        text: String,
+    },
+    Compact,
     #[serde(skip)]
     Wake,
     Message {

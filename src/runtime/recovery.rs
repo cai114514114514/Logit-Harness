@@ -34,7 +34,17 @@ pub async fn reconcile(session: &mut Session, store: &Store, logs: &Path) -> any
             }
         }
     }
-    let snapshot = Workspace::open(&session.workspace)?.fingerprints()?;
+    // A crashed chat model request does not justify discovering the project.
+    let snapshot = if session.mode == super::conversation::Mode::Engineering
+        || session
+            .actions
+            .values()
+            .any(|a| a.running && !a.pending.scope.readonly)
+    {
+        Workspace::open(&session.workspace)?.fingerprints()?
+    } else {
+        Default::default()
+    };
     let interrupted_ids: Vec<_> = session
         .actions
         .values()

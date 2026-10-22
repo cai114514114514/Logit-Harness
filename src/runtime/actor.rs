@@ -8,6 +8,7 @@ use std::collections::VecDeque;
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
+    Conversation,
     Main,
     Worker,
     Verifier,
@@ -34,6 +35,16 @@ pub struct Pending {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Actor {
+    #[serde(default = "identity")]
+    pub turn: String,
+    #[serde(default)]
+    pub response: Option<String>,
+    #[serde(default)]
+    pub compact: bool,
+    /// Promotion in plan mode is offered only for a fresh, actual user turn.
+    /// Reading tool/skill content consumes this opportunity.
+    #[serde(default)]
+    pub allow_goal: bool,
     pub id: String,
     pub role: Role,
     pub task: String,
@@ -72,6 +83,10 @@ impl Actor {
         let mut context = Context::default();
         context.user(&task);
         Self {
+            turn: identity(),
+            response: None,
+            compact: false,
+            allow_goal: false,
             id,
             role,
             task,
@@ -88,6 +103,10 @@ impl Actor {
             parent: None,
         }
     }
+}
+
+fn identity() -> String {
+    uuid::Uuid::new_v4().to_string()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

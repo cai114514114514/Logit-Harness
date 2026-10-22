@@ -11,16 +11,34 @@ use serde_json::json;
 
 impl Runner {
     pub(super) fn handle_wire(&mut self, wire: Wire) -> anyhow::Result<()> {
+        if let Wire::Model { id, .. } = &wire {
+            let Some(job) = self.jobs.get(id) else {
+                return Ok(());
+            };
+            if job.cancel.is_cancelled()
+                || job.goal != self.session.goal.id
+                || self
+                    .session
+                    .actors
+                    .get(&job.actor)
+                    .is_none_or(|a| a.retired || a.turn != job.turn)
+            {
+                return Ok(());
+            }
+        }
         match wire {
             Wire::Model {
+                id: _,
                 actor,
                 event: ModelEvent::Text(text),
             } => self.emit(EventData::Delta { actor, text })?,
             Wire::Model {
+                id: _,
                 actor: _,
                 event: ModelEvent::Reasoning(_),
             } => (),
             Wire::Model {
+                id: _,
                 actor,
                 event: ModelEvent::Retry(attempt),
             } => self.emit(EventData::Diagnostic {
@@ -59,6 +77,7 @@ impl Runner {
                 JobKind::Model {
                     reservation,
                     compact,
+                    prior,
                 },
                 ResultData::Model(result),
             ) => {
@@ -133,6 +152,9 @@ impl Runner {
                             cached: response.usage.cached,
                         })?;
                         let stale = job.cancel.is_cancelled()
+                            || job.goal != self.session.goal.id
+                            || self.session.actors[&job.actor].turn != job.turn
+                            || self.session.actors[&job.actor].retired
                             || !self.scope_current(&job.scope)
                             || job.scope.requirements.iter().any(|(id, rev)| {
                                 !self
@@ -154,7 +176,9 @@ impl Runner {
                         actor.failures = 0;
                         if compact {
                             actor.context.compact(&response.text())?;
-                            actor.phase = Phase::Ready;
+                            actor.compact = false;
+                            actor.phase = prior;
+                            self.emit(EventData::Diagnostic { message: format!("{} context compacted; current requirements and pending work retained", job.actor) })?;
                             return Ok(());
                         }
                         let calls = response.calls()?;
@@ -170,6 +194,12 @@ impl Runner {
                         if calls.is_empty() {
                             actor.phase = Phase::Done;
                             match actor.role {
+                                Role::Conversation => {
+                                    self.status(
+                                        Status::Waiting,
+                                        "response complete; waiting for user input",
+                                    )?;
+                                }
                                 Role::Main => {
                                     if self.session.prompt_pending {
                                         actor.phase = Phase::Ready;
@@ -226,6 +256,7 @@ impl Runner {
                     .remove(&action)
                     .ok_or_else(|| anyhow::anyhow!("missing action record"))?;
                 if let Err(error) = &result
+                    && !job.cancel.is_cancelled()
                     && let Some(ToolError::Approval { id, reason }) =
                         error.downcast_ref::<ToolError>()
                 {
@@ -283,6 +314,10 @@ impl Runner {
                     Err(error) => json!({"error":error.to_string()}),
                 };
                 let success = data["result"]["success"].as_bool().unwrap_or(false);
+                record.running = false;
+                self.session
+                    .settled_actions
+                    .insert(record.id.clone(), record.clone());
                 let observation = json!({"tool":record.pending.call.name,"outcome":data,"requirements":job.scope.requirements,"steps":job.scope.steps});
                 let actor = self.session.actors.get_mut(&job.actor).unwrap();
                 actor

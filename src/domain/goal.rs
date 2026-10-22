@@ -15,6 +15,9 @@ pub struct Requirement {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Goal {
+    /// Stable across revisions. Old snapshots receive an identity on first load.
+    #[serde(default = "goal_id")]
+    pub id: String,
     pub original: String,
     pub revision: u64,
     /// Unscoped additions/replacements invalidate every old dependency assumption.
@@ -69,6 +72,7 @@ impl Goal {
             active: true,
         };
         Self {
+            id: goal_id(),
             original: text.into(),
             revision: 1,
             epoch: 0,
@@ -242,4 +246,8 @@ impl Goal {
             requirements: self.requirements.clone(),
         });
     }
+}
+
+fn goal_id() -> String {
+    uuid::Uuid::new_v4().to_string()
 }

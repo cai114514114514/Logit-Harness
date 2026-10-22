@@ -21,6 +21,15 @@ pub enum Status {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventData {
+    /// Correlates legacy events with stable user-turn, response and goal IDs.
+    /// Tool events retain their action ID; model deltas use the response ID.
+    Identity {
+        actor: String,
+        response: String,
+        turn: String,
+        goal: Option<String>,
+        action: Option<String>,
+    },
     ModelRequested {
         actor: String,
         artifact: String,

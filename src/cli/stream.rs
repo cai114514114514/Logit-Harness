@@ -27,7 +27,7 @@ pub async fn attach(paths: &Paths, id: &str, after: u64, json: bool) -> anyhow::
             match &message {
                 ServerMessage::Snapshot { state, .. } => println!(
                     "Logit- Harness {} · {:?}\n{}",
-                    state.id, state.status, state.goal.original
+                    state.id, state.status, state.title
                 ),
                 ServerMessage::Event { event } => match &event.data {
                     EventData::Message { actor, text } => println!("\n{actor}: {text}"),

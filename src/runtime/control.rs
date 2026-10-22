@@ -10,7 +10,42 @@ use crate::{
 
 impl Runner {
     pub(super) async fn handle_control(&mut self, control: Control) -> anyhow::Result<()> {
+        if self.session.interactive
+            && self.session.status == Status::Completed
+            && self.jobs.is_empty()
+        {
+            self.settle_boundary().await?;
+        }
         match control {
+            Control::Plan { text } => {
+                let turn = text.as_ref().map(|text| self.record_turn(text));
+                self.request_boundary(super::conversation::Boundary::Plan { text, turn })?;
+            }
+            Control::Goal { text } => {
+                if text.trim().is_empty() {
+                    self.emit(EventData::Diagnostic {
+                        message: "goal cannot be empty".into(),
+                    })?;
+                } else if self.session.active_goal().is_some() {
+                    self.submit_work_message(text)?;
+                } else {
+                    let turn = self.record_turn(&text);
+                    self.request_boundary(
+                        if self.session.mode == super::conversation::Mode::Plan {
+                            super::conversation::Boundary::Implement { text, turn }
+                        } else {
+                            super::conversation::Boundary::Goal { text, turn }
+                        },
+                    )?;
+                }
+            }
+            Control::Side { text } => self.side_question(text)?,
+            Control::Compact => {
+                self.session.compact_pending = true;
+                self.emit(EventData::Diagnostic {
+                    message: "compaction requested; waiting for in-flight tools to settle".into(),
+                })?;
+            }
             Control::Answer { id, text } => {
                 self.emit(EventData::User {
                     message: text.clone(),
@@ -26,11 +61,19 @@ impl Runner {
                 Status::Paused,
                 "pause requested; cancelling active operations",
             )?,
-            Control::Stop => self.halt(
-                Status::Stopped,
-                "stop requested; cancelling active operations",
-            )?,
+            Control::Stop => {
+                self.session.boundary = None;
+                self.session.compact_pending = false;
+                self.halt(
+                    Status::Stopped,
+                    "stop requested; cancelling active operations",
+                )?;
+            }
             Control::Resume => {
+                if self.session.mode != super::conversation::Mode::Engineering {
+                    self.emit(EventData::Diagnostic { message: "conversation has no paused engineering execution; submit an explicit goal to implement".into() })?;
+                    return Ok(());
+                }
                 // A resume received during cancellation changes its destination;
                 // it must not launch replacements before the old work has exited.
                 if self.session.transition.is_some() {
@@ -101,23 +144,37 @@ impl Runner {
                 if matches!(trimmed, "pause" | "暂停" | "等一下" | "等一下，停着") {
                     return self.halt(Status::Paused, "user requested pause");
                 }
-                let id = uuid::Uuid::new_v4().to_string();
-                let prompt_only = self.session.condition == super::condition::Condition::Prompt;
-                self.session.inbox.push(UserMessage {
-                    id,
-                    text: text.clone(),
-                    applied: prompt_only,
-                    prior: self.session.status.clone(),
-                    revision: self.session.goal.revision,
-                });
-                if prompt_only {
-                    self.append_prompt_correction(&text);
+                if self.session.mode != super::conversation::Mode::Engineering {
+                    self.emit(EventData::User {
+                        message: text.clone(),
+                    })?;
+                    return self.conversation_message(text);
                 }
-                self.emit(EventData::User { message: text })?;
-                if matches!(self.session.status, Status::Completed | Status::Waiting) {
-                    self.status(Status::Running, "received new user input")?;
-                }
+                self.submit_work_message(text)?;
             }
+        }
+        Ok(())
+    }
+    fn submit_work_message(&mut self, text: String) -> anyhow::Result<()> {
+        let id = uuid::Uuid::new_v4().to_string();
+        self.session.turns.push(super::conversation::Turn {
+            id: id.clone(),
+            text: text.clone(),
+        });
+        let prompt_only = self.session.condition == super::condition::Condition::Prompt;
+        self.session.inbox.push(UserMessage {
+            id,
+            text: text.clone(),
+            applied: prompt_only,
+            prior: self.session.status.clone(),
+            revision: self.session.goal.revision,
+        });
+        if prompt_only {
+            self.append_prompt_correction(&text);
+        }
+        self.emit(EventData::User { message: text })?;
+        if matches!(self.session.status, Status::Completed | Status::Waiting) {
+            self.status(Status::Running, "received new user input")?;
         }
         Ok(())
     }
@@ -131,7 +188,7 @@ impl Runner {
             return;
         }
         if let Some(message) = self.session.inbox.iter().find(|m| !m.applied) {
-            let actor = Actor::new(
+            let mut actor = Actor::new(
                 format!("steer-{}", message.id),
                 Role::Steering,
                 message.text.clone(),
@@ -141,6 +198,15 @@ impl Runner {
                     ..Scope::default()
                 },
             );
+            actor.turn = message.id.clone();
+            if let Some(task) = self
+                .session
+                .implementation
+                .as_ref()
+                .filter(|task| task.id == message.id)
+            {
+                actor.turn = task.turn.clone();
+            }
             self.session.actors.insert(actor.id.clone(), actor);
         }
     }
@@ -155,5 +221,16 @@ impl Runner {
             }
         }
         Ok(())
+    }
+    fn record_turn(&mut self, text: &str) -> String {
+        if self.session.title.trim().is_empty() && !text.trim().is_empty() {
+            self.session.title = text.into();
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        self.session.turns.push(super::conversation::Turn {
+            id: id.clone(),
+            text: text.into(),
+        });
+        id
     }
 }

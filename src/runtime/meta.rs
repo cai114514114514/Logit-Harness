@@ -142,6 +142,12 @@ impl Runner {
             }
             _ => return Ok(false),
         }
+        let actor = self.session.actors.get_mut(actor_id).unwrap();
+        if actor.busy == 0 && actor.context.unanswered().contains(&pending.call.id) {
+            actor
+                .context
+                .tool_result(&pending.call.id, &json!({"accepted":true}));
+        }
         Ok(true)
     }
 }

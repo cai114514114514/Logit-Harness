@@ -114,7 +114,11 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             } else {
                 vec![]
             };
-            let summaries:Vec<_>=rows.into_iter().map(|(id,state)|json!({"id":id,"status":state["status"],"objective":state["goal"]["original"],"workspace":state["workspace"]})).collect();
+            let summaries: Vec<_> = rows.into_iter().map(|(id, state)| {
+                let title = state["title"].as_str().filter(|title| !title.is_empty())
+                    .or_else(|| state["goal"]["original"].as_str().filter(|title| !title.is_empty())).unwrap_or("新对话");
+                json!({"id":id,"status":state["status"],"objective":title,"workspace":state["workspace"]})
+            }).collect();
             if json {
                 println!("{}", serde_json::to_string(&summaries)?);
             } else {
@@ -139,7 +143,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             );
             paths.prepare()?;
             let store = Store::open(&paths.database())?;
-            let mut session = Session::new(cwd, &prompt, config.tokens, config.seconds);
+            let mut session = Session::conversation(cwd, &prompt, config.tokens, config.seconds);
             session.campaign = config.campaign.clone();
             store.commit(
                 &session.id,

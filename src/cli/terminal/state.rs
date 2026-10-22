@@ -240,7 +240,7 @@ impl Screen {
                 session.goal.revision,
                 session.goal.active_versions().len(),
                 session.graph.steps.len(),
-                session.goal.original
+                session.title
             ),
             None => "正在连接会话…".into(),
         }

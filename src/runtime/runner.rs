@@ -40,18 +40,33 @@ impl Default for Settings {
 }
 
 pub(super) enum Wire {
-    Model { actor: String, event: ModelEvent },
-    Tool { id: String, event: ToolEvent },
+    Model {
+        id: String,
+        actor: String,
+        event: ModelEvent,
+    },
+    Tool {
+        id: String,
+        event: ToolEvent,
+    },
 }
 pub(super) enum ResultData {
     Model(anyhow::Result<Response>),
     Tool(anyhow::Result<ToolResult>),
 }
 pub(super) enum JobKind {
-    Model { reservation: String, compact: bool },
-    Tool { action: String },
+    Model {
+        reservation: String,
+        compact: bool,
+        prior: super::actor::Phase,
+    },
+    Tool {
+        action: String,
+    },
 }
 pub(super) struct Job {
+    pub goal: String,
+    pub turn: String,
     pub actor: String,
     pub scope: Scope,
     pub cancel: CancellationToken,
@@ -59,6 +74,8 @@ pub(super) struct Job {
 }
 
 pub struct Runner {
+    pub(super) lease: Option<super::ownership::Lease>,
+    pub(super) recover: bool,
     clock: super::clock::Clock,
     observer: Option<Arc<dyn Observer>>,
     pub(super) session: Session,
@@ -90,6 +107,8 @@ impl Runner {
         let (send, wire) = mpsc::unbounded_channel();
         (
             Self {
+                lease: None,
+                recover: false,
                 clock: super::clock::Clock::new(),
                 observer: None,
                 session,
@@ -124,6 +143,10 @@ impl Runner {
         self.observer = Some(observer);
         self
     }
+    pub fn recover_on_start(mut self) -> Self {
+        self.recover = true;
+        self
+    }
     pub(super) fn status(&mut self, status: Status, reason: &str) -> anyhow::Result<()> {
         self.account_time()?;
         self.session.status = status.clone();
@@ -136,6 +159,10 @@ impl Runner {
         self.session.inbox.iter().any(|m| !m.applied)
     }
     pub async fn run(mut self) -> anyhow::Result<Session> {
+        if self.recover && self.session.mode != super::conversation::Mode::Engineering {
+            super::recovery::reconcile(&mut self.session, &self.store, &self.tools.logs).await?;
+            self.recover = false;
+        }
         self.refresh_plan().await?;
         self.refresh_questions().await;
         if self.session.status == Status::Ready {
@@ -143,6 +170,12 @@ impl Runner {
         }
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
         loop {
+            // Reconcile a restarted engineering owner before consuming controls
+            // that might replace its actors or discard interrupted write records.
+            if self.recover && !self.execution_owner().await? {
+                tick.tick().await;
+                continue;
+            }
             self.check_time()?;
             self.drain_inbox().await?;
             while let Ok(control) = self.control.try_recv() {
@@ -152,8 +185,15 @@ impl Runner {
                 if let Some(target) = self.session.transition.take() {
                     self.status(target, "all active operations have settled")?;
                 }
+                self.settle_boundary().await?;
+                self.execution_owner().await?;
+                self.prepare_compaction()?;
                 if self.session.status == Status::Stopped
                     || (!self.settings.linger
+                        && self.session.owner.is_none()
+                        && !self.frozen()
+                        && self.session.implementation.is_none()
+                        && !self.session.actors.values().any(|a| a.compact)
                         && matches!(
                             self.session.status,
                             Status::Completed
@@ -168,7 +208,7 @@ impl Runner {
             if self.session.transition.is_none()
                 && matches!(
                     self.session.status,
-                    Status::Running | Status::Waiting | Status::Paused
+                    Status::Running | Status::Waiting | Status::Paused | Status::Completed
                 )
                 && self.schedule().await?
             {

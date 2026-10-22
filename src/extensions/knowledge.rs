@@ -13,7 +13,7 @@ pub struct Knowledge {
 impl Knowledge {
     pub fn new(workspace: PathBuf, user_roots: Vec<PathBuf>) -> anyhow::Result<Self> {
         Ok(Self {
-            skills: RwLock::new(Skills::discover(&workspace, &user_roots)?),
+            skills: RwLock::new(Skills::default()),
             instructions: Instructions::new(workspace.clone()),
             workspace,
             user_roots,
@@ -36,6 +36,7 @@ impl Knowledge {
     }
     /// Refresh scoped AGENTS.md on every model request, including after compaction or resume.
     pub fn prompt(&self, scope: &mut Scope) -> anyhow::Result<String> {
+        self.refresh()?;
         let instructions = self
             .instructions
             .for_paths(&scope.observed.keys().cloned().collect::<Vec<_>>())?;

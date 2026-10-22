@@ -15,6 +15,7 @@ use tokio_util::sync::CancellationToken;
 impl Runner {
     pub(super) async fn schedule(&mut self) -> anyhow::Result<bool> {
         let mut progressed = false;
+        let owned = self.execution_owner().await?;
         self.start_steering();
         if self.session.replan_pending {
             if !self.jobs.is_empty() {
@@ -38,13 +39,26 @@ impl Runner {
             }
         });
         for id in ids {
+            if self.session.transition.is_some() {
+                break;
+            }
             if self.session.actors[&id].retired || self.session.actors[&id].phase == Phase::Blocked
             {
                 continue;
             }
             let role = self.session.actors[&id].role.clone();
+            if !owned && !matches!(role, Role::Conversation | Role::Question | Role::Steering) {
+                continue;
+            }
+            if self.session.status == Status::Completed
+                && !self.session.actors[&id].compact
+                && !matches!(role, Role::Question | Role::Steering)
+            {
+                continue;
+            }
             if self.session.status == Status::Paused
                 && !matches!(role, Role::Steering | Role::Question)
+                && !self.session.actors[&id].compact
             {
                 continue;
             }
@@ -78,6 +92,32 @@ impl Runner {
                 .pop_front()
             {
                 progressed = true;
+                // Host readonly scopes are a second gate. The conversational
+                // boundary also rejects engineering meta-tools, including tools
+                // a provider emits despite their absence from its definitions.
+                let allowed = self.conversation_call(&id, &pending).await;
+                match allowed {
+                    Ok(true) => continue,
+                    Ok(false) => (),
+                    Err(error) => {
+                        let actor = self.session.actors.get_mut(&id).unwrap();
+                        actor
+                            .context
+                            .tool_result(&pending.call.id, &json!({"error":error.to_string()}));
+                        actor.phase = if actor.pending.is_empty() {
+                            Phase::Ready
+                        } else {
+                            Phase::Awaiting
+                        };
+                        self.emit(EventData::Diagnostic {
+                            message: format!(
+                                "conversation boundary rejected {}: {error}",
+                                pending.call.name
+                            ),
+                        })?;
+                        continue;
+                    }
+                }
                 match self.special_call(&id, &pending).await {
                     Ok(true) => continue,
                     Ok(false) => (),
@@ -101,7 +141,7 @@ impl Runner {
                 self.start_tool(&id, pending).await?;
                 continue;
             }
-            if self.session.actors[&id].phase == Phase::Ready {
+            if self.session.actors[&id].phase == Phase::Ready || self.session.actors[&id].compact {
                 let active = self
                     .jobs
                     .values()
@@ -145,7 +185,11 @@ impl Runner {
                 actor.scope.requirements = self.session.goal.active_versions();
             }
         }
-        let guidance = if let Some(knowledge) = &self.tools.knowledge {
+        let guidance = if matches!(
+            actor.role,
+            Role::Main | Role::Worker | Role::Verifier | Role::Diagnosis
+        ) && let Some(knowledge) = &self.tools.knowledge
+        {
             knowledge.prompt(&mut actor.scope)?
         } else {
             String::new()
@@ -165,7 +209,15 @@ impl Runner {
         if actor.role == Role::Steering {
             tools.clear();
         }
+        if matches!(actor.role, Role::Conversation | Role::Question) {
+            tools.retain(|v| {
+                self.tools.effect(v["name"].as_str().unwrap_or("")) == Some(Effect::Read)
+            });
+        }
         tools.extend(prompts::special(&actor.role));
+        if actor.role == Role::Conversation && !actor.allow_goal {
+            tools.retain(|v| v["name"] != "begin_goal");
+        }
         if actor.role == Role::Worker
             && let Some(mut proposal) = self
                 .tools
@@ -193,8 +245,9 @@ impl Runner {
                 }
             }
         }
-        let compact = actor.role != Role::Steering
-            && serde_json::to_vec(&actor.context.items)?.len() > self.settings.context_limit;
+        let compact = actor.compact
+            || (actor.role != Role::Steering
+                && serde_json::to_vec(&actor.context.items)?.len() > self.settings.context_limit);
         let state = prompts::state(&self.session, actor, &guidance);
         let instructions = prompts::instructions(&actor.role, &self.session);
         let actor = self.session.actors.get_mut(actor_id).unwrap();
@@ -237,6 +290,7 @@ impl Runner {
             }
         };
         let actor = self.session.actors.get_mut(actor_id).unwrap();
+        let prior = actor.phase.clone();
         actor.phase = Phase::Busy;
         actor.busy += 1;
         actor.turns += 1;
@@ -245,6 +299,15 @@ impl Runner {
             self.session.prompt_pending = false;
         }
         let id = uuid::Uuid::new_v4().to_string();
+        let turn = self.session.actors[actor_id].turn.clone();
+        self.session.actors.get_mut(actor_id).unwrap().response = Some(id.clone());
+        self.emit(EventData::Identity {
+            actor: actor_id.into(),
+            response: id.clone(),
+            turn: turn.clone(),
+            goal: self.session.active_goal().map(|g| g.id.clone()),
+            action: None,
+        })?;
         let artifact = self.tools.logs.join(format!("{id}.request.json"));
         std::fs::create_dir_all(&self.tools.logs)?;
         std::fs::write(
@@ -262,23 +325,28 @@ impl Runner {
         self.jobs.insert(
             id.clone(),
             Job {
+                goal: self.session.goal.id.clone(),
+                turn,
                 actor: actor_id.into(),
                 scope,
                 cancel,
                 kind: JobKind::Model {
                     reservation,
                     compact,
+                    prior,
                 },
             },
         );
         let provider = self.provider.clone();
         let send = self.send.clone();
         let actor = actor_id.to_owned();
+        let response_id = id.clone();
         self.tasks.spawn(async move {
             let (output, mut receiver) = mpsc::unbounded_channel();
             let relay = tokio::spawn(async move {
                 while let Some(event) = receiver.recv().await {
                     let _ = send.send(Wire::Model {
+                        id: response_id.clone(),
                         actor: actor.clone(),
                         event,
                     });
@@ -295,6 +363,12 @@ impl Runner {
         actor_id: &str,
         mut pending: super::actor::Pending,
     ) -> anyhow::Result<()> {
+        if matches!(
+            self.session.actors[actor_id].role,
+            Role::Conversation | Role::Question
+        ) {
+            pending.scope.readonly = true;
+        }
         pending.scope.approvals = self.session.approvals.clone();
         let id = uuid::Uuid::new_v4().to_string();
         self.session.actions.insert(
@@ -321,6 +395,14 @@ impl Runner {
             steps: pending.scope.steps.clone(),
             observed: pending.scope.observed.clone(),
         })?;
+        let actor = &self.session.actors[actor_id];
+        self.emit(EventData::Identity {
+            actor: actor_id.into(),
+            response: actor.response.clone().unwrap_or_default(),
+            turn: actor.turn.clone(),
+            goal: self.session.active_goal().map(|g| g.id.clone()),
+            action: Some(id.clone()),
+        })?;
         self.emit(EventData::ActionStarted {
             id: id.clone(),
             tool: pending.call.name.clone(),
@@ -332,6 +414,8 @@ impl Runner {
         self.jobs.insert(
             id.clone(),
             Job {
+                goal: self.session.goal.id.clone(),
+                turn: self.session.actors[actor_id].turn.clone(),
                 actor: actor_id.into(),
                 scope,
                 cancel,

@@ -18,6 +18,15 @@ use tokio::{
 fn model_response(request: &Value) -> Value {
     let instruction = request["instructions"].as_str().unwrap_or("");
     let history = request["input"].as_array().unwrap();
+    if instruction.starts_with("ROLE: conversation") {
+        if history
+            .first()
+            .is_some_and(|item| item["content"] == "hello")
+        {
+            return json!([{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Hello!"}]}]);
+        }
+        return json!([{"type":"function_call","call_id":"begin-fixture","name":"begin_goal","arguments":"{}"}]);
+    }
     let outputs: Vec<_> = history
         .iter()
         .filter(|item| item["type"] == "function_call_output")
@@ -34,6 +43,12 @@ fn model_response(request: &Value) -> Value {
             ("read_file", json!({"path":"result.txt"}))
         }
     } else if outputs.is_empty() {
+        if history
+            .first()
+            .is_some_and(|item| item["content"] == "Inspect result.txt")
+        {
+            return json!([{"type":"function_call","call_id":"inspect-fixture","name":"read_file","arguments":"{\"path\":\"result.txt\"}"}]);
+        }
         if history
             .first()
             .is_some_and(|item| item["content"] == "Crash recovery fixture")
@@ -209,9 +224,15 @@ async fn respond(mut socket: tokio::net::TcpStream, gate: Arc<Semaphore>) {
         bytes.extend_from_slice(&buffer[..n]);
     }
     let request: Value = serde_json::from_slice(&bytes[head..head + length]).unwrap();
-    let permit = gate.acquire().await.unwrap();
-    permit.forget();
-    gate.add_permits(1);
+    if !request["instructions"]
+        .as_str()
+        .unwrap_or("")
+        .starts_with("ROLE: conversation")
+    {
+        let permit = gate.acquire().await.unwrap();
+        permit.forget();
+        gate.add_permits(1);
+    }
     let body = format!(
         "data: {}\n\n",
         json!({"type":"response.completed","response":{
@@ -228,6 +249,135 @@ async fn respond(mut socket: tokio::net::TcpStream, gate: Arc<Semaphore>) {
 
 struct Cleanup {
     paths: Paths,
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn independent_chat_daemons_share_workspace_only_at_execution_boundaries() {
+    let workspace = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let paths = Paths::new(state.path().join("state"));
+    paths.prepare().unwrap();
+    let _cleanup = Cleanup {
+        paths: paths.clone(),
+    };
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    std::fs::write(
+        paths.home.join("config.toml"),
+        format!("base_url = \"{base}\"\nmax_output = 1024\n"),
+    )
+    .unwrap();
+    loh::config::api::save(&paths, &base, Some("fixture")).unwrap();
+    let gate = Arc::new(Semaphore::new(0));
+    let server_gate = gate.clone();
+    let server = tokio::spawn(async move {
+        loop {
+            let (socket, _) = listener.accept().await.unwrap();
+            tokio::spawn(respond(socket, server_gate.clone()));
+        }
+    });
+    let launch = |input: &'static str| {
+        let paths = paths.clone();
+        let root = workspace.path().to_owned();
+        async move {
+            let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_loh"))
+                .args([
+                    "--home",
+                    paths.home.to_str().unwrap(),
+                    "--cwd",
+                    root.to_str().unwrap(),
+                    "run",
+                    input,
+                    "--detach",
+                    "--json",
+                ])
+                .env_remove("DEEPSEEK_API_KEY")
+                .output()
+                .await
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            serde_json::from_slice::<Value>(&output.stdout).unwrap()["id"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        }
+    };
+    let first = launch("Write result.txt").await;
+    let store = Store::open(&paths.database()).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let state: Session = store.load(&first).unwrap();
+            if state.active_goal().is_some() && state.actors["main"].busy > 0 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let second = tokio::time::timeout(Duration::from_secs(5), launch("hello"))
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while store.load::<Session>(&second).unwrap().status != Status::Waiting {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(
+        store
+            .load::<Session>(&second)
+            .unwrap()
+            .active_goal()
+            .is_none()
+    );
+    loh::runtime::daemon::command(
+        &paths,
+        &second,
+        Control::Goal {
+            text: "Inspect result.txt".into(),
+        },
+    )
+    .await
+    .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while store.load::<Session>(&second).unwrap().owner.is_none() {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let waiting: Session = store.load(&second).unwrap();
+    assert_eq!(waiting.owner.as_deref(), Some(first.as_str()));
+    assert_eq!(waiting.actors["main"].turns, 0);
+    gate.add_permits(1);
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while store.load::<Session>(&second).unwrap().status != Status::Completed {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        store.load::<Session>(&first).unwrap().status,
+        Status::Completed
+    );
+    assert!(
+        tokio::net::UnixStream::connect(paths.socket(&first).unwrap())
+            .await
+            .is_ok()
+    );
+    assert!(
+        tokio::net::UnixStream::connect(paths.socket(&second).unwrap())
+            .await
+            .is_ok()
+    );
+    server.abort();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
