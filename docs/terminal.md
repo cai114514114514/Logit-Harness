@@ -160,9 +160,22 @@ See [the UI review](terminal-review.md) for the comparison and scope.
 The subsequent conversation-layout correction is exercised by `tests/pty/layout.py` and
 `tests/pty/interaction.py`: bottom docking, one startup brand, once-only settled scrollback,
 mode prompts, CJK editing, menu/detail return, resizing, setup masking and cancellation.
-Current colored grid captures and machine-readable receipts are in `artifacts/terminal-layout`
-and `artifacts/terminal-layout-integrated`. Native terminal reflow remains owned by the terminal;
+Historical development captures are in `artifacts/terminal-layout` and
+`artifacts/terminal-layout-integrated`; delivery evidence is under `artifacts/interaction-delivery`.
+Native terminal reflow remains owned by the terminal;
 opening a taller menu can move settled rows into scrollback. Closing it clears only the old
 active area and leaves reusable space above the bottom input; later output fills that space.
 Repeated menu/editor toggles do not add blank rows to completed records or separate their
 headings from their text.
+
+The PTY scripts require Python with `pexpect`, `pyte` and Pillow on macOS. For an isolated
+test environment, install those packages in a virtual environment, then run:
+
+```sh
+python tests/pty/layout.py --binary /opt/homebrew/bin/loh --output artifacts/layout-check
+python tests/pty/interaction.py --binary /opt/homebrew/bin/loh --output artifacts/interaction-check
+```
+
+Both scripts use temporary state/workspace directories and a localhost provider. They do not use
+the user's credentials, clipboard, sessions or paid model allowance. The renderer comes from
+`tests/pty/grid.py`; screenshots are captured character grids, not native-window acceptance.

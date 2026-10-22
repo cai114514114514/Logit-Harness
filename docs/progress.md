@@ -624,3 +624,43 @@ Spec: docs/spec.md
 - At this checkpoint, broad final review, final-source release/install, installed-binary PTY,
   bounded real Flash samples and the final package remain delivery gates. The prior real greeting
   and frozen research results above are not presented as verification of this new executable.
+
+## Clear CLI rebuild and interaction delivery
+
+- The user's conversation-layout correction replaces the earlier welcome-style active header.
+  The blue L is committed once per client; input and usage sit at the physical bottom after entering
+  a conversation, including `/new`, menu/detail return and resize. Conversation, Plan and Engineering
+  have distinct prompts. The active area shows actual work, elapsed time, wait reasons and complete
+  actionable IDs; compact tools retain failure tails and source-truncation warnings.
+- Product commits `21ac1d5`, `3225c98` and `db0253b` implement and correct the rebuild. Independent
+  review exposed cumulative blank rows from reverse-index scrolling. Tracking the committed-output
+  boundary separately fixed that defect: three menu cycles and three nested editor/menu cycles
+  preserve all 38 original settled rows exactly, including headings and blanks. Later replies reuse
+  released space. The initial “bounded blank band” interpretation was wrong and is withdrawn.
+- Full regression exposed a hidden source-truncation notice; the original failing test was retained,
+  structured source-limit notices now survive compact folding, and scoped review accepted the fix.
+  Final locked all-target suite: **237 passed, 0 failed** in 51 groups; formatting, strict Clippy and
+  locked release build passed. Logs: `artifacts/interaction-delivery/final`.
+- Integrated fixes `fd5e937` and `fab5f1d` also close complete isolated `/diff`, full persisted
+  stream retention in history/search/copy, read-only resume and elapsed-time enforcement, and
+  valid absolute/directory instruction scopes. Escaping paths remain rejected. Task reviews,
+  whole-branch audit and scoped corrections have no open load-bearing implementation finding.
+- Installed `/opt/homebrew/bin/loh` is macOS ARM64 with a verified ad-hoc signature. Source hash:
+  `2a1ed33994e889325e08eda817d1f45a5405abeb05115d5f51591629b5e4faf0`; executable SHA-256:
+  `d864e5cab85411e13b315012849b074602094196cdeeb488b32f94dfa8b3510b`.
+  Installation was atomic. Existing user daemons and the unrelated local review document were
+  preserved; new clients use the new UI, while new conversations use the updated runtime.
+- Installed-source layout, integrated interaction and Enter PTY checks all passed, with matching
+  source/binary hashes and 19 total localhost requests. The 401-event history, source output,
+  cancellation, setup masking, Chinese input and detail return remain functional. Colored actual
+  PTY grids were visually inspected; these are not native Apple Terminal-window screenshots.
+- Real Flash passed hello, thanks and knowledge samples in one request each, with no tools/goals
+  or project initialization. Reported input cache hit across those samples: 76.58%. The project-read
+  case remains unaccepted: ambiguous byte-limit wording led to two short reads before a successful
+  full read, and the bounded probe cancelled the following request before its answer. This is not
+  evidence of a completed project answer or broader reliability gain. Exact observations and the
+  next research item are retained in `flash-analysis.json` and [acceptance](acceptance.md).
+- The shared 50 RMB ledger remains authoritative: settled used 19.77662472, uncertain 30.220288,
+  reserved 0, conservative available 0.00308728 RMB. No additional model reservation fits; no cap
+  or historical uncertainty was changed. Frozen research executable SHA-256 remains
+  `41242b0b92eae3a9c3103099e088cebfd86cb27922781020f60134ad4827533d`.

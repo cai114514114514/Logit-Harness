@@ -4,6 +4,45 @@ Product: **Logit- Harness**. Command: **`loh`**. macOS ARM64, version 0.1.0.
 The installed executable is `/opt/homebrew/bin/loh`. Configure credentials with `/setup`, `loh setup`
 or `DEEPSEEK_API_KEY`. Build and use instructions are in [README](../README.md).
 
+## Current interaction build
+
+The conversation CLI was rebuilt with a single startup blue L, bottom-docked input, mode-specific
+prompts, measured activity and compact tools with explicit source-truncation notices. Completed
+records remain in native scrollback. Repeated menu/editor transitions preserve the complete row
+sequence; full tool streams and final metadata remain searchable, expandable and exportable.
+
+- Product commit: `db0253b`; source hash:
+  `2a1ed33994e889325e08eda817d1f45a5405abeb05115d5f51591629b5e4faf0`.
+- Full locked all-target regression: **237 passed, 0 failed**, 51 result groups. Formatting,
+  strict all-target Clippy and the locked release build passed.
+- macOS ARM64 release installed atomically with verified local ad-hoc signature. Executable SHA-256:
+  `d864e5cab85411e13b315012849b074602094196cdeeb488b32f94dfa8b3510b`.
+- Review corrections also cover isolated complete `/diff`, preserved persisted tool streams,
+  read-only resume with elapsed-time enforcement, and valid contained instruction-directory paths.
+- Source-matched delivery logs and receipts: `artifacts/interaction-delivery/final`.
+  Earlier checkpoint evidence is retained separately and does not establish this build's results.
+- Installed-binary macOS PTY layout, interaction and Enter checks passed: 11 + 7 + 1 localhost
+  fixture requests, zero paid requests. Captures cover three menu cycles, three nested editor/menu
+  cycles, subsequent replies, narrow/tall resize, one startup brand, background work across `/new`,
+  cancellation, masked setup and 401-event searchable history. Source and executable hashes match
+  the installation receipt. Colored grids were visually inspected; native-window acceptance is
+  still not claimed.
+- Real Flash greeting, thanks and knowledge samples each completed in one request with no tools,
+  goals, workers, verifier or project guidance. Their aggregate reported input cache hit was
+  4,736 / 6,184 tokens (76.58%). This is a small functional sample, not a controlled cache gain.
+- The real project-read sample is **not accepted**: the model treated an unspecified `limit` as
+  line count, first reading 5 and 1 bytes, then obtaining the complete file with 300. The probe's
+  request-count guard cancelled the fifth request before its answer. Tool byte units need clearer
+  model-facing documentation and a subsequent paid retest; the CLI fixtures do not prove that
+  model behavior. Read-only boundaries held and the workspace remained unchanged.
+- This probe added 0.0087644 RMB of settled configured-rate charges and 2.105344 RMB of uncertainty
+  for the cancelled request. The unchanged 50 RMB account now has used 19.77662472, uncertain
+  30.220288, reserved 0 and conservative available 0.00308728 RMB. No uncertainty was cleared or
+  budget reset; another full reservation does not fit. See `flash.json` and `flash-analysis.json`.
+
+The frozen research executable and its real correction example below are unchanged. They are not
+replaced by the interaction build or counted as evidence of a new reliability improvement.
+
 ## Frozen research executable
 
 The following measurements belong to the frozen research build. Later cache, terminal and API
