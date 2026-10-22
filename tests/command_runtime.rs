@@ -147,12 +147,236 @@ fn project() -> tempfile::TempDir {
     std::fs::write(root.path().join("README.md"), "fixture project").unwrap();
     root
 }
+
+fn git(root: &std::path::Path, args: &[&str]) -> String {
+    let output = std::process::Command::new("git")
+        .args(args)
+        .current_dir(root)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).trim().into()
+}
+
+#[tokio::test]
+async fn read_only_review_never_executes_repository_helpers() {
+    use std::os::unix::fs::PermissionsExt;
+    for helper in ["fsmonitor", "clean", "process", "submodule"] {
+        let root = project();
+        let outside = tempfile::tempdir().unwrap();
+        let marker = outside.path().join("executed");
+        let script = outside.path().join("helper");
+        std::fs::write(
+            &script,
+            format!("#!/bin/sh\nprintf invoked > '{}'\ncat\n", marker.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
+        git(root.path(), &["init", "--quiet"]);
+        std::fs::write(root.path().join("file.txt"), "before\n").unwrap();
+        git(root.path(), &["add", "file.txt"]);
+        std::fs::write(root.path().join("file.txt"), "after\n").unwrap();
+        match helper {
+            "fsmonitor" => {
+                git(
+                    root.path(),
+                    &["config", "core.fsmonitor", script.to_str().unwrap()],
+                );
+            }
+            "clean" | "process" => {
+                git(
+                    root.path(),
+                    &[
+                        "config",
+                        &format!("filter.attack.{helper}"),
+                        script.to_str().unwrap(),
+                    ],
+                );
+                std::fs::write(root.path().join(".gitattributes"), "*.txt filter=attack\n")
+                    .unwrap();
+            }
+            _ => {
+                let nested = root.path().join("nested");
+                std::fs::create_dir(&nested).unwrap();
+                git(&nested, &["init", "--quiet"]);
+                std::fs::write(nested.join("inner"), "before").unwrap();
+                git(&nested, &["add", "inner"]);
+                git(
+                    &nested,
+                    &[
+                        "-c",
+                        "user.name=Fixture",
+                        "-c",
+                        "user.email=fixture@example.test",
+                        "commit",
+                        "--quiet",
+                        "-m",
+                        "fixture",
+                    ],
+                );
+                let head = git(&nested, &["rev-parse", "HEAD"]);
+                git(
+                    root.path(),
+                    &[
+                        "update-index",
+                        "--add",
+                        "--cacheinfo",
+                        &format!("160000,{head},nested"),
+                    ],
+                );
+                std::fs::write(nested.join("inner"), "after").unwrap();
+                git(
+                    &nested,
+                    &["config", "core.fsmonitor", script.to_str().unwrap()],
+                );
+            }
+        }
+        let index = std::fs::read(root.path().join(".git/index")).unwrap();
+        let knowledge = Arc::new(Knowledge::new(root.path().into(), vec![]).unwrap());
+        let tool = loh::extensions::skills::tools(knowledge)
+            .into_iter()
+            .find(|tool| tool.spec().name == "project_diff")
+            .unwrap();
+        let (events, _) = mpsc::unbounded_channel();
+        let result = tool
+            .call(
+                json!({}),
+                loh::tools::ToolContext {
+                    workspace: Workspace::open(root.path()).unwrap(),
+                    logs: outside.path().join("logs"),
+                    id: "inspection".into(),
+                    scope: loh::tools::Scope {
+                        readonly: true,
+                        ..Default::default()
+                    },
+                },
+                CancellationToken::new(),
+                events,
+            )
+            .await;
+        assert!(
+            !marker.exists(),
+            "{helper} ran outside the read-only workspace"
+        );
+        let result = result.unwrap();
+        assert!(
+            result.data["unstaged"]["text"]
+                .as_str()
+                .unwrap()
+                .contains("+after"),
+            "working tree diff must remain useful"
+        );
+        assert!(
+            result.data["staged"]["text"]
+                .as_str()
+                .unwrap()
+                .contains("+before")
+        );
+        assert_eq!(
+            std::fs::read(root.path().join(".git/index")).unwrap(),
+            index
+        );
+    }
+}
 fn workflow(attack: bool, file: &str) -> Arc<Workflow> {
     Arc::new(Workflow {
         requests: Mutex::new(vec![]),
         attack,
         file: file.into(),
     })
+}
+
+#[tokio::test]
+async fn review_supports_linked_worktree_and_reports_unsupported_formats() {
+    let root = project();
+    let linked = tempfile::tempdir().unwrap();
+    let working = linked.path().join("working");
+    git(root.path(), &["init", "--quiet"]);
+    git(root.path(), &["add", "README.md"]);
+    git(
+        root.path(),
+        &[
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.test",
+            "commit",
+            "--quiet",
+            "-m",
+            "fixture",
+        ],
+    );
+    git(root.path(), &["pack-refs", "--all"]);
+    git(
+        root.path(),
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "--detach",
+            working.to_str().unwrap(),
+        ],
+    );
+    git(
+        root.path(),
+        &["config", "extensions.worktreeConfig", "true"],
+    );
+    std::fs::write(working.join("README.md"), "staged update\n").unwrap();
+    git(&working, &["add", "README.md"]);
+    std::fs::write(working.join("README.md"), "unstaged update\n").unwrap();
+    let knowledge = Arc::new(Knowledge::new(working.clone(), vec![]).unwrap());
+    let tool = loh::extensions::skills::tools(knowledge)
+        .into_iter()
+        .find(|tool| tool.spec().name == "project_diff")
+        .unwrap();
+    let context = loh::tools::ToolContext {
+        workspace: Workspace::open(&working).unwrap(),
+        logs: linked.path().join("logs"),
+        id: "linked".into(),
+        scope: loh::tools::Scope {
+            readonly: true,
+            ..Default::default()
+        },
+    };
+    let (events, _) = mpsc::unbounded_channel();
+    let result = tool
+        .call(
+            json!({}),
+            context.clone(),
+            CancellationToken::new(),
+            events.clone(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        result.data["staged"]["text"]
+            .as_str()
+            .unwrap()
+            .contains("+staged update")
+    );
+    assert!(
+        result.data["unstaged"]["text"]
+            .as_str()
+            .unwrap()
+            .contains("+unstaged update")
+    );
+    let config = root.path().join(".git/config");
+    let mut content = std::fs::read_to_string(&config).unwrap();
+    content.push_str("\n[extensions]\nobjectFormat = sha256\n");
+    std::fs::write(config, content).unwrap();
+    let error = tool
+        .call(json!({}), context, CancellationToken::new(), events)
+        .await
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("does not support Git extension formats")
+    );
 }
 fn invocation(root: &std::path::Path, name: &str) -> Invocation {
     Skills::discover(root, &[])

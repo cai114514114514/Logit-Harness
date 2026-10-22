@@ -62,6 +62,15 @@ pub fn parse(text: &str) -> anyhow::Result<Command> {
     anyhow::ensure!(valid, "参数有误：{}", entry.usage);
     Ok(Command::Builtin {
         kind: entry.kind,
-        arguments: arguments.into(),
+        arguments: if matches!(
+            entry.rule,
+            Arguments::Budget | Arguments::One | Arguments::Mcp
+        ) {
+            words.join(" ")
+        } else if matches!(entry.rule, Arguments::Config) {
+            arguments.trim_end().into()
+        } else {
+            arguments.into()
+        },
     })
 }

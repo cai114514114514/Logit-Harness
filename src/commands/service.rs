@@ -116,11 +116,23 @@ impl<'a> Service<'a> {
             Kind::Sessions => Ok(Outcome::Navigate(Navigation::Sessions)),
             Kind::Detach => Ok(Outcome::Navigate(Navigation::Detach)),
             Kind::Help => Ok(local("帮助", super::help())),
-            Kind::History | Kind::Tools => {
+            Kind::Tools => pretty(
+                "工具能力",
+                super::capabilities::inspect(
+                    self.paths,
+                    self.workspace,
+                    Config::load(&self.paths.home)?,
+                    self.optional_session()?.as_ref(),
+                    arguments.trim(),
+                )?,
+            ),
+            Kind::History => {
                 self.id()?;
+                let (head, tail) = split(&arguments);
+                let tools_only = head == "tools";
                 Ok(Outcome::History(History {
-                    query: arguments,
-                    tools_only: kind == Kind::Tools,
+                    query: if tools_only { tail.into() } else { arguments },
+                    tools_only,
                 }))
             }
             Kind::Copy => {
@@ -239,7 +251,7 @@ impl<'a> Service<'a> {
         let (key, value) = split(arguments);
         if !value.is_empty() {
             return pretty(
-                "默认值已保存（仅新任务生效）",
+                "默认值已保存（/new 新会话生效）",
                 crate::config::defaults::save(self.paths, key, value)?,
             );
         }

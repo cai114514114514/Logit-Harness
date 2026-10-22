@@ -156,6 +156,9 @@ impl ToolHost {
             serde_json::json!({"type":"function","name":spec.name,"description":spec.description,"parameters":spec.parameters})
         }).collect()
     }
+    pub fn specs(&self) -> Vec<ToolSpec> {
+        self.registry.values().map(|tool| tool.spec()).collect()
+    }
     pub fn effect(&self, name: &str) -> Option<Effect> {
         self.registry.get(name).map(|tool| tool.spec().effect)
     }

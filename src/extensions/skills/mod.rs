@@ -1,6 +1,7 @@
 mod bundled;
 mod catalog;
 mod changes;
+mod git;
 mod invoke;
 mod tool;
 

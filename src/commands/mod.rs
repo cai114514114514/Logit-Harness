@@ -1,5 +1,6 @@
 //! Terminal-independent commands. Discovery, help and parsing share DIRECTORY;
 //! executing a local command never constructs a provider or runs a model.
+mod capabilities;
 mod catalog;
 mod completion;
 mod inspect;

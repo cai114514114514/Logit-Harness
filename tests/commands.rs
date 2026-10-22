@@ -327,3 +327,69 @@ fn metadata_completion_retains_argument_context() {
         assert!(!invocation.content.is_empty());
     }
 }
+
+#[test]
+fn tools_inspects_real_capabilities_at_welcome_without_a_provider() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::new(root.path().join("state"));
+    let service = Service::new(&paths, root.path(), None);
+    let Outcome::Local { text, .. } = service.execute(commands::parse("/tools").unwrap()).unwrap()
+    else {
+        panic!("capability inspection, not history")
+    };
+    let data: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let tools = data["tools"].as_array().unwrap();
+    assert!(
+        tools
+            .iter()
+            .any(|tool| tool["name"] == "read_file" && tool["effect"] == "read")
+    );
+    assert!(tools.iter().any(|tool| tool["name"] == "apply_patch"
+        && tool["effect"] == "write"
+        && tool["conversation_or_plan"] == false));
+    assert!(
+        tools
+            .iter()
+            .any(|tool| tool["name"] == "mcp_call" && tool["available"] == false)
+    );
+    assert!(data["policy"].as_str().unwrap().contains("exact-action"));
+    assert_eq!(data["remote_probe_performed"], false);
+    assert!(!paths.database().exists());
+    assert!(!paths.home.exists());
+    let Outcome::Local { text, .. } = service
+        .execute(commands::parse("/tools apply_patch").unwrap())
+        .unwrap()
+    else {
+        panic!()
+    };
+    let filtered: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(filtered["tools"].as_array().unwrap().len(), 1);
+    assert!(commands::help().contains("/new 新会话"));
+    assert!(commands::help().contains("缺少指导时初始化"));
+}
+
+#[test]
+fn scalar_builtin_whitespace_is_normalized_without_changing_skill_arguments() {
+    use loh::runtime::state::Control;
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::new(root.path().join("state"));
+    let service = Service::new(&paths, root.path(), None);
+    assert!(matches!(
+        service
+            .execute(commands::parse("/budget 100 20 \n").unwrap())
+            .unwrap(),
+        Outcome::Control(Control::Budget {
+            tokens: Some(100),
+            seconds: Some(20)
+        })
+    ));
+    assert!(
+        matches!(service.execute(commands::parse("/approve id  ").unwrap()).unwrap(),Outcome::Control(Control::Approve {id}) if id=="id")
+    );
+    service
+        .execute(commands::parse("/config workers 3  ").unwrap())
+        .unwrap();
+    assert!(
+        matches!(commands::parse("/skills run explain x  \n").unwrap(),Command::Builtin {arguments,..} if arguments.ends_with("x  \n"))
+    );
+}

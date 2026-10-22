@@ -292,7 +292,7 @@ pub const DIRECTORY: &[Entry] = &[
         History,
         "/history",
         "浏览完整历史并搜索",
-        "/history [搜索词]",
+        "/history [tools] [搜索词]",
         "/history",
         Optional,
         Local
@@ -300,8 +300,8 @@ pub const DIRECTORY: &[Entry] = &[
     entry!(
         Tools,
         "/tools",
-        "浏览工具调用详情",
-        "/tools [ID 或搜索词]",
+        "查看工具能力、可用条件与权限边界",
+        "/tools [名称或来源]",
         "/tools",
         Optional,
         Local
@@ -336,7 +336,7 @@ pub const DIRECTORY: &[Entry] = &[
     entry!(
         Config,
         "/config",
-        "非敏感默认值，仅新任务生效",
+        "非敏感默认值，仅 /new 新会话生效",
         "/config [key [value]]",
         "/config",
         Config,
@@ -390,5 +390,5 @@ pub fn help() -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
-        + "\n/init · /review [bundled Skill · 只读工作流]\n/<技能名> [字面参数]；同名技能用 /skills run <ID> 选择来源"
+        + "\n/init [bundled Skill · 缺少指导时初始化，已有指导或 Plan 时仅建议]\n/review [bundled Skill · 只读审查]\n/<技能名> [字面参数]；同名技能用 /skills run <ID> 选择来源"
 }
