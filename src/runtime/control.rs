@@ -125,8 +125,7 @@ impl Runner {
             }
             Control::Resume => {
                 if self.session.mode != super::conversation::Mode::Engineering {
-                    self.emit(EventData::Diagnostic { message: "conversation has no paused engineering execution; submit an explicit goal to implement".into() })?;
-                    return Ok(());
+                    return self.resume_readonly();
                 }
                 // A resume received during cancellation changes its destination;
                 // it must not launch replacements before the old work has exited.
@@ -209,6 +208,41 @@ impl Runner {
         }
         Ok(())
     }
+    fn resume_readonly(&mut self) -> anyhow::Result<()> {
+        let eligible = self.session.actors.values().any(|actor| {
+            !actor.retired
+                && matches!(actor.role, Role::Conversation | Role::Question)
+                && matches!(actor.phase, Phase::Ready | Phase::Busy | Phase::Awaiting)
+        });
+        if !eligible
+            || matches!(
+                self.session.status,
+                Status::Running | Status::Waiting | Status::Completed
+            )
+        {
+            self.emit(EventData::Diagnostic {
+                message: "session has no paused execution to resume".into(),
+            })?;
+            return Ok(());
+        }
+        // Resume restores execution, not fresh user authorization. Retain the
+        // original turn/context and read-only scopes, including across recovery.
+        for actor in self.session.actors.values_mut() {
+            if matches!(actor.role, Role::Conversation | Role::Question) {
+                actor.allow_goal = false;
+            }
+        }
+        if self.session.transition.is_some() {
+            self.session.transition = Some(Status::Running);
+            self.emit(EventData::Diagnostic {
+                message: "resume queued until active cancellations settle".into(),
+            })?;
+        } else {
+            self.status(Status::Running, "resuming saved read-only work")?;
+        }
+        Ok(())
+    }
+
     pub(super) fn submit_work_message(&mut self, text: String) -> anyhow::Result<()> {
         let id = self.record_turn(&text);
         self.work_turn(text, id)

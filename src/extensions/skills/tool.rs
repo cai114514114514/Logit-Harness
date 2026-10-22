@@ -60,7 +60,7 @@ impl Tool for SkillTool {
             ),
             Operation::Instructions => (
                 "project_instructions",
-                "Read applicable root and directory AGENTS.md before changing a new path. Deeper rules apply only within their own directory.",
+                "Read applicable root and directory AGENTS.md before changing a new path. Accepts workspace-relative or in-workspace absolute file/directory paths; use . for the workspace root. Deeper rules apply only within their own directory.",
                 json!({"paths":{"type":"array","items":{"type":"string"}}}),
                 json!(["paths"]),
             ),

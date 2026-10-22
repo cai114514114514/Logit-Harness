@@ -14,6 +14,23 @@ use ratatui::{
 use std::collections::BTreeSet;
 const PAGE: usize = 20;
 
+#[cfg(test)]
+#[path = "history_tests.rs"]
+mod tests;
+
+pub(super) fn selected_text(transcript: &Transcript, selector: &str) -> anyhow::Result<String> {
+    let entries = transcript
+        .entries()
+        .iter()
+        .filter(|entry| entry.id.starts_with(selector))
+        .collect::<Vec<_>>();
+    anyhow::ensure!(
+        entries.len() == 1,
+        "ID 必须唯一匹配一条记录；/history 选择后按 c 复制"
+    );
+    Ok(entries[0].full_text())
+}
+
 pub struct Browser {
     transcript: Transcript,
     query: String,
@@ -47,14 +64,14 @@ impl Browser {
             .iter()
             .filter(|e| {
                 (e.kind == Kind::Tool || !self.tools && !e.body.is_empty())
-                    && format!("{} {} {} {}", e.id, e.source, e.title, e.body)
+                    && format!("{} {} {} {}", e.id, e.source, e.title, e.full_text())
                         .to_lowercase()
                         .contains(&query)
             })
             .collect()
     }
     pub fn copy(&self) -> Option<String> {
-        self.matches().get(self.selected).map(|e| e.body.clone())
+        self.matches().get(self.selected).map(|e| e.full_text())
     }
     pub fn key(&mut self, key: KeyEvent) -> Action {
         if let Some(input) = &mut self.search {

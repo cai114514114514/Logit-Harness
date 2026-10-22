@@ -3,6 +3,23 @@ use std::{path::Path, process::Stdio, time::Duration};
 use tokio::io::AsyncReadExt;
 use tokio_util::sync::CancellationToken;
 
+/// The local command is synchronous and may run inside a Tokio caller. Keep
+/// its runtime on a separate thread, while sharing the tool's exact isolation,
+/// output caps and timeout path rather than maintaining a second Git launcher.
+pub(crate) fn inspect(root: &Path) -> anyhow::Result<serde_json::Value> {
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()?
+                    .block_on(changes(root, &CancellationToken::new()))
+            })
+            .join()
+            .map_err(|_| anyhow::anyhow!("Git inspection thread failed"))?
+    })
+}
+
 pub(super) async fn changes(
     root: &Path,
     cancel: &CancellationToken,

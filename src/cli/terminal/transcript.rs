@@ -25,6 +25,10 @@ pub struct Entry {
     pub kind: Kind,
     pub title: String,
     pub body: String,
+    /// Full persisted deltas stay in `body`; the bounded final result must never
+    /// replace them. Keep structured outcome/error metadata independently.
+    pub result: Option<serde_json::Value>,
+    streamed: bool,
     pub running: bool,
     pub success: Option<bool>,
     pub settled: Option<u64>,
@@ -72,6 +76,8 @@ impl Transcript {
             started: stamp.into(),
             updated: stamp.into(),
             body: String::new(),
+            result: None,
+            streamed: false,
             running: true,
             success: None,
             settled: None,
@@ -153,6 +159,7 @@ impl Transcript {
                     .position(|e| e.id == *actor && e.kind == Kind::Tool)
                     .unwrap_or_else(|| self.assistant(actor, stamp));
                 self.entries[i].body.push_str(text);
+                self.entries[i].streamed = true;
                 self.entries[i].updated = stamp.clone();
             }
             EventData::ActionStarted {
@@ -190,9 +197,10 @@ impl Transcript {
                         )
                     });
                 let body = super::tool_text::result(result);
-                if !body.is_empty() {
+                if !self.entries[i].streamed && !body.is_empty() {
                     self.entries[i].body = body;
                 }
+                self.entries[i].result = Some(result.clone());
                 self.entries[i].success = Some(*success);
                 self.entries[i].updated = stamp.clone();
                 if !success && self.entries[i].body.is_empty() {
@@ -354,6 +362,41 @@ impl Transcript {
     }
 }
 impl Entry {
+    /// Search, expansion and both copy routes share the same complete record.
+    /// JSON retains process flags and bounded-result provenance, even for quiet
+    /// tools; the leading stream is preserved byte-for-byte without escaping.
+    pub fn full_text(&self) -> String {
+        match &self.result {
+            Some(result) => {
+                let mut metadata = serde_json::to_string_pretty(result).unwrap_or_default();
+                if super::tool_text::truncated(result) {
+                    metadata.push_str("\n[工具提供的结果内容已截断；以上持久化流如有则完整保留]");
+                }
+                if !self.body.is_empty() && self.body != metadata {
+                    format!("{}\n\n[最终结果]\n{metadata}", self.body)
+                } else {
+                    metadata
+                }
+            }
+            None => self.body.clone(),
+        }
+    }
+
+    fn display_text(&self, expanded: bool) -> String {
+        if expanded {
+            return self.full_text();
+        }
+        if let Some(result) = &self.result {
+            let final_text = super::tool_text::result(result);
+            if !final_text.is_empty() {
+                // Keep the existing compact final-result/failure-tail view.
+                // Full streams remain available through expansion and copy.
+                return final_text;
+            }
+        }
+        self.body.clone()
+    }
+
     pub fn lines(&self, width: usize, expanded: bool) -> Vec<Line<'static>> {
         if self.kind == Kind::Assistant && self.body.is_empty() {
             return vec![];
@@ -385,14 +428,11 @@ impl Entry {
             )],
             width,
         );
+        let content = self.display_text(expanded);
         let body = if self.kind == Kind::Assistant {
-            text::markdown(
-                &clean(&self.body),
-                width.saturating_sub(2),
-                Style::default(),
-            )
+            text::markdown(&clean(&content), width.saturating_sub(2), Style::default())
         } else {
-            clean(&self.body)
+            clean(&content)
                 .split('\n')
                 .flat_map(|line| {
                     text::wrap(vec![Span::raw(line.to_owned())], width.saturating_sub(2))

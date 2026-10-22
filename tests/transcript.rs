@@ -265,3 +265,74 @@ fn replayed_notices_keep_original_time_and_identity_after_local_commands() {
     assert_eq!(a.started, notice.timestamp);
     assert_eq!(a.started, b.started);
 }
+
+#[test]
+fn persisted_long_tool_stream_survives_success_failure_cancellation_and_replay() {
+    let stream = format!(
+        "UNIQUE_EARLY_PREFIX!!\n{}END\n",
+        "0123456789\n".repeat(12_000)
+    );
+    assert_eq!(stream.len(), 132026);
+    let tail = &stream[stream.len() - 65_536..];
+    assert!(!tail.contains("UNIQUE_EARLY_PREFIX"));
+    for result in [
+        json!({"result":{"data":{"process":{"output":tail,"code":0,"cancelled":false}}}}),
+        json!({"error":"command failed after output"}),
+        json!({"result":{"data":{"process":{"output":tail,"code":null,"cancelled":true}}}}),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("db")).unwrap();
+        let mut live = Transcript::default();
+        for data in [
+            EventData::Identity {
+                actor: "main".into(),
+                response: "response".into(),
+                turn: "turn".into(),
+                goal: None,
+                action: Some("long".into()),
+            },
+            EventData::ActionStarted {
+                id: "long".into(),
+                tool: "shell".into(),
+                arguments: json!({"command":"long fixture"}),
+            },
+            EventData::Delta {
+                actor: "long".into(),
+                text: stream.clone(),
+            },
+            EventData::ActionFinished {
+                id: "long".into(),
+                success: result["result"]["data"]["process"]["code"] == 0,
+                result,
+            },
+        ] {
+            store.append("fixture", data).unwrap();
+            for event in store.events("fixture", live.sequence()).unwrap() {
+                live.receive(&event);
+            }
+        }
+        let mut replay = Transcript::default();
+        for event in store.events("fixture", 0).unwrap() {
+            replay.receive(&event);
+        }
+        for projection in [&live, &replay] {
+            let entry = &projection.entries()[0];
+            assert!(
+                entry.body.starts_with(&stream),
+                "settlement lost persisted stream prefix"
+            );
+            assert_eq!(entry.turn.as_deref(), Some("turn"));
+            assert_eq!(entry.response.as_deref(), Some("response"));
+            assert!(!entry.running);
+            assert!(
+                entry
+                    .lines(80, true)
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<String>()
+                    .contains("UNIQUE_EARLY_PREFIX")
+            );
+        }
+        assert_eq!(live.entries()[0].settled, replay.entries()[0].settled);
+    }
+}

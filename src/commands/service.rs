@@ -163,21 +163,7 @@ impl<'a> Service<'a> {
                 )
             }
             Kind::Mcp => self.mcp(&arguments),
-            Kind::Diff => {
-                let result = std::process::Command::new("git")
-                    .args(["--no-pager", "diff", "--no-ext-diff", "--no-textconv"])
-                    .current_dir(self.workspace)
-                    .output()?;
-                anyhow::ensure!(
-                    result.status.success(),
-                    "git diff: {}",
-                    String::from_utf8_lossy(&result.stderr)
-                );
-                Ok(local(
-                    "改动",
-                    String::from_utf8_lossy(&result.stdout).into_owned(),
-                ))
-            }
+            Kind::Diff => pretty("改动", crate::extensions::skills::inspect(self.workspace)?),
             Kind::Export => self.export(&arguments),
             Kind::Status => pretty(
                 "状态",

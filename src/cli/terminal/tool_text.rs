@@ -1,5 +1,14 @@
 //! Tool output is data, never Markdown. Preserve command bytes and typed results.
 use serde_json::Value;
+
+pub(super) fn truncated(result: &Value) -> bool {
+    let data = result
+        .get("result")
+        .and_then(|value| value.get("data"))
+        .or_else(|| result.get("data"))
+        .unwrap_or(result);
+    data["truncated"] == true || data["process"]["truncated"] == true
+}
 pub(super) fn title(tool: &str, arguments: &Value) -> String {
     let arguments = crate::tools::approval::redact(arguments);
     let name = match tool {
@@ -107,7 +116,7 @@ pub(super) fn result(result: &Value) -> String {
     if parts.is_empty() && !data.is_null() {
         parts.push(serde_json::to_string_pretty(data).unwrap_or_default());
     }
-    if data["truncated"] == true || data["process"]["truncated"] == true {
+    if truncated(result) {
         parts.push("[工具已截断输出；日志文件保留情况见结果元数据]".into());
     }
     parts.join("\n")

@@ -302,16 +302,8 @@ impl Context {
                         .as_ref()
                         .ok_or_else(|| anyhow::anyhow!("请先打开会话"))?;
                     let transcript = super::history::load(&self.paths, id)?;
-                    let entries = transcript
-                        .entries()
-                        .iter()
-                        .filter(|e| e.id.starts_with(&selector))
-                        .collect::<Vec<_>>();
-                    anyhow::ensure!(
-                        entries.len() == 1,
-                        "ID 必须唯一匹配一条记录；/history 选择后按 c 复制"
-                    );
-                    super::clipboard::copy(&entries[0].body)?;
+                    let text = super::history::selected_text(&transcript, &selector)?;
+                    super::clipboard::copy(&text)?;
                     Ok(Reply::Copied)
                 })
                 .await
