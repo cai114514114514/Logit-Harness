@@ -207,6 +207,10 @@ impl Runner {
                     return Ok(self.session);
                 }
             }
+            // Controls and settled cancellations can restore Running after the
+            // loop's first clock check. Recheck at the shared scheduling boundary
+            // so no resumed mode dispatches work against an expired allowance.
+            self.check_time()?;
             if self.session.transition.is_none()
                 && matches!(
                     self.session.status,
