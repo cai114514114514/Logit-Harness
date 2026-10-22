@@ -18,6 +18,8 @@ use std::{
 };
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+#[path = "fixtures/identity.rs"]
+mod identity;
 
 fn call(name: &str, args: Value) -> Response {
     Response {
@@ -103,7 +105,7 @@ async fn repeated_no_information_failures_trigger_fresh_diagnosis_and_continue()
     });
     let (runner, _, _) = Runner::new(
         session,
-        store,
+        store.clone(),
         provider.clone(),
         host,
         Settings {
@@ -117,6 +119,7 @@ async fn repeated_no_information_failures_trigger_fresh_diagnosis_and_continue()
         .unwrap()
         .unwrap();
     assert_eq!(session.status, Status::Completed);
+    identity::assert_user_turns(&session, &store);
     assert_eq!(provider.diagnoses.load(Ordering::SeqCst), 1);
 }
 

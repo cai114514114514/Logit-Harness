@@ -65,14 +65,14 @@ impl Screen {
         match message {
             ServerMessage::Snapshot { state, sequence } => {
                 self.receive(ServerMessage::View {
-                    state: (*state).into(),
+                    state: Box::new((*state).into()),
                     sequence,
                 });
             }
             ServerMessage::View { state, sequence } => {
                 if sequence >= self.snapshot.max(self.sequence) {
                     self.workspace = state.workspace.clone();
-                    self.session = Some(state);
+                    self.session = Some(*state);
                     self.snapshot = sequence;
                 }
                 self.connected = true;

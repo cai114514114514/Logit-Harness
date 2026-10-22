@@ -6,19 +6,13 @@ use super::{
     runner::Runner,
     state::UserMessage,
 };
-use crate::{domain::Goal, tools::Scope};
+use crate::tools::Scope;
 
 impl Runner {
-    pub(super) fn reconcile_plan(&mut self, text: String, turn: String, epoch: u64) {
-        if self.session.goal.id.is_empty() {
-            let objective = self
-                .session
-                .plan_input
-                .clone()
-                .unwrap_or_else(|| text.clone());
-            self.session.goal = Goal::new(&objective);
-            self.session.goal.epoch = epoch;
-        }
+    pub(super) fn reconcile_plan(&mut self, text: String, turn: String) {
+        // A bare /plan may precede several ordinary messages. Let structured
+        // reconciliation select actual request quotes before creating any goal;
+        // implementation authorization is not a fallback acceptance requirement.
         if self.session.plan_turns.last() != Some(&text) {
             self.session.plan_turns.push(text.clone());
         }

@@ -93,6 +93,7 @@ impl Runner {
         );
         let id = format!("diagnose-{}", uuid::Uuid::new_v4());
         let mut diagnosis = Actor::new(id.clone(), Role::Diagnosis, task.clone(), scope);
+        diagnosis.turn = actor.turn.clone();
         diagnosis.parent = Some(actor_id.into());
         self.session.actors.insert(id.clone(), diagnosis);
         self.emit(EventData::Worker {

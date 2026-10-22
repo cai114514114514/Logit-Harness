@@ -5,6 +5,180 @@ use loh::tools::{
 use std::{sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
 
+fn owner_path(workspace: &std::path::Path) -> std::path::PathBuf {
+    let root = workspace.canonicalize().unwrap();
+    let hash = blake3::hash(root.as_os_str().as_encoded_bytes());
+    format!(
+        "/tmp/loh-owner-{}-{}.lock",
+        unsafe { libc::geteuid() },
+        &hash.to_hex()[..24]
+    )
+    .into()
+}
+
+struct RecoveredProvider {
+    writer: Option<u32>,
+    calls: std::sync::atomic::AtomicUsize,
+}
+#[async_trait::async_trait]
+impl loh::model::Provider for RecoveredProvider {
+    async fn respond(
+        &self,
+        _: loh::model::Request,
+        _: CancellationToken,
+        _: tokio::sync::mpsc::UnboundedSender<loh::model::ModelEvent>,
+    ) -> anyhow::Result<loh::model::Response> {
+        self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if let Some(pid) = self.writer {
+            anyhow::ensure!(
+                Identity::capture(pid)?.is_none(),
+                "old writer is still alive at engineering dispatch"
+            );
+        }
+        Ok(loh::model::Response {
+            output: vec![
+                serde_json::json!({"type":"message","role":"assistant","content":[{"type":"output_text","text":"inspected after reconciliation"}]}),
+            ],
+            usage: Default::default(),
+            model: "fixture".into(),
+        })
+    }
+}
+
+#[tokio::test]
+async fn legacy_cross_session_owner_reaps_writer_before_new_engineering_dispatch() {
+    use loh::{
+        config::Paths,
+        domain::EventData,
+        runtime::{
+            condition::Condition,
+            runner::{Runner, Settings},
+            state::Session,
+        },
+        store::Store,
+        tools::{ToolHost, files::Workspace},
+    };
+    let root = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let paths = Paths::new(home.path().join("state"));
+    paths.prepare().unwrap();
+    let store = Arc::new(Store::open(&paths.database()).unwrap());
+    let previous = Session::new(root.path().into(), "legacy writer", 100000, 60);
+    store
+        .commit(
+            &previous.id,
+            &previous,
+            EventData::Diagnostic {
+                message: "legacy fixture".into(),
+            },
+        )
+        .unwrap();
+    let (events, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+    let writer = tokio::spawn(process::run(
+        ProcessSpec {
+            command: "printf started > marker; sleep 30; printf late >> marker".into(),
+            cwd: root.path().into(),
+            log: paths.logs(&previous.id).unwrap().join("writer.log"),
+            timeout: Duration::from_secs(40),
+            profile: None,
+        },
+        CancellationToken::new(),
+        events,
+    ));
+    let pid = loop {
+        if let ProcessEvent::Started { pid } = receiver.recv().await.unwrap() {
+            break pid;
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while !root.path().join("marker").exists() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    // The legacy daemon is gone: its raw lease remains, without a live flock.
+    let lock = owner_path(root.path());
+    std::fs::write(&lock, &previous.id).unwrap();
+    let mut session = Session::new(root.path().into(), "new engineering session", 100000, 60);
+    session.condition = Condition::Prompt;
+    let provider = Arc::new(RecoveredProvider {
+        writer: Some(pid),
+        calls: 0.into(),
+    });
+    let tools = Arc::new(ToolHost::new(
+        Workspace::open(root.path()).unwrap(),
+        Arc::new(tokio::sync::RwLock::new(session.goal.clone())),
+        paths.logs(&session.id).unwrap(),
+    ));
+    let (runner, _, _) = Runner::new(
+        session,
+        store,
+        provider.clone(),
+        tools,
+        Settings {
+            linger: false,
+            max_output: 1024,
+            ..Settings::default()
+        },
+    );
+    let result = tokio::time::timeout(Duration::from_secs(5), runner.run())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(result.status, loh::domain::Status::Completed);
+    writer.await.unwrap().unwrap();
+    assert_eq!(provider.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(
+        std::fs::read_to_string(root.path().join("marker")).unwrap(),
+        "started"
+    );
+    assert!(std::fs::read_to_string(&lock).unwrap().is_empty());
+    std::fs::remove_file(lock).unwrap();
+}
+
+#[tokio::test]
+async fn unknown_legacy_owner_is_preserved_and_blocks_engineering() {
+    use loh::{
+        runtime::{
+            runner::{Runner, Settings},
+            state::Session,
+        },
+        store::Store,
+        tools::{ToolHost, files::Workspace},
+    };
+    let root = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let owner = "0123456789abcdef";
+    let lock = owner_path(root.path());
+    std::fs::write(&lock, owner).unwrap();
+    let session = Session::new(root.path().into(), "new work", 100000, 60);
+    let provider = Arc::new(RecoveredProvider {
+        writer: None,
+        calls: 0.into(),
+    });
+    let tools = Arc::new(ToolHost::new(
+        Workspace::open(root.path()).unwrap(),
+        Arc::new(tokio::sync::RwLock::new(session.goal.clone())),
+        state.path().join("logs"),
+    ));
+    let (runner, _, _) = Runner::new(
+        session,
+        Arc::new(Store::open(&state.path().join("db")).unwrap()),
+        provider.clone(),
+        tools,
+        Settings {
+            linger: false,
+            ..Settings::default()
+        },
+    );
+    let error = runner.run().await.unwrap_err().to_string();
+    assert!(error.contains(owner) && error.contains("original --home"));
+    assert_eq!(provider.calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert_eq!(std::fs::read_to_string(&lock).unwrap(), owner);
+    std::fs::remove_file(lock).unwrap();
+}
+
 #[tokio::test]
 async fn recorded_process_identity_stops_only_its_own_process_group() {
     let dir = tempfile::tempdir().unwrap();

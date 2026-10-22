@@ -93,7 +93,7 @@ impl Runner {
         }
         let mut content = String::new();
         file.read_to_string(&mut content)?;
-        if let Ok(previous) = serde_json::from_str::<Owner>(&content) {
+        if let Some(previous) = self.previous_owner(&content)? {
             reap(&previous.logs).await?;
             self.emit(EventData::Diagnostic {
                 message: format!(
@@ -119,6 +119,52 @@ impl Runner {
             self.status(destination, "workspace execution ownership acquired")?;
         }
         Ok(true)
+    }
+
+    fn previous_owner(&self, content: &str) -> anyhow::Result<Option<Owner>> {
+        let content = content.trim();
+        if content.is_empty() {
+            return Ok(None);
+        }
+        if let Ok(owner) = serde_json::from_str::<Owner>(content) {
+            return Ok(Some(owner));
+        }
+
+        // Older daemons stored only a session ID. Resolve it exclusively inside
+        // this known state home and verify its workspace before touching journals.
+        // Never erase an unknown nonempty lease: its orphan writers are unproven.
+        let unresolved = || {
+            anyhow::anyhow!(
+                "cannot reconcile legacy workspace owner {content:?}; resume that session using its original --home to settle its process journals before starting another task"
+            )
+        };
+        crate::config::validate_id(content).map_err(|_| unresolved())?;
+        let current = self.tools.logs.parent().ok_or_else(unresolved)?;
+        let sessions = current.parent().ok_or_else(unresolved)?;
+        anyhow::ensure!(
+            self.tools
+                .logs
+                .file_name()
+                .is_some_and(|name| name == "logs")
+                && current
+                    .file_name()
+                    .is_some_and(|name| name == self.session.id.as_str())
+                && sessions.file_name().is_some_and(|name| name == "sessions"),
+            "{}",
+            unresolved()
+        );
+        let previous: super::state::Session = self.store.load(content).map_err(|_| unresolved())?;
+        anyhow::ensure!(
+            previous.workspace.canonicalize()? == self.session.workspace.canonicalize()?,
+            "{}",
+            unresolved()
+        );
+        let logs = sessions.join(content).join("logs");
+        anyhow::ensure!(logs.is_dir(), "{}", unresolved());
+        Ok(Some(Owner {
+            session: content.into(),
+            logs,
+        }))
     }
 }
 

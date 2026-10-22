@@ -178,7 +178,7 @@ fn cache_display_weights_input_and_does_not_count_replayed_usage_twice() {
     let latest = screen.session.clone().unwrap();
     let mut reattached = Screen::default();
     reattached.receive(ServerMessage::View {
-        state: latest,
+        state: Box::new(latest),
         sequence: 6,
     });
     reattached.receive(ServerMessage::Event {

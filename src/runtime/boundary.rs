@@ -80,6 +80,10 @@ impl Runner {
                     "main".into(),
                     conversation_actor("", self.session.goal.epoch, true),
                 );
+                if let Some(archive) = self.session.archives.last() {
+                    self.session.actors.get_mut("main").unwrap().turn =
+                        archive.actors["main"].turn.clone();
+                }
                 self.session.actors.get_mut("main").unwrap().phase = Phase::Done;
                 *self.tools.goal.write().await = self.session.goal.clone();
                 self.emit(EventData::Diagnostic {
@@ -137,7 +141,7 @@ impl Runner {
                 self.session.verification_pending = false;
             }
             Boundary::Implement { text, turn } => {
-                self.reconcile_plan(text, turn, epoch);
+                self.reconcile_plan(text, turn);
             }
             Boundary::ResumeGoal { text, .. } => {
                 self.resume_planned_goal(&text, epoch)?;

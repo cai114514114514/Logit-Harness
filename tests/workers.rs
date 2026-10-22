@@ -22,6 +22,8 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
+#[path = "fixtures/identity.rs"]
+mod identity;
 #[path = "fixtures/state.rs"]
 mod state;
 
@@ -138,7 +140,7 @@ async fn workers_run_concurrently_and_commit_proposals_through_the_owner() {
     let store = Arc::new(Store::open(&state.path().join("db")).unwrap());
     let (runner, _, _) = Runner::new(
         session,
-        store,
+        store.clone(),
         Arc::new(Parallel {
             main: 0.into(),
             rendezvous: Barrier::new(2),
@@ -155,6 +157,10 @@ async fn workers_run_concurrently_and_commit_proposals_through_the_owner() {
         .unwrap()
         .unwrap();
     assert_eq!(session.status, Status::Completed);
+    identity::assert_user_turns(&session, &store);
+    for actor in session.actors.values() {
+        assert_eq!(actor.turn, session.actors["main"].turn);
+    }
     assert_eq!(
         std::fs::read_to_string(root.path().join("storage.txt")).unwrap(),
         "done"

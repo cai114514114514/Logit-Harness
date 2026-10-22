@@ -361,7 +361,7 @@ impl Runner {
             return Ok(());
         }
         let id = format!("verify-{}", uuid::Uuid::new_v4());
-        let actor = Actor::new(
+        let mut actor = Actor::new(
             id.clone(),
             Role::Verifier,
             "Inspect the actual deliverable and report evidence for every current requirement."
@@ -372,6 +372,7 @@ impl Runner {
                 ..Scope::default()
             },
         );
+        actor.turn = self.session.actors["main"].turn.clone();
         self.session.actors.insert(id, actor);
         Ok(())
     }

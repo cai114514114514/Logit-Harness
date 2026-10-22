@@ -16,6 +16,8 @@ use tokio_util::sync::CancellationToken;
 
 #[path = "fixtures/chat.rs"]
 mod chat;
+#[path = "fixtures/identity.rs"]
+mod identity;
 use chat::{Engineer, Live};
 use loh::{
     domain::EventData,
@@ -168,6 +170,7 @@ async fn explicit_task_activates_engineering_and_requires_independent_evidence()
     assert!(!saved.archives[0].actions.is_empty());
     assert_eq!(provider.count("conversation"), 1);
     assert_eq!(provider.count("verifier"), 2);
+    identity::assert_user_turns(&saved, &live.store);
     assert_eq!(
         std::fs::read_to_string(root.path().join("first.txt")).unwrap(),
         "fixture delivery"
@@ -521,18 +524,19 @@ async fn planning_changes_revise_the_suspended_goal_before_implementation_resume
             .source
             .contains("SQLite instead of JSON")
     );
-    let requests = provider.requests.lock().unwrap();
-    let resumed = requests
-        .iter()
-        .filter(|r| r.instructions.starts_with("ROLE: main"))
-        .nth(1)
-        .unwrap();
-    assert!(
-        serde_json::to_string(&resumed.input)
-            .unwrap()
-            .contains("SQLite instead of JSON")
-    );
-    drop(requests);
+    {
+        let requests = provider.requests.lock().unwrap();
+        let resumed = requests
+            .iter()
+            .filter(|r| r.instructions.starts_with("ROLE: main"))
+            .nth(1)
+            .unwrap();
+        assert!(
+            serde_json::to_string(&resumed.input)
+                .unwrap()
+                .contains("SQLite instead of JSON")
+        );
+    }
     live.stop().await;
 }
 
@@ -599,6 +603,7 @@ fn legacy_saved_goal_and_turn_identities_are_stable_before_the_first_new_commit(
         .unwrap()
         .remove("turn");
     value.as_object_mut().unwrap().remove("mode");
+    value.as_object_mut().unwrap().remove("turns");
     let store = Store::open(&root.path().join("state.db")).unwrap();
     store
         .commit(
@@ -615,6 +620,12 @@ fn legacy_saved_goal_and_turn_identities_are_stable_before_the_first_new_commit(
     assert_eq!(first.actors["main"].turn, second.actors["main"].turn);
     assert_eq!(first.mode, Mode::Engineering);
     assert!(first.active_goal().is_some());
+    assert!(
+        first
+            .turns
+            .iter()
+            .any(|turn| turn.id == first.actors["main"].turn)
+    );
 }
 
 struct PlanningOnly(Arc<Engineer>);
@@ -830,5 +841,157 @@ async fn explicit_replacement_archives_cancelled_goal_with_a_new_identity() {
     assert_ne!(saved.archives[1].goal.id, original);
     assert!(!root.path().join("first.txt").exists());
     assert!(root.path().join("second.txt").exists());
+    live.stop().await;
+}
+
+#[tokio::test]
+async fn bare_plan_extracts_the_request_without_greetings_or_implementation_authorization() {
+    let root = tempfile::tempdir().unwrap();
+    let mut live = Live::start(
+        Session::conversation(root.path().into(), "", 1_000_000, 60),
+        Engineer::new(false),
+    );
+    live.control
+        .send(Control::Plan { text: None })
+        .await
+        .unwrap();
+    live.waiting().await;
+    for input in ["hello", "Plan first.txt", "thanks", "What is SQLite?"] {
+        live.control
+            .send(Control::Message { text: input.into() })
+            .await
+            .unwrap();
+        live.waiting().await;
+    }
+    live.control
+        .send(Control::Message {
+            text: "Implement now".into(),
+        })
+        .await
+        .unwrap();
+    live.completed().await;
+    let saved = live.saved();
+    let goal = &saved.archives[0].goal;
+    assert_eq!(goal.original, "Plan first.txt");
+    assert_eq!(goal.requirements["r1"].text, "Plan first.txt");
+    assert!(root.path().join("first.txt").exists());
+    identity::assert_user_turns(&saved, &live.store);
+    live.stop().await;
+}
+
+struct Side(Arc<Engineer>);
+#[async_trait::async_trait]
+impl Provider for Side {
+    async fn respond(
+        &self,
+        request: Request,
+        cancel: CancellationToken,
+        events: mpsc::UnboundedSender<ModelEvent>,
+    ) -> anyhow::Result<Response> {
+        if request.instructions.starts_with("ROLE: steering") {
+            return Ok(call(
+                "classify_input",
+                json!({"intent":"question","updates":{},"additions":[],"answer":"","reason":"side question","needs_tools":true}),
+            ));
+        }
+        self.0.respond(request, cancel, events).await
+    }
+}
+
+#[tokio::test]
+async fn classified_side_question_inherits_its_actual_user_turn() {
+    let root = tempfile::tempdir().unwrap();
+    let mut live = Live::start(
+        Session::new(root.path().into(), "Create first.txt", 1_000_000, 60),
+        Arc::new(Side(Engineer::new(true))),
+    );
+    live.until(|e| matches!(e, EventData::ModelRequested { .. }))
+        .await;
+    live.control
+        .send(Control::Message {
+            text: "What is the status?".into(),
+        })
+        .await
+        .unwrap();
+    live.until(|e| matches!(e, EventData::Message { actor, .. } if actor.starts_with("question-")))
+        .await;
+    let saved = live.saved();
+    identity::assert_user_turns(&saved, &live.store);
+    let question = saved
+        .actors
+        .values()
+        .find(|actor| actor.id.starts_with("question-"))
+        .unwrap();
+    assert_eq!(question.turn, saved.inbox.last().unwrap().id);
+    live.stop().await;
+}
+
+#[tokio::test]
+async fn planning_without_a_task_requests_clarification_instead_of_creating_an_authorization_goal()
+{
+    let root = tempfile::tempdir().unwrap();
+    let provider = Engineer::new(false);
+    let mut live = Live::start(
+        Session::conversation(root.path().into(), "", 1_000_000, 60),
+        provider.clone(),
+    );
+    live.control
+        .send(Control::Plan { text: None })
+        .await
+        .unwrap();
+    live.waiting().await;
+    for input in ["hello", "thanks", "What is SQLite?"] {
+        live.control
+            .send(Control::Message { text: input.into() })
+            .await
+            .unwrap();
+        live.waiting().await;
+    }
+    live.control
+        .send(Control::Message {
+            text: "Implement now".into(),
+        })
+        .await
+        .unwrap();
+    live.until(|e| matches!(e, EventData::Message { actor, text } if actor == "question" && text.contains("What task"))).await;
+    let saved = live.saved();
+    assert!(saved.goal.id.is_empty());
+    assert!(saved.goal.requirements.is_empty());
+    assert_eq!(provider.count("main"), 0);
+    live.stop().await;
+}
+
+#[tokio::test]
+async fn planning_objective_extraction_rejects_empty_and_non_source_quotes() {
+    let root = tempfile::tempdir().unwrap();
+    let invalid = |quotes: Value| {
+        call(
+            "classify_input",
+            json!({"intent":"start","objective_quotes":quotes,"updates":{},"additions":[],"answer":"","reason":"invalid fixture"}),
+        )
+    };
+    let provider = Arc::new(Script { requests: Mutex::new(vec![]), responses: Mutex::new(vec![
+        call("begin_goal", json!({})), invalid(json!(["invented requirement"])), invalid(json!([])),
+        call("classify_input", json!({"intent":"clarify","updates":{},"additions":[],"answer":"Please provide the actual task.","reason":"no requirement provided"})),
+    ].into()) });
+    let mut live = Live::start(
+        Session::conversation(root.path().into(), "", 1_000_000, 60),
+        provider.clone(),
+    );
+    live.control
+        .send(Control::Plan { text: None })
+        .await
+        .unwrap();
+    live.waiting().await;
+    live.control
+        .send(Control::Message {
+            text: "Implement now".into(),
+        })
+        .await
+        .unwrap();
+    live.until(|e| matches!(e, EventData::Message { actor, .. } if actor == "question"))
+        .await;
+    assert!(live.saved().goal.id.is_empty());
+    assert_eq!(provider.requests.lock().unwrap().len(), 4);
     live.stop().await;
 }

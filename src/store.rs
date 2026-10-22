@@ -262,15 +262,36 @@ fn decode<T: DeserializeOwned>(state: &str, session: &str) -> anyhow::Result<T> 
         goal.entry("id")
             .or_insert_with(|| serde_json::json!(format!("{session}:goal")));
     }
+    let main_turn = value["actors"]["main"]["turn"]
+        .as_str()
+        .or_else(|| value["turns"].as_array()?.first()?["id"].as_str())
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("{session}:main:turn"));
+    let mut turns = value["turns"].as_array().cloned().unwrap_or_default();
+    if value["actors"].is_object() && turns.is_empty() {
+        turns.push(serde_json::json!({"id":main_turn,"text":value["goal"]["original"]}));
+        if let Some(inbox) = value["inbox"].as_array() {
+            turns.extend(
+                inbox
+                    .iter()
+                    .map(|message| serde_json::json!({"id":message["id"],"text":message["text"]})),
+            );
+        }
+        value["turns"] = serde_json::Value::Array(turns.clone());
+    }
     if let Some(actors) = value
         .get_mut("actors")
         .and_then(serde_json::Value::as_object_mut)
     {
         for (id, actor) in actors {
             if let Some(actor) = actor.as_object_mut() {
+                let source = id
+                    .strip_prefix("steer-")
+                    .or_else(|| id.strip_prefix("question-"))
+                    .filter(|id| turns.iter().any(|turn| turn["id"] == *id));
                 actor
                     .entry("turn")
-                    .or_insert_with(|| serde_json::json!(format!("{session}:{id}:turn")));
+                    .or_insert_with(|| serde_json::json!(source.unwrap_or(&main_turn)));
             }
         }
     }

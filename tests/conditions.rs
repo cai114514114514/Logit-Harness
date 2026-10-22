@@ -20,6 +20,8 @@ use std::{
 };
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+#[path = "fixtures/identity.rs"]
+mod identity;
 
 fn response(output: Value) -> Response {
     Response {
@@ -391,6 +393,7 @@ async fn tracking_leaves_active_work_running_but_dynamic_and_replan_cancel_it() 
             30,
         );
         session.condition = condition;
+        let original_turn = session.actors["main"].turn.clone();
         let host = Arc::new(ToolHost::new(
             Workspace::open(root.path()).unwrap(),
             Arc::new(tokio::sync::RwLock::new(session.goal.clone())),
@@ -399,7 +402,7 @@ async fn tracking_leaves_active_work_running_but_dynamic_and_replan_cancel_it() 
         let store = Arc::new(Store::open(&logs.path().join("state.db")).unwrap());
         let (runner, control, mut events) = Runner::new(
             session,
-            store,
+            store.clone(),
             Arc::new(Script {
                 main: AtomicUsize::new(0),
                 premature: false,
@@ -432,6 +435,8 @@ async fn tracking_leaves_active_work_running_but_dynamic_and_replan_cancel_it() 
             .unwrap()
             .unwrap();
         assert_eq!(state.status, Status::Completed, "{condition:?}");
+        identity::assert_user_turns(&state, &store);
+        assert_eq!(state.actors["main"].turn, original_turn);
         assert_eq!(
             root.path().join("obsolete.txt").exists(),
             matches!(condition, Condition::Prompt | Condition::Tracking),

@@ -25,6 +25,8 @@ impl Runner {
             #[serde(default)]
             needs_tools: bool,
             question_id: Option<String>,
+            #[serde(default)]
+            objective_quotes: Vec<String>,
         }
         let input: Input = serde_json::from_value(arguments.clone())?;
         let message_id = actor_id
@@ -43,11 +45,47 @@ impl Runner {
             .implementation
             .as_ref()
             .is_some_and(|task| task.id == message_id);
+        let new_plan = reconciliation && self.session.goal.id.is_empty();
         anyhow::ensure!(
-            !reconciliation || matches!(input.intent.as_str(), "refine" | "nudge"),
-            "planning reconciliation must selectively refine actual requirement changes, or nudge if none; questions and greetings are not requirements"
+            !reconciliation
+                || if new_plan {
+                    matches!(input.intent.as_str(), "start" | "clarify")
+                } else {
+                    matches!(input.intent.as_str(), "refine" | "nudge")
+                },
+            "planning reconciliation must start a real quoted objective, clarify missing requirements, or selectively refine/nudge an existing goal; greetings and authorization are not requirements"
         );
         match input.intent.as_str() {
+            "start" => {
+                anyhow::ensure!(
+                    new_plan,
+                    "start is only available for planning without an existing goal"
+                );
+                anyhow::ensure!(
+                    !input.objective_quotes.is_empty()
+                        && input
+                            .objective_quotes
+                            .iter()
+                            .all(|quote| !quote.trim().is_empty()
+                                && self
+                                    .session
+                                    .plan_turns
+                                    .iter()
+                                    .any(|turn| turn.contains(quote))),
+                    "initial objective requires nonempty exact quotes from actual planning user requests"
+                );
+                let mut goal = crate::domain::Goal::new(&input.objective_quotes.join("\n"));
+                goal.epoch = self.session.goal.epoch.saturating_add(1);
+                self.session.goal = goal;
+                *self.tools.goal.write().await = self.session.goal.clone();
+            }
+            "clarify" if new_plan => {
+                self.session.implementation = None;
+                self.emit(EventData::Message {
+                    actor: "question".into(),
+                    text: input.answer,
+                })?;
+            }
             "queue" => self.queue_goal(message.clone(), message_id.into())?,
             "replace" if self.session.interactive => {
                 self.request_boundary(super::conversation::Boundary::Goal {
@@ -101,7 +139,7 @@ impl Runner {
             "question" => {
                 if input.needs_tools {
                     let id = format!("question-{message_id}");
-                    let actor = Actor::new(
+                    let mut actor = Actor::new(
                         id.clone(),
                         Role::Question,
                         message.clone(),
@@ -111,6 +149,7 @@ impl Runner {
                             ..Scope::default()
                         },
                     );
+                    actor.turn = message_id.into();
                     self.session.actors.insert(id, actor);
                 } else {
                     self.emit(EventData::Message {
@@ -171,7 +210,7 @@ impl Runner {
         self.emit(EventData::Diagnostic {
             message: "user input classified and applied".into(),
         })?;
-        if reconciliation {
+        if reconciliation && self.session.implementation.is_some() {
             let task = self.session.implementation.take().unwrap();
             self.request_boundary(super::conversation::Boundary::ResumeGoal {
                 text: task.text,

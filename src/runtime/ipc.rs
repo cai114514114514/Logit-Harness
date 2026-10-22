@@ -33,7 +33,7 @@ pub enum ServerMessage {
         sequence: u64,
     },
     View {
-        state: super::view::SessionView,
+        state: Box<super::view::SessionView>,
         sequence: u64,
     },
     Ack,
@@ -148,7 +148,7 @@ async fn serve(stream: UnixStream, endpoint: Endpoint) -> anyhow::Result<()> {
             send(
                 reader.get_mut(),
                 &ServerMessage::View {
-                    state: state.into(),
+                    state: Box::new(state.into()),
                     sequence,
                 },
             )

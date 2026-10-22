@@ -99,6 +99,22 @@ impl Provider for Engineer {
         if request.instructions.starts_with("ROLE: steering") {
             let state = state::current(&request);
             if !state["pending_implementation"].is_null() {
+                if state["requirements"]
+                    .as_object()
+                    .is_some_and(|requirements| requirements.is_empty())
+                {
+                    let quotes: Vec<_> = state["planning_user_turns"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter_map(|turn| turn.as_str())
+                        .filter(|turn| turn.starts_with("Plan "))
+                        .collect();
+                    return Ok(call(
+                        "classify_input",
+                        json!({"intent":if quotes.is_empty() {"clarify"} else {"start"},"objective_quotes":quotes,"updates":{},"additions":[],"answer":"What task should I implement?","reason":"extract actual planning request only"}),
+                    ));
+                }
                 let changed = state["planning_user_turns"]
                     .to_string()
                     .contains("SQLite instead of JSON");

@@ -68,6 +68,7 @@ impl Runner {
         );
         let id = format!("worker-{}", uuid::Uuid::new_v4());
         let mut actor = Actor::new(id.clone(), Role::Worker, task.into(), scope);
+        actor.turn = self.session.actors[caller].turn.clone();
         actor.step = Some(step.into());
         self.session.actors.insert(id.clone(), actor);
         self.session.graph.steps.get_mut(step).unwrap().status = StepStatus::Running;
