@@ -96,41 +96,23 @@ pub(super) fn markdown(session: &Session, sequence: u64, events: &[SessionEvent]
                 success,
                 result,
             } => {
-                streams.remove(id.as_str());
+                let stream = streams.remove(id.as_str());
                 let origin = origins.get(id.as_str()).copied();
-                let started = starts.get(id.as_str()).copied();
-                let name = started
-                    .and_then(|start| {
-                        if let EventData::ActionStarted { tool, .. } = &start.data {
-                            Some(tool.as_str())
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or("工具");
-                heading(
+                let started = starts.remove(id.as_str());
+                tool_heading(
                     &mut output,
-                    &format!(
-                        "工具 · {name} · {}",
-                        if *success { "成功" } else { "未成功" }
-                    ),
-                    origin.map_or(id.as_str(), |o| o.actor),
+                    id,
                     event,
+                    started,
                     origin,
+                    if *success { "成功" } else { "未成功" },
                 );
-                output.push_str(&format!("- 操作：`{id}`\n"));
-                if let Some(start) = started {
-                    output.push_str(&format!(
-                        "- 开始：{} · 事件 {}\n",
-                        start.timestamp, start.sequence
-                    ));
-                    if let EventData::ActionStarted { arguments, .. } = &start.data {
-                        output.push_str("\n请求参数：\n\n");
-                        fence(&mut output, "json", &json(arguments));
-                    }
-                }
+                // ProcessOutput is a bounded tail, whereas Delta events retain
+                // every emitted chunk. Keep both records without substituting
+                // the shorter final payload for the persisted stream.
+                tool_stream(&mut output, stream.as_ref().map(|(_, text)| text.as_str()));
                 raw_tool_text(&mut output, result);
-                output.push_str("完整工具结果：\n\n");
+                output.push_str("完整结构化工具结果（输出字段可能由执行器限长）：\n\n");
                 fence(&mut output, "json", &json(result));
             }
             EventData::Status { status, reason } => {
@@ -146,8 +128,25 @@ pub(super) fn markdown(session: &Session, sequence: u64, events: &[SessionEvent]
             _ => (),
         }
     }
-    // Cancelled or still-running responses may have no final Message/Result.
-    // Retain those bytes too, but do not repeat streams superseded by a final body.
+    // An unmatched start is itself durable history, even for a quiet process
+    // that has emitted no Delta. Do not claim it finished or is still alive:
+    // only its un-settled status at this export boundary is known.
+    let mut pending = starts.into_iter().collect::<Vec<_>>();
+    pending.sort_by_key(|(_, event)| event.sequence);
+    for (id, started) in pending {
+        tool_heading(
+            &mut output,
+            id,
+            started,
+            Some(started),
+            origins.get(id).copied(),
+            "未结算",
+        );
+        output.push_str(&format!("截至导出事件 {sequence}，未收到最终结果。\n\n"));
+        let stream = streams.remove(id);
+        tool_stream(&mut output, stream.as_ref().map(|(_, text)| text.as_str()));
+    }
+    // Keep orphan/model streams too; those have no start record to describe.
     for (actor, (start, text)) in streams {
         partial(
             &mut output,
@@ -158,6 +157,51 @@ pub(super) fn markdown(session: &Session, sequence: u64, events: &[SessionEvent]
         );
     }
     output
+}
+
+fn tool_heading(
+    output: &mut String,
+    id: &str,
+    event: &SessionEvent,
+    started: Option<&SessionEvent>,
+    origin: Option<Origin<'_>>,
+    status: &str,
+) {
+    let name = started
+        .and_then(|start| {
+            if let EventData::ActionStarted { tool, .. } = &start.data {
+                Some(tool.as_str())
+            } else {
+                None
+            }
+        })
+        .unwrap_or("工具");
+    heading(
+        output,
+        &format!("工具 · {name} · {status}"),
+        origin.map_or(id, |value| value.actor),
+        event,
+        origin,
+    );
+    output.push_str(&format!("- 操作：`{id}`\n"));
+    if let Some(start) = started {
+        output.push_str(&format!(
+            "- 开始：{} · 事件 {}\n",
+            start.timestamp, start.sequence
+        ));
+        if let EventData::ActionStarted { arguments, .. } = &start.data {
+            output.push_str("\n请求参数：\n\n");
+            fence(output, "json", &json(arguments));
+        }
+    }
+}
+fn tool_stream(output: &mut String, text: Option<&str>) {
+    if let Some(text) = text {
+        output.push_str("完整已持久化流输出：\n\n");
+        fence(output, "text", text);
+    } else {
+        output.push_str("尚无已持久化流输出。\n\n");
+    }
 }
 
 fn heading(
@@ -186,7 +230,14 @@ fn partial(
     text: &str,
     origin: Option<Origin<'_>>,
 ) {
-    heading(output, "未结算流输出", actor, event, origin);
+    heading(
+        output,
+        "未结算流输出",
+        origin.map_or(actor, |value| value.actor),
+        event,
+        origin,
+    );
+    output.push_str(&format!("- 流标识：`{actor}`\n\n"));
     fence(output, "text", text);
 }
 fn json(value: &serde_json::Value) -> String {
@@ -201,16 +252,16 @@ fn raw_tool_text(output: &mut String, result: &serde_json::Value) {
         .unwrap_or(result);
     for key in ["stdout", "stderr", "output", "content", "text"] {
         if let Some(text) = data[key].as_str() {
-            output.push_str(&format!("原始 {key}：\n\n"));
+            output.push_str(&format!("最终结果中的原始 {key}：\n\n"));
             fence(output, "text", text);
         }
     }
     if let Some(text) = data["process"]["output"].as_str() {
-        output.push_str("原始进程输出：\n\n");
+        output.push_str("最终结果中的进程输出（执行器可能只保留尾部）：\n\n");
         fence(output, "text", text);
     }
     if let Some(text) = result["error"].as_str() {
-        output.push_str("原始错误：\n\n");
+        output.push_str("最终结果中的原始错误：\n\n");
         fence(output, "text", text);
     }
 }

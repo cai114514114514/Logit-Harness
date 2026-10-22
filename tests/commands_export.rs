@@ -153,3 +153,139 @@ fn markdown_export_preserves_unfinished_streams_and_rejects_existing_symlink() {
             .is_err()
     );
 }
+
+#[test]
+fn completed_shell_export_retains_persisted_stream_before_the_bounded_final_tail() {
+    let full = "UNIQUE_PREFIX_BEFORE_TAIL\n".to_owned() + &"shell log output line\n".repeat(6000);
+    assert!(full.len() > 65_536);
+    let tail = full[full.len() - 65_536..].to_owned();
+    assert!(!tail.contains("UNIQUE_PREFIX_BEFORE_TAIL"));
+    let mut data = vec![
+        EventData::Identity {
+            actor: "worker-long".into(),
+            response: "response-long".into(),
+            turn: "turn-long".into(),
+            goal: None,
+            action: Some("action-long".into()),
+        },
+        EventData::ActionStarted {
+            id: "action-long".into(),
+            tool: "shell".into(),
+            arguments: json!({"command":"emit large fixture output"}),
+        },
+    ];
+    // Match process::drain: every chunk is persisted as a Delta while the final
+    // ProcessOutput retains only its last 65,536 bytes.
+    for chunk in full.as_bytes().chunks(4096) {
+        data.push(EventData::Delta {
+            actor: "action-long".into(),
+            text: String::from_utf8(chunk.to_vec()).unwrap(),
+        });
+    }
+    let process = loh::tools::process::ProcessOutput {
+        pid: 4242,
+        code: Some(0),
+        cancelled: false,
+        timed_out: false,
+        output: tail,
+    };
+    let result = json!({"result":{"data":{"process":process}}});
+    data.push(EventData::ActionFinished {
+        id: "action-long".into(),
+        success: true,
+        result: result.clone(),
+    });
+    let (markdown, _) = export_events(data);
+    assert!(
+        markdown.contains(&full),
+        "full persisted stream must survive a bounded final result"
+    );
+    assert_eq!(markdown.matches("UNIQUE_PREFIX_BEFORE_TAIL").count(), 1);
+    assert!(
+        markdown.contains(&serde_json::to_string_pretty(&result).unwrap()),
+        "retain the exact final structured result as well"
+    );
+    assert!(markdown.contains("已持久化流输出"));
+    assert!(markdown.contains("最终结果中的进程输出"));
+    assert_eq!(markdown.matches("## 工具 · shell").count(), 1);
+    assert!(!markdown.contains("## 工具 · shell · 未结算"));
+}
+
+#[test]
+fn quiet_and_streaming_unfinished_tools_keep_start_details_and_worker_source() {
+    let mut data = vec![];
+    for (action, worker) in [
+        ("quiet-action", "worker-quiet"),
+        ("partial-action", "worker-partial"),
+    ] {
+        data.push(EventData::Identity {
+            actor: worker.into(),
+            response: format!("response-{action}"),
+            turn: format!("turn-{action}"),
+            goal: None,
+            action: Some(action.into()),
+        });
+        data.push(EventData::ActionStarted {
+            id: action.into(),
+            tool: "shell".into(),
+            arguments: json!({"command":format!("run {action}")}),
+        });
+    }
+    data.push(EventData::Delta {
+        actor: "partial-action".into(),
+        text: "partial tool bytes\n".into(),
+    });
+    let (markdown, events) = export_events(data);
+    assert_eq!(markdown.matches("## 工具 · shell · 未结算").count(), 2);
+    for (action, worker) in [
+        ("quiet-action", "worker-quiet"),
+        ("partial-action", "worker-partial"),
+    ] {
+        assert!(markdown.contains(&format!("- 操作：`{action}`")));
+        assert!(markdown.contains(&format!("- 来源：`{worker}`")));
+        assert!(!markdown.contains(&format!("- 来源：`{action}`")));
+        assert!(markdown.contains(&format!("run {action}")));
+        assert!(markdown.contains(&format!("turn-{action}")));
+        assert!(markdown.contains(&format!("response-{action}")));
+    }
+    for event in events
+        .iter()
+        .filter(|event| matches!(event.data, EventData::ActionStarted { .. }))
+    {
+        assert!(markdown.contains(&format!(
+            "- 开始：{} · 事件 {}",
+            event.timestamp, event.sequence
+        )));
+    }
+    assert!(markdown.contains("尚无已持久化流输出"));
+    assert!(markdown.contains("partial tool bytes\n"));
+    assert!(markdown.contains("未收到最终结果"));
+}
+
+fn export_events(data: Vec<EventData>) -> (String, Vec<loh::domain::SessionEvent>) {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::new(root.path().join("state"));
+    paths.prepare().unwrap();
+    let store = Store::open(&paths.database()).unwrap();
+    let session = Session::conversation(root.path().into(), "history fixture", 1000, 60);
+    store
+        .commit(
+            &session.id,
+            &session,
+            EventData::Created {
+                objective: "history fixture".into(),
+                workspace: root.path().display().to_string(),
+            },
+        )
+        .unwrap();
+    for event in data {
+        store.append(&session.id, event).unwrap();
+    }
+    Service::new(&paths, root.path(), Some(&session.id))
+        .execute(parse("/export history.md").unwrap())
+        .unwrap();
+    (
+        std::fs::read_to_string(root.path().join("history.md")).unwrap(),
+        store.events(&session.id, 0).unwrap(),
+    )
+}
