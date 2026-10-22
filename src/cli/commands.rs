@@ -9,7 +9,10 @@ use crate::{
     store::Store,
 };
 use serde_json::json;
-use std::{io::Write, path::PathBuf};
+use std::{
+    io::{IsTerminal, Write},
+    path::PathBuf,
+};
 
 pub async fn run(args: Args) -> anyhow::Result<()> {
     let home = args
@@ -34,6 +37,23 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         .canonicalize()?;
     let command = if let Some(command) = args.command {
         command
+    } else if args.prompt.is_none()
+        && std::io::stdin().is_terminal()
+        && std::io::stdout().is_terminal()
+    {
+        match super::terminal::welcome(&paths, &config, &cwd).await? {
+            super::terminal::Launch::Task(prompt) => Command::Run {
+                prompt,
+                json: false,
+                detach: false,
+            },
+            super::terminal::Launch::Attach(id) => Command::Attach {
+                id,
+                after: 0,
+                json: false,
+            },
+            super::terminal::Launch::Exit => return Ok(()),
+        }
     } else {
         let prompt = if let Some(prompt) = args.prompt {
             prompt

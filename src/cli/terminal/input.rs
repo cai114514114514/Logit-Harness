@@ -6,6 +6,9 @@ use unicode_width::UnicodeWidthStr;
 pub struct Input {
     text: String,
     cursor: usize,
+    history: Vec<String>,
+    history_index: Option<usize>,
+    draft: String,
 }
 
 impl Input {
@@ -65,7 +68,78 @@ impl Input {
     }
     pub fn take(&mut self) -> String {
         self.cursor = 0;
+        self.history_index = None;
+        self.draft.clear();
         std::mem::take(&mut self.text)
+    }
+    pub fn remember(&mut self, text: &str) {
+        if !text.trim().is_empty() && self.history.last().is_none_or(|last| last != text) {
+            self.history.push(text.to_owned());
+            if self.history.len() > 200 {
+                self.history.remove(0);
+            }
+        }
+    }
+    pub fn replace(&mut self, text: &str) {
+        self.text.clear();
+        self.cursor = 0;
+        self.insert(text);
+    }
+    /// Within multiline drafts arrows move between lines; at the boundary they
+    /// browse submitted messages, retaining the unsent draft when moving back down.
+    pub fn up(&mut self) {
+        let start = self.text[..self.cursor].rfind('\n').map_or(0, |n| n + 1);
+        if start > 0 {
+            let column = self.text[start..self.cursor].graphemes(true).count();
+            let previous = self.text[..start - 1].rfind('\n').map_or(0, |n| n + 1);
+            self.cursor = previous
+                + self.text[previous..start - 1]
+                    .graphemes(true)
+                    .take(column)
+                    .map(str::len)
+                    .sum::<usize>();
+            return;
+        }
+        if self.history.is_empty() {
+            return;
+        }
+        let index = match self.history_index {
+            None => {
+                self.draft = self.text.clone();
+                self.history.len() - 1
+            }
+            Some(index) => index.saturating_sub(1),
+        };
+        self.history_index = Some(index);
+        self.replace(&self.history[index].clone());
+    }
+    pub fn down(&mut self) {
+        if let Some(end) = self.text[self.cursor..].find('\n') {
+            let start = self.text[..self.cursor].rfind('\n').map_or(0, |n| n + 1);
+            let column = self.text[start..self.cursor].graphemes(true).count();
+            let next = self.cursor + end + 1;
+            let end = self.text[next..]
+                .find('\n')
+                .map_or(self.text.len(), |n| next + n);
+            self.cursor = next
+                + self.text[next..end]
+                    .graphemes(true)
+                    .take(column)
+                    .map(str::len)
+                    .sum::<usize>();
+            return;
+        }
+        let Some(index) = self.history_index else {
+            return;
+        };
+        if index + 1 < self.history.len() {
+            self.history_index = Some(index + 1);
+            self.replace(&self.history[index + 1].clone());
+        } else {
+            self.history_index = None;
+            let draft = std::mem::take(&mut self.draft);
+            self.replace(&draft);
+        }
     }
     pub fn position(&self, width: usize) -> (usize, usize) {
         let width = width.max(1);
@@ -102,6 +176,7 @@ pub enum Intent {
     Diff,
     Help,
     Detach,
+    Sessions,
 }
 
 pub fn parse(text: &str) -> anyhow::Result<Intent> {
@@ -118,6 +193,7 @@ pub fn parse(text: &str) -> anyhow::Result<Intent> {
         "/status" if parts.len() == 1 => Intent::Status,
         "/diff" if parts.len() == 1 => Intent::Diff,
         "/help" if parts.len() == 1 => Intent::Help,
+        "/sessions" if parts.len() == 1 => Intent::Sessions,
         "/detach" if parts.len() == 1 => Intent::Detach,
         "/budget" if parts.len() == 1 => Intent::Budget,
         "/budget" if (2..=3).contains(&parts.len()) => {

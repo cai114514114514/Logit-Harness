@@ -10,8 +10,6 @@ use std::{
 };
 use tokio::task::JoinSet;
 
-const HELP: &str = "/status 当前状态\n/diff 当前 Git 工作树差异（包括用户已有修改）\n/budget 查看用量；/budget <总 token 上限> [总秒数上限]\n/pause 暂停  /resume 继续  /stop 停止\n/answer <问题 ID> <答复>  /approve <授权 ID>\n/detach 断开客户端，后台继续；关闭终端同样只断开\nEnter 发送，Alt+Enter 换行；粘贴多行后仍需 Enter 才发送。";
-
 pub(super) enum View {
     Quiet,
     Status,
@@ -26,6 +24,9 @@ pub(super) struct Reply {
 type Jobs = JoinSet<anyhow::Result<Reply>>;
 
 pub(super) fn apply(reply: Reply, screen: &mut Screen) {
+    if reply.message.is_none() && reply.note.is_none() && reply.draft.is_none() {
+        screen.activity = "已送达，等待执行器处理".into();
+    }
     if let Some(message) = reply.message {
         screen.receive(message);
     }
@@ -57,38 +58,44 @@ pub(super) fn handle(event: Event, screen: &mut Screen, jobs: &mut Jobs, socket:
         _ => return false,
     };
     let control = key.modifiers.contains(KeyModifiers::CONTROL);
+    if screen.picker && key.code == KeyCode::Enter {
+        screen.next_session = screen
+            .recent
+            .get(screen.selection)
+            .map(|recent| recent.id.clone());
+        return screen.next_session.is_some();
+    }
+    if super::edit::edit(screen, key) {
+        return false;
+    }
     match key.code {
         KeyCode::Char('c') if control => request(jobs, socket, Control::Pause),
         KeyCode::Char('d') if control => return true,
-        KeyCode::Char('u') if control => {
-            screen.input.take();
-        }
-        KeyCode::Char('a') if control => screen.input.home(),
-        KeyCode::Char('e') if control => screen.input.end(),
-        KeyCode::Enter if key.modifiers.contains(KeyModifiers::ALT) => screen.input.insert("\n"),
         KeyCode::Enter => return submit(screen, jobs, socket),
-        KeyCode::Char(character) if !control => screen.input.insert(&character.to_string()),
-        KeyCode::Backspace => screen.input.backspace(),
-        KeyCode::Delete => screen.input.delete(),
-        KeyCode::Left => screen.input.left(),
-        KeyCode::Right => screen.input.right(),
-        KeyCode::Home => screen.input.home(),
-        KeyCode::End => screen.input.end(),
-        KeyCode::PageUp => screen.scroll = screen.scroll.saturating_add(10),
-        KeyCode::PageDown => screen.scroll = screen.scroll.saturating_sub(10),
         _ => (),
     }
     false
 }
 
 fn submit(screen: &mut Screen, jobs: &mut Jobs, socket: &Path) -> bool {
+    if !screen.complete() {
+        return false;
+    }
     let text = screen.input.take();
     if text.trim().is_empty() {
         return false;
     }
     match parse(&text) {
         Ok(Intent::Detach) => return true,
-        Ok(Intent::Help) => screen.note(HELP),
+        Ok(Intent::Help) => screen.note(super::menu::help()),
+        Ok(Intent::Sessions) => {
+            screen.selection = 0;
+            if screen.recent.is_empty() {
+                screen.note("当前目录没有其他保存的会话。");
+            } else {
+                screen.picker = true;
+            }
+        }
         Ok(Intent::Status) => snapshot(jobs, socket, View::Status),
         Ok(Intent::Budget) => snapshot(jobs, socket, View::Budget),
         Ok(Intent::Diff) => {
@@ -104,12 +111,17 @@ fn submit(screen: &mut Screen, jobs: &mut Jobs, socket: &Path) -> bool {
                 });
             }
         }
-        Ok(Intent::Control(command)) => request(jobs, socket, command),
+        Ok(Intent::Control(command)) => {
+            screen.activity = "正在提交…".into();
+            request(jobs, socket, command);
+        }
         Err(error) => {
             screen.note(error.to_string());
             screen.input.insert(&text);
         }
     }
+    screen.input.remember(&text);
+    screen.menu_hidden = false;
     screen.scroll = 0;
     false
 }
@@ -125,7 +137,7 @@ pub(super) fn request(jobs: &mut Jobs, socket: &Path, command: Control) {
         match ipc::request(&socket, ClientMessage::Command { command }).await {
             Ok(ServerMessage::Ack) => Ok(Reply {
                 message: None,
-                note: Some("控制请求已保存，等待执行器处理。".into()),
+                note: None,
                 draft: None,
                 view: View::Quiet,
             }),
@@ -158,7 +170,7 @@ pub(super) fn snapshot(jobs: &mut Jobs, socket: &Path, view: View) {
     });
 }
 
-async fn diff(cwd: PathBuf) -> anyhow::Result<String> {
+pub(super) async fn diff(cwd: PathBuf) -> anyhow::Result<String> {
     let mut output = String::from("当前 Git 工作树（包含已有修改）：\n");
     for arguments in [
         vec!["status", "--short"],

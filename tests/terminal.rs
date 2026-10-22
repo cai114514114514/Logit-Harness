@@ -285,7 +285,12 @@ async fn actual_pty_accepts_multiline_corrections_pauses_and_detaches_without_st
     let mut screen = Vec::new();
     tokio::time::timeout(Duration::from_secs(5), async {
         while !String::from_utf8_lossy(&screen).contains("Logit- Harness") {
-            screen.extend(chunks.recv().await.unwrap());
+            let bytes = chunks.recv().await.unwrap();
+            screen.extend(&bytes);
+            if screen.windows(4).any(|part| part == b"\x1b[6n") {
+                writer.write_all(b"\x1b[1;1R").unwrap();
+                writer.flush().unwrap();
+            }
         }
     })
     .await

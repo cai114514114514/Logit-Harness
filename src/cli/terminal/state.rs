@@ -1,9 +1,15 @@
-use super::Input;
+use super::{Input, menu, transcript::Transcript};
 use crate::{
     domain::{EventData, Status},
     runtime::{ipc::ServerMessage, view::SessionView},
 };
-use std::collections::{BTreeMap, VecDeque};
+use std::path::PathBuf;
+
+pub struct Recent {
+    pub id: String,
+    pub objective: String,
+    pub status: Status,
+}
 
 #[derive(Default)]
 pub struct Screen {
@@ -11,19 +17,48 @@ pub struct Screen {
     pub session: Option<SessionView>,
     pub scroll: usize,
     pub connected: bool,
-    pub(super) logs: VecDeque<String>,
-    pub(super) streams: BTreeMap<String, String>,
+    pub transcript: Transcript,
+    pub workspace: PathBuf,
+    pub model: String,
+    pub key_present: bool,
+    pub recent: Vec<Recent>,
+    pub picker: bool,
+    pub selection: usize,
+    pub expanded: bool,
+    pub(super) frame: usize,
+    pub(super) menu_hidden: bool,
+    pub(super) activity: String,
+    pub(super) next_session: Option<String>,
     sequence: u64,
     snapshot: u64,
 }
 
 impl Screen {
     pub fn note(&mut self, text: impl Into<String>) {
-        let text = clean(&text.into());
-        self.logs.push_back(text.chars().take(20_000).collect());
-        while self.logs.len() > 300 || self.logs.iter().map(String::len).sum::<usize>() > 160_000 {
-            self.logs.pop_front();
+        self.transcript.note(&text.into());
+    }
+    pub fn menu(&self) -> Vec<&'static menu::Command> {
+        if self.menu_hidden || self.picker {
+            vec![]
+        } else {
+            menu::matches(self.input.text())
         }
+    }
+    pub fn complete(&mut self) -> bool {
+        let menu = self.menu();
+        let Some(command) = menu.get(self.selection.min(menu.len().saturating_sub(1))) else {
+            return true;
+        };
+        let text = format!(
+            "{}{}",
+            command.name,
+            if command.arguments { " " } else { "" }
+        );
+        let ready = !command.arguments;
+        self.input.replace(&text);
+        self.menu_hidden = true;
+        self.selection = 0;
+        ready
     }
     pub fn receive(&mut self, message: ServerMessage) {
         match message {
@@ -35,6 +70,7 @@ impl Screen {
             }
             ServerMessage::View { state, sequence } => {
                 if sequence >= self.snapshot.max(self.sequence) {
+                    self.workspace = state.workspace.clone();
                     self.session = Some(state);
                     self.snapshot = sequence;
                 }
@@ -75,35 +111,58 @@ impl Screen {
                 }
                 match event.data {
                     EventData::Message { actor, text } => {
-                        self.streams.remove(&actor);
-                        self.note(format!("{actor} › {text}"));
+                        self.transcript.message(&actor, &text);
+                        self.activity.clear();
                     }
-                    EventData::User { message } => self.note(format!("你 › {message}")),
+                    EventData::Created { objective, .. } => {
+                        self.input.remember(&objective);
+                        self.transcript.user(&objective);
+                    }
+                    EventData::User { message } => {
+                        self.input.remember(&message);
+                        self.transcript.user(&message);
+                    }
                     EventData::Delta { actor, text } => {
-                        let stream = self.streams.entry(actor).or_default();
-                        stream.push_str(&clean(&text));
-                        if stream.len() > 16_000 {
-                            *stream = stream
-                                .chars()
-                                .rev()
-                                .take(4000)
-                                .collect::<String>()
-                                .chars()
-                                .rev()
-                                .collect();
-                        }
+                        self.transcript.delta(&actor, &text);
                     }
-                    EventData::ActionStarted { tool, .. } => self.note(format!("执行 › {tool}")),
-                    EventData::ActionFinished { id, success, .. } => {
-                        self.streams.remove(&id);
-                        self.note(if success {
-                            "检查点 › 工具执行成功"
+                    EventData::ModelRequested { actor, .. } => {
+                        self.activity = if actor.starts_with("verify") {
+                            "正在独立验收"
+                        } else if actor.starts_with("steer") {
+                            "正在理解你的补充"
                         } else {
-                            "检查点 › 工具未成功，正在核对原因"
-                        });
+                            "正在思考"
+                        }
+                        .into();
+                    }
+                    EventData::ActionStarted {
+                        id,
+                        tool,
+                        arguments,
+                    } => self.transcript.start(&id, &tool, &arguments),
+                    EventData::ActionFinished {
+                        id,
+                        success,
+                        result,
+                    } => {
+                        self.transcript.finish(&id, success, &result);
+                        self.activity.clear();
                     }
                     EventData::Status { status, reason } => {
-                        self.note(format!("{} › {reason}", label(&status)))
+                        if matches!(
+                            status,
+                            Status::Paused
+                                | Status::Stopped
+                                | Status::Completed
+                                | Status::Failed
+                                | Status::Exhausted
+                        ) {
+                            self.transcript.settle();
+                        }
+                        if status != Status::Running {
+                            self.note(format!("{} · {reason}", label(&status)));
+                        }
+                        self.activity.clear();
                     }
                     EventData::Diagnostic { message } => self.note(format!("系统 › {message}")),
                     EventData::Approval {
@@ -124,7 +183,8 @@ impl Screen {
                         self.note(format!("需求修订 {revision} › {}", changed.join(", ")))
                     }
                     EventData::Worker { id, status, task } => {
-                        self.note(format!("{id} · {status} › {task}"))
+                        let _ = id;
+                        self.note(format!("工作者 · {status} · {task}"))
                     }
                     _ => (),
                 }

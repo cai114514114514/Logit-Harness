@@ -465,3 +465,26 @@ Spec: docs/spec.md
 - No paid request was made. A real-provider cache/latency/quality comparison remains pending the
   existing budget blocker. Request-prefix equality does not prove a particular hit rate or speedup.
   Full design, measurements and limitations: `docs/cache.md`. The overall research goal stays open.
+
+## Terminal redesign after local CLI comparison
+
+- Inspected the actual local Claude Code 2.1.304 (not logged in) and Codex CLI 0.159.3 startup,
+  composer and slash-command menus without submitting a coding task. Closed those inspection
+  clients afterwards. Findings and design choices: `docs/terminal-review.md`.
+- Replaced the raw startup prompt with a shared multiline editor, compact welcome screen,
+  filtered command palette, completion, history and recent-session picker. The UI uses the normal
+  terminal buffer. Tool commands, paths and results stay grouped, failures remain visible, Markdown
+  is readable, and Ctrl-O expands output. The existing KV statistic stays in the footer.
+- Added read-only saved-conversation viewing when the socket is unavailable. Viewing does not
+  restart execution; resume is explicit and requires credentials. Fixed a real PTY transition
+  failure caused by synchronous cursor queries racing the previously created async input reader.
+- Complete suite: 143 passing tests; strict all-target Clippy and locked macOS release build pass.
+  Actual installed-binary PTY checks pass for startup, slash menu, completion, multiline paste,
+  resize, session selection, archive view, tool failure, output expansion and keyless resume refusal.
+  Evidence: `artifacts/terminal/interaction.json`, logs and rendered PTY grids. These are not native
+  Apple Terminal-window screenshots; the example conversation is clearly marked synthetic.
+- Installed source hash:
+  `52c6a53a55ba1cb202188d2e5cc1e4b8755292d02b18a3580a70ee7b614c10b3`.
+  Current client package: `dist/terminal/loh-macos-arm64-0.1.0.tar.gz`. Earlier delivery/cache packages
+  and the frozen research executable are retained. No paid provider call or model/harness strategy
+  change was made. This does not resolve the independent research-budget blocker.
