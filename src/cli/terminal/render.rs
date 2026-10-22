@@ -2,12 +2,12 @@ use super::{
     Screen,
     input::wrap,
     state::label,
-    text::{ACCENT, MUTED},
+    text::{ACCENT, BRAND, MUTED},
 };
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
 };
@@ -208,7 +208,14 @@ fn header_view(frame: &mut Frame, screen: &Screen, area: Rect) {
         Paragraph::new(vec![
             Line::from(vec![
                 Span::styled(
-                    "◈  Logit- Harness",
+                    " L ",
+                    Style::default()
+                        .fg(Color::White)
+                        .bg(BRAND)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "  Logit- Harness",
                     Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(

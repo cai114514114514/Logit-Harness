@@ -22,7 +22,8 @@ correction mechanism and shared paid budget left in place.
 One editor now handles both starting and steering a task. The welcome screen includes model,
 directory, credential state and recent project sessions. Normal terminal-buffer rendering preserves
 earlier shell scrollback. The composer uses horizontal rules, leaving conversation and tool output
-visually distinct without heavy panel borders. Amber marks interaction/progress; success/error
+visually distinct without heavy panel borders. Blue marks interaction/progress after the user's
+L-icon branding update; success/error
 markers carry meaning independent of color. `NO_COLOR` is respected by the terminal backend.
 
 The command catalog supplies help, filtering, completion and keyboard selection. History navigation

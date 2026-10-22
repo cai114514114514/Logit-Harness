@@ -1,3 +1,5 @@
+<img src="assets/brand/loh-icon.png" alt="Logit- Harness 蓝色 L 图标" width="72" height="72">
+
 # Logit- Harness
 
 启动命令：`loh`。一个以 DeepSeek Flash 为模型的 Rust Coding Agent，面向 macOS 本地开发。

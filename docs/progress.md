@@ -488,3 +488,15 @@ Spec: docs/spec.md
   Current client package: `dist/terminal/loh-macos-arm64-0.1.0.tar.gz`. Earlier delivery/cache packages
   and the frozen research executable are retained. No paid provider call or model/harness strategy
   change was made. This does not resolve the independent research-budget blocker.
+
+## Blue L identity
+
+- Designed the requested L icon with the built-in imagegen tool: a white geometric L, diagonal
+  right terminal and electric-blue rounded tile. Project asset: `assets/brand/loh-icon.png`
+  (1254 × 1254 RGBA). Design notes and generation prompts: `assets/brand/README.md`.
+- Replaced the terminal's generic diamond with a white L on a blue badge. Identity, selection and
+  progress now use blue; success and failure retain their semantic colors. The actual terminal uses
+  a text badge rather than attempting to render a PNG. README and packaged releases include the art.
+- The 14 existing CLI/terminal/layout checks pass, including actual PTY input and detach. This is a
+  small branding change; no model protocol, execution policy, evaluation corpus or billing ledger
+  changed. The earlier complete 143-test terminal validation remains separately recorded above.

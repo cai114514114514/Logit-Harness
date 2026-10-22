@@ -29,6 +29,7 @@ def main():
     shutil.copy2(binary, directory / "loh")
     shutil.copy2("README.md", directory / "README.md")
     shutil.copytree("docs", directory / "docs")
+    shutil.copytree("assets/brand", directory / "assets/brand")
     (directory / "scripts").mkdir()
     shutil.copy2("scripts/replay.py", directory / "scripts/replay.py")
     shutil.copy2("scripts/cache_report.py", directory / "scripts/cache_report.py")
