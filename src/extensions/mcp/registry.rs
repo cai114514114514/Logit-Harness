@@ -1,6 +1,7 @@
 use super::{McpClient, Server, Transport, journal};
 use crate::tools::Effect;
 use serde_json::{Value, json};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
@@ -10,6 +11,7 @@ struct Connection {
     // A single server is serialized: cancelling a local call terminates its process group.
     client: Mutex<Option<Arc<McpClient>>>,
     directory: PathBuf,
+    enabled: AtomicBool,
 }
 
 pub struct Registry {
@@ -31,6 +33,7 @@ impl Registry {
                             config,
                             client: Mutex::new(None),
                             directory,
+                            enabled: AtomicBool::new(true),
                         },
                     )
                 })
@@ -69,9 +72,17 @@ impl Registry {
     pub async fn catalog(&self, name: &str, cancel: &CancellationToken) -> anyhow::Result<Value> {
         let server = self.server(name)?;
         let mut slot = tokio::select! { biased; _ = cancel.cancelled() => anyhow::bail!("MCP discovery cancelled"), slot = server.client.lock() => slot };
+        anyhow::ensure!(
+            server.enabled.load(Ordering::SeqCst),
+            "MCP server is disabled: {name}"
+        );
         let client = self.connect(server, &mut slot).await?;
         anyhow::ensure!(!cancel.is_cancelled(), "MCP discovery cancelled");
-        Ok(serde_json::to_value(client.catalog())?)
+        let mut catalog = serde_json::to_value(client.catalog())?;
+        if let Some(tools) = catalog.as_array_mut() {
+            tools.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+        }
+        Ok(catalog)
     }
 
     pub async fn call(
@@ -83,6 +94,10 @@ impl Registry {
     ) -> anyhow::Result<super::client::CallResult> {
         let server = self.server(name)?;
         let mut slot = tokio::select! { biased; _ = cancel.cancelled() => anyhow::bail!("MCP call cancelled before ownership"), slot = server.client.lock() => slot };
+        anyhow::ensure!(
+            server.enabled.load(Ordering::SeqCst),
+            "MCP server is disabled: {name}"
+        );
         let pending = server.directory.join("pending.json");
         let effect = server.config.effect(tool);
         let mutation = !effect.readonly();
@@ -127,6 +142,30 @@ impl Registry {
         let bytes = std::fs::read(path)?;
         Ok(
             json!({"record":serde_json::from_slice::<Value>(&bytes)?,"hash":blake3::hash(&bytes).to_hex().to_string()}),
+        )
+    }
+
+    /// The per-server mutex is the settlement boundary shared with call/catalog.
+    /// A reconnect or disable never deletes uncertain mutation journals.
+    pub async fn control(&self, name: &str, operation: super::Operation) -> anyhow::Result<Value> {
+        let server = self.server(name)?;
+        let mut slot = server.client.lock().await;
+        if let Some(client) = slot.take() {
+            client.close().await?;
+        }
+        match operation {
+            super::Operation::Disable => server.enabled.store(false, Ordering::SeqCst),
+            super::Operation::Enable => server.enabled.store(true, Ordering::SeqCst),
+            super::Operation::Reconnect => {
+                anyhow::ensure!(
+                    server.enabled.load(Ordering::SeqCst),
+                    "MCP server is disabled; enable it first"
+                );
+                self.connect(server, &mut slot).await?;
+            }
+        }
+        Ok(
+            json!({"server":name,"operation":operation,"enabled":server.enabled.load(Ordering::SeqCst),"uncertain_mutation":server.directory.join("pending.json").exists()}),
         )
     }
 

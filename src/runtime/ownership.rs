@@ -74,7 +74,12 @@ impl Runner {
             let owner = serde_json::from_str::<Owner>(&content)
                 .map(|o| o.session)
                 .unwrap_or_else(|_| content.trim().to_owned());
-            if self.session.owner.as_deref() != Some(&owner) {
+            // A new message/steering result can set Running without acquiring
+            // the lease. The OS lock remains authoritative even when its owner
+            // has not changed; retain the original handover destination.
+            if self.session.owner.as_deref() != Some(&owner)
+                || self.session.status != Status::Waiting
+            {
                 if self.session.owner_status.is_none() {
                     self.session.owner_status = Some(
                         self.session

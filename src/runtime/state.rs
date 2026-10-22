@@ -41,6 +41,16 @@ pub struct Question {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Session {
+    #[serde(default)]
+    pub defaults: Option<crate::config::defaults::Snapshot>,
+    #[serde(default)]
+    pub mcp_disabled: BTreeSet<String>,
+    #[serde(default)]
+    pub mcp_pending: Vec<crate::extensions::mcp::Change>,
+    #[serde(default)]
+    pub workflows: BTreeMap<String, crate::extensions::skills::Invocation>,
+    #[serde(default)]
+    pub skill_pending: Vec<crate::extensions::skills::Request>,
     /// Missing fields in historical sessions retain explicit engineering behavior.
     #[serde(default)]
     pub mode: super::conversation::Mode,
@@ -113,6 +123,12 @@ pub struct Session {
 }
 
 impl Session {
+    /// Capture nonsecret defaults when creating a conversation, before the daemon
+    /// can be launched later. /config takes effect in /new, never in this session.
+    pub fn with_defaults(mut self, config: &crate::config::Config) -> Self {
+        self.defaults = Some(crate::config::defaults::Snapshot::capture(config));
+        self
+    }
     /// tokens/seconds of 0 are accepted without validation: the CLI's Config
     /// rejects zero execution limits before this is constructed. A zero-token
     /// session created directly would exhaust on the first model request, and
@@ -134,6 +150,11 @@ impl Session {
             text: objective.into(),
         }];
         Self {
+            defaults: None,
+            mcp_disabled: BTreeSet::new(),
+            mcp_pending: vec![],
+            workflows: BTreeMap::new(),
+            skill_pending: vec![],
             mode: Default::default(),
             interactive: false,
             archives: vec![],
@@ -182,6 +203,18 @@ impl Session {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Control {
+    Rename {
+        title: String,
+    },
+    Mcp {
+        server: String,
+        operation: crate::extensions::mcp::Operation,
+    },
+    Skill {
+        id: String,
+        hash: String,
+        arguments: String,
+    },
     Plan {
         text: Option<String>,
     },

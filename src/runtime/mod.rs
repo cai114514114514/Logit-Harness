@@ -2,6 +2,7 @@ mod actor;
 mod boundary;
 pub mod charge;
 mod clock;
+mod commands;
 pub mod condition;
 mod control;
 pub mod conversation;

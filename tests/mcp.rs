@@ -88,6 +88,26 @@ async fn stdio_external_effect_stays_uncertain_after_cancellation_and_restart() 
     let recovered = Registry::new(config, root.path().into(), logs.path().into());
     recovered.recover().await.unwrap();
     let restored = recovered.pending("remote").await.unwrap();
+    recovered
+        .control("remote", loh::extensions::mcp::Operation::Disable)
+        .await
+        .unwrap();
+    assert_eq!(recovered.pending("remote").await.unwrap(), restored);
+    assert!(
+        recovered
+            .catalog("remote", &CancellationToken::new())
+            .await
+            .is_err()
+    );
+    recovered
+        .control("remote", loh::extensions::mcp::Operation::Enable)
+        .await
+        .unwrap();
+    recovered
+        .control("remote", loh::extensions::mcp::Operation::Reconnect)
+        .await
+        .unwrap();
+    assert_eq!(recovered.pending("remote").await.unwrap(), restored);
     let retry = recovered
         .call(
             "remote",
@@ -471,4 +491,80 @@ async fn cancellation_confirms_the_stdio_writer_exits_before_returning() {
             .is_none()
     );
     assert!(!root.path().join("late").exists());
+}
+
+#[tokio::test]
+async fn disable_waits_for_current_call_and_preserves_unknown_mutation_journal() {
+    use loh::extensions::mcp::{Operation, Registry};
+    let root = tempfile::tempdir().unwrap();
+    let logs = tempfile::tempdir().unwrap();
+    let mut server = config(Transport::Stdio {
+        command: "python3".into(),
+        args: vec![
+            "-u".into(),
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/mcp_server.py")
+                .display()
+                .to_string(),
+        ],
+        environment: vec![],
+    });
+    server.effects.insert("echo".into(), Effect::Unknown);
+    let registry = Arc::new(Registry::new(
+        BTreeMap::from([("test".into(), server)]),
+        root.path().into(),
+        logs.path().into(),
+    ));
+    let cancel = CancellationToken::new();
+    let call = {
+        let registry = registry.clone();
+        let cancel = cancel.clone();
+        tokio::spawn(async move {
+            registry
+                .call("test", "echo", json!({"text":"slow"}), cancel)
+                .await
+        })
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        while !root.path().join("started").exists() {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let disable = {
+        let registry = registry.clone();
+        tokio::spawn(async move { registry.control("test", Operation::Disable).await })
+    };
+    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+    assert!(
+        !disable.is_finished(),
+        "disable must await the in-flight call, not terminate its transport"
+    );
+    cancel.cancel();
+    assert!(call.await.unwrap().is_err());
+    let result = disable.await.unwrap().unwrap();
+    assert_eq!(result["enabled"], false);
+    assert_eq!(result["uncertain_mutation"], true);
+    let pending = registry.pending("test").await.unwrap();
+    registry.control("test", Operation::Enable).await.unwrap();
+    assert_eq!(registry.pending("test").await.unwrap(), pending);
+    assert!(
+        registry
+            .call(
+                "test",
+                "echo",
+                json!({"text":"retry"}),
+                CancellationToken::new()
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        registry
+            .control("unconfigured", Operation::Enable)
+            .await
+            .is_err()
+    );
+    registry.close().await.unwrap();
 }

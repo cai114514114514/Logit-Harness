@@ -84,10 +84,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             super::terminal::configure(&paths, &config, &cwd).await?;
         }
         Command::Doctor { json } => {
-            let result = json!({"model":config.model,"base_url":config.base_url,"api_key_present":crate::config::api::configured(&paths, &config.base_url)?,"api_key_source":crate::config::api::source(&paths, &config.base_url)?,
-                "chrome_present":config.chrome.is_file(),"service_sandbox_present":std::path::Path::new("/usr/bin/sandbox-exec").is_file(),
-                "paid_probe_performed":false,"state_directory":paths.home,"platform":std::env::consts::OS,
-                "version":env!("CARGO_PKG_VERSION"),"source_hash":env!("LOH_SOURCE_HASH")});
+            let result = crate::commands::doctor(&paths, &config)?;
             if json {
                 println!("{result}");
             } else {
@@ -143,7 +140,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             );
             paths.prepare()?;
             let store = Store::open(&paths.database())?;
-            let mut session = Session::conversation(cwd, &prompt, config.tokens, config.seconds);
+            let mut session = Session::conversation(cwd, &prompt, config.tokens, config.seconds)
+                .with_defaults(&config);
             session.campaign = config.campaign.clone();
             store.commit(
                 &session.id,

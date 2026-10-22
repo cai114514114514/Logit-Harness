@@ -26,7 +26,12 @@ pub async fn serve(paths: Paths, id: &str) -> anyhow::Result<()> {
     paths.prepare()?;
     let mut config = Config::load(&paths.home)?;
     let store = Arc::new(Store::open(&paths.database())?);
-    let session: Session = store.load(id)?;
+    let mut session: Session = store.load(id)?;
+    if let Some(defaults) = &session.defaults {
+        defaults.apply(&mut config);
+    } else {
+        session.defaults = Some(crate::config::defaults::Snapshot::capture(&config));
+    }
     if let Some(spec) = &session.evaluation {
         config.model = spec.protocol.model.clone();
         config.workers = spec.protocol.workers;
@@ -93,9 +98,16 @@ pub async fn serve(paths: Paths, id: &str) -> anyhow::Result<()> {
         paths.logs(id)?.join("mcp"),
     ));
     mcp.recover().await?;
+    for name in &session.mcp_disabled {
+        if mcp.names().contains(&name.as_str()) {
+            mcp.control(name, crate::extensions::mcp::Operation::Disable)
+                .await?;
+        }
+    }
     for tool in crate::extensions::mcp::tools(mcp.clone()) {
         tools.register(tool)?;
     }
+    tools.mcp = Some(mcp.clone());
     let mut skill_roots = vec![];
     if config.user_skills {
         skill_roots.push(paths.home.join("skills"));

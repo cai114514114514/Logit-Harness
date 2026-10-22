@@ -182,10 +182,12 @@ impl Runner {
                 self.handle_control(control).await?;
             }
             if self.jobs.is_empty() {
+                self.settle_mcp().await?;
                 if let Some(target) = self.session.transition.take() {
                     self.status(target, "all active operations have settled")?;
                 }
                 self.settle_boundary().await?;
+                self.settle_skills()?;
                 self.execution_owner().await?;
                 self.prepare_compaction()?;
                 if self.session.status == Status::Stopped

@@ -19,6 +19,8 @@ fn main() {
         root.join("Cargo.toml"),
         root.join("Cargo.lock"),
         root.join("build.rs"),
+        root.join("skills/init/SKILL.md"),
+        root.join("skills/review/SKILL.md"),
     ];
     collect(&root.join("src"), &mut paths);
     paths.sort();

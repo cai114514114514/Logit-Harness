@@ -117,6 +117,7 @@ pub struct ToolHost {
     pub blocked: Arc<RwLock<BTreeSet<String>>>,
     pub services: Option<Arc<super::services::Services>>,
     pub knowledge: Option<Arc<crate::extensions::knowledge::Knowledge>>,
+    pub mcp: Option<Arc<crate::extensions::mcp::Registry>>,
     registry: BTreeMap<String, Arc<dyn Tool>>,
 }
 
@@ -136,6 +137,7 @@ impl ToolHost {
             blocked: Arc::new(RwLock::new(BTreeSet::new())),
             services: None,
             knowledge: None,
+            mcp: None,
             registry,
         }
     }

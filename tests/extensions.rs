@@ -87,6 +87,26 @@ fn changed_or_symlinked_skills_are_not_silently_loaded_under_old_metadata() {
 }
 
 #[test]
+fn discovery_does_not_decode_or_load_skill_bodies() {
+    let root = tempfile::tempdir().unwrap();
+    let folder = root.path().join("lazy");
+    std::fs::create_dir(&folder).unwrap();
+    let mut bytes = b"---\nname: lazy\ndescription: Lazy body\n---\n".to_vec();
+    bytes.extend(vec![0xff; 300_000]);
+    std::fs::write(folder.join("SKILL.md"), bytes).unwrap();
+    let catalog = Skills::discover(root.path(), &[]).unwrap();
+    assert_eq!(
+        catalog.entries.len(),
+        1,
+        "metadata discovery must not decode the body"
+    );
+    assert!(
+        catalog.load(&catalog.entries[0].id, None).is_err(),
+        "invalid/oversized body rejected only when requested"
+    );
+}
+
+#[test]
 fn directory_instructions_apply_only_to_their_subtree_with_provenance() {
     let root = tempfile::tempdir().unwrap();
     std::fs::create_dir(root.path().join("frontend")).unwrap();
@@ -186,5 +206,86 @@ async fn patches_require_current_directory_rules_even_for_a_new_file() {
             .await
             .unwrap()
             .success
+    );
+}
+
+#[tokio::test]
+async fn review_diff_reads_staged_unstaged_and_untracked_changes_without_external_driver() {
+    use loh::{
+        extensions::knowledge::Knowledge,
+        tools::{Scope, ToolContext, files::Workspace},
+    };
+    use std::sync::Arc;
+    let root = tempfile::tempdir().unwrap();
+    for args in [
+        vec!["init", "--quiet"],
+        vec!["config", "diff.external", "touch DRIVER_RAN"],
+    ] {
+        assert!(
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(root.path())
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+    std::fs::write(root.path().join("file.txt"), "before\n").unwrap();
+    assert!(
+        std::process::Command::new("git")
+            .args(["add", "file.txt"])
+            .current_dir(root.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    std::fs::write(root.path().join("file.txt"), "after\n").unwrap();
+    std::fs::write(root.path().join("untracked.txt"), "new").unwrap();
+    let knowledge = Arc::new(Knowledge::new(root.path().into(), vec![]).unwrap());
+    let tool = loh::extensions::skills::tools(knowledge)
+        .into_iter()
+        .find(|tool| tool.spec().name == "project_diff")
+        .unwrap();
+    assert_eq!(tool.spec().effect, loh::tools::Effect::Read);
+    let (events, _) = tokio::sync::mpsc::unbounded_channel();
+    let result = tool
+        .call(
+            serde_json::json!({}),
+            ToolContext {
+                workspace: Workspace::open(root.path()).unwrap(),
+                logs: root.path().join("logs"),
+                id: "review".into(),
+                scope: Scope {
+                    readonly: true,
+                    ..Scope::default()
+                },
+            },
+            tokio_util::sync::CancellationToken::new(),
+            events,
+        )
+        .await
+        .unwrap();
+    assert!(
+        result.data["staged"]["text"]
+            .as_str()
+            .unwrap()
+            .contains("+before")
+    );
+    assert!(
+        result.data["unstaged"]["text"]
+            .as_str()
+            .unwrap()
+            .contains("+after")
+    );
+    assert!(
+        result.data["status"]["text"]
+            .as_str()
+            .unwrap()
+            .contains("untracked.txt")
+    );
+    assert!(!root.path().join("DRIVER_RAN").exists());
+    assert_eq!(
+        std::fs::read_to_string(root.path().join("file.txt")).unwrap(),
+        "after\n"
     );
 }

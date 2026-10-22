@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 pub mod api;
+pub mod defaults;
 mod private;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -46,17 +47,21 @@ impl Config {
         } else {
             Self::default()
         };
+        config.validate()?;
+        Ok(config)
+    }
+    pub fn validate(&self) -> anyhow::Result<()> {
         anyhow::ensure!(
-            config.tokens > 0 && config.seconds > 0 && config.max_output > 0,
+            self.tokens > 0 && self.seconds > 0 && self.max_output > 0,
             "execution limits must be positive"
         );
         anyhow::ensure!(
-            config.context_bytes >= 4096,
+            self.context_bytes >= 4096,
             "context_bytes must be at least 4096"
         );
-        anyhow::ensure!(config.workers <= 16, "at most 16 workers per runner");
-        reqwest::Url::parse(&config.base_url)?;
-        Ok(config)
+        anyhow::ensure!(self.workers <= 16, "at most 16 workers per runner");
+        reqwest::Url::parse(&self.base_url)?;
+        Ok(())
     }
 }
 

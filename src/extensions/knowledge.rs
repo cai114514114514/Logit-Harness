@@ -20,7 +20,7 @@ impl Knowledge {
         })
     }
     pub fn refresh(&self) -> anyhow::Result<()> {
-        let catalog = Skills::discover(&self.workspace, &self.user_roots)?;
+        let catalog = Skills::discover(&self.workspace, &self.user_roots)?.with_bundled();
         *self
             .skills
             .write()

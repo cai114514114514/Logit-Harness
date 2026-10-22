@@ -398,6 +398,12 @@ async fn cli_resume_persists_intent_before_starting_a_stopped_daemon() {
         ),
     )
     .unwrap();
+    loh::config::api::save(
+        &paths,
+        &format!("http://{}", listener.local_addr().unwrap()),
+        Some("fixture"),
+    )
+    .unwrap();
     let server = tokio::spawn(async move {
         loop {
             let (socket, _) = listener.accept().await.unwrap();
@@ -434,13 +440,73 @@ async fn cli_resume_persists_intent_before_starting_a_stopped_daemon() {
         }
     })
     .await;
-    server.abort();
     assert!(
         output.status.success(),
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(completed.is_ok());
+    let pinned = store
+        .load::<Session>(&session.id)
+        .unwrap()
+        .defaults
+        .unwrap();
+    ipc::request(
+        &paths.socket(&session.id).unwrap(),
+        ClientMessage::Command {
+            command: Control::Stop,
+        },
+    )
+    .await
+    .unwrap();
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while tokio::net::UnixStream::connect(paths.socket(&session.id).unwrap())
+            .await
+            .is_ok()
+        {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    // The new endpoint deliberately has no credential. A restarted old session
+    // must use its captured endpoint and endpoint-bound key, not this new default.
+    loh::config::defaults::save(&paths, "base_url", "http://127.0.0.1:1").unwrap();
+    loh::config::defaults::save(&paths, "max_output", "64").unwrap();
+    loh::config::defaults::save(&paths, "workers", "0").unwrap();
+    let resumed = tokio::process::Command::new(env!("CARGO_BIN_EXE_loh"))
+        .args([
+            "--home",
+            paths.home.to_str().unwrap(),
+            "resume",
+            &session.id,
+        ])
+        .env_remove("DEEPSEEK_API_KEY")
+        .output()
+        .await
+        .unwrap();
+    assert!(
+        resumed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&resumed.stderr)
+    );
+    tokio::time::timeout(Duration::from_secs(4), async {
+        while store.load::<Session>(&session.id).unwrap().status != Status::Completed {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let restarted = store.load::<Session>(&session.id).unwrap();
+    assert_eq!(
+        serde_json::to_value(restarted.defaults.unwrap()).unwrap(),
+        serde_json::to_value(pinned).unwrap()
+    );
+    assert_eq!(
+        loh::config::Config::load(&paths.home).unwrap().max_output,
+        64
+    );
+    server.abort();
 }
 impl Drop for Cleanup {
     fn drop(&mut self) {

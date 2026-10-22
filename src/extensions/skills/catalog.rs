@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
-    io::Read,
+    io::{BufRead, BufReader, Read},
+    os::unix::fs::MetadataExt,
     path::{Component, Path, PathBuf},
 };
 
@@ -15,6 +16,9 @@ pub struct Entry {
     pub source: String,
     pub path: PathBuf,
     pub hash: String,
+    /// Discovery fingerprints only metadata and file identity, not the body.
+    #[serde(skip)]
+    pub(super) stamp: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -44,8 +48,12 @@ impl Skills {
             warnings: vec![],
             roots: BTreeMap::new(),
         };
-        let roots = std::iter::once((workspace, "project"))
-            .chain(user_roots.iter().map(|root| (root.as_path(), "user")));
+        // An explicitly configured user root keeps its provenance even when a
+        // test/custom state home happens to be nested inside the workspace.
+        let roots = user_roots
+            .iter()
+            .map(|root| (root.as_path(), "user"))
+            .chain(std::iter::once((workspace, "project")));
         let mut seen = std::collections::BTreeSet::new();
         for (root, source) in roots {
             if !root.is_dir() {
@@ -99,15 +107,17 @@ impl Skills {
     }
 
     pub fn load(&self, id: &str, resource: Option<&str>) -> anyhow::Result<Loaded> {
+        if let Some(loaded) = super::bundled::load(id, resource)? {
+            return Ok(loaded);
+        }
         let entry = self
             .entries
             .iter()
             .find(|entry| entry.id == id)
             .ok_or_else(|| anyhow::anyhow!("unknown skill ID; use skills_list"))?;
         let root = &self.roots[id];
-        let current = read(&entry.path)?;
         anyhow::ensure!(
-            blake3::hash(current.as_bytes()).to_hex().as_str() == entry.hash,
+            stamp(&entry.path)? == entry.stamp,
             "skill changed since discovery; refresh skills_list before loading"
         );
         let relative = Path::new(resource.unwrap_or("SKILL.md"));
@@ -133,6 +143,10 @@ impl Skills {
             "skill resource escaped its directory"
         );
         let content = read(&path)?;
+        anyhow::ensure!(
+            stamp(&entry.path)? == entry.stamp,
+            "skill changed during load; refresh skills_list"
+        );
         Ok(Loaded {
             hash: blake3::hash(content.as_bytes()).to_hex().to_string(),
             path,
@@ -142,14 +156,28 @@ impl Skills {
 }
 
 fn parse(path: &Path, source: &str) -> anyhow::Result<Entry> {
-    let content = read(path)?;
-    let normalized = content.replace("\r\n", "\n");
-    let header = normalized
-        .strip_prefix("---\n")
-        .and_then(|text| text.split_once("\n---").map(|(header, _)| header))
-        .ok_or_else(|| anyhow::anyhow!("SKILL.md requires YAML frontmatter"))?;
-    anyhow::ensure!(header.len() <= 16 * 1024, "skill metadata too large");
-    let metadata: Metadata = serde_saphyr::from_str(header)?;
+    let before = stamp(path)?;
+    let mut reader = BufReader::with_capacity(512, std::fs::File::open(path)?.take(16 * 1024 + 1));
+    let mut line = String::new();
+    reader.read_line(&mut line)?;
+    anyhow::ensure!(
+        line.trim_end() == "---",
+        "SKILL.md requires YAML frontmatter"
+    );
+    let mut header = String::new();
+    loop {
+        line.clear();
+        anyhow::ensure!(
+            reader.read_line(&mut line)? > 0,
+            "unterminated or oversized skill metadata"
+        );
+        if line.trim_end() == "---" {
+            break;
+        }
+        header.push_str(&line);
+        anyhow::ensure!(header.len() <= 16 * 1024, "skill metadata too large");
+    }
+    let metadata: Metadata = serde_saphyr::from_str(&header)?;
     let name = &metadata.name;
     anyhow::ensure!(
         !name.is_empty()
@@ -179,8 +207,27 @@ fn parse(path: &Path, source: &str) -> anyhow::Result<Entry> {
         description: metadata.description,
         source: source.into(),
         path: path.to_owned(),
-        hash: blake3::hash(content.as_bytes()).to_hex().to_string(),
+        hash: blake3::hash(header.as_bytes()).to_hex().to_string(),
+        stamp: before,
     })
+}
+
+fn stamp(path: &Path) -> anyhow::Result<String> {
+    let metadata = std::fs::symlink_metadata(path)?;
+    anyhow::ensure!(
+        metadata.is_file() && !metadata.file_type().is_symlink(),
+        "symlinked skill resources are not loaded"
+    );
+    Ok(format!(
+        "{}:{}:{}:{}:{}:{}:{}",
+        metadata.dev(),
+        metadata.ino(),
+        metadata.len(),
+        metadata.mtime(),
+        metadata.mtime_nsec(),
+        metadata.ctime(),
+        metadata.ctime_nsec()
+    ))
 }
 
 pub(crate) fn read(path: &Path) -> anyhow::Result<String> {

@@ -62,6 +62,7 @@ pub fn state(session: &Session, actor: &super::actor::Actor, guidance: &str) -> 
         "user_turns": session.turns,
         "pending_implementation": session.implementation,
         "planning_user_turns": session.plan_turns,
+        "mcp_disabled": session.mcp_disabled,
     })
 }
 

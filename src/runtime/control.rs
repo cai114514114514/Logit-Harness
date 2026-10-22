@@ -17,6 +17,59 @@ impl Runner {
             self.settle_boundary().await?;
         }
         match control {
+            Control::Rename { title } => {
+                if title.trim().is_empty() || title.len() > 4096 {
+                    self.emit(EventData::Diagnostic {
+                        message: "title must contain 1..4096 bytes".into(),
+                    })?;
+                } else {
+                    self.session.title = title;
+                    self.emit(EventData::Diagnostic {
+                        message: "session renamed".into(),
+                    })?;
+                }
+            }
+            Control::Mcp { server, operation } => {
+                if self
+                    .tools
+                    .mcp
+                    .as_ref()
+                    .is_some_and(|registry| registry.names().contains(&server.as_str()))
+                {
+                    self.session
+                        .mcp_pending
+                        .push(crate::extensions::mcp::Change { server, operation });
+                    self.emit(EventData::Diagnostic {
+                        message: "MCP change queued until active calls settle".into(),
+                    })?;
+                } else {
+                    self.emit(EventData::Diagnostic {
+                        message: format!("unknown configured MCP server: {server}"),
+                    })?;
+                }
+            }
+            Control::Skill {
+                id,
+                hash,
+                arguments,
+            } => {
+                if self.session.boundary.is_some() {
+                    self.session
+                        .skill_pending
+                        .push(crate::extensions::skills::Request {
+                            id,
+                            hash,
+                            arguments,
+                        });
+                    self.emit(EventData::Diagnostic {
+                        message: "skill queued until mode transition settles".into(),
+                    })?;
+                } else if let Err(error) = self.invoke_skill(&id, &hash, &arguments) {
+                    self.emit(EventData::Diagnostic {
+                        message: format!("skill invocation failed: {error}"),
+                    })?;
+                }
+            }
             Control::Plan { text } => {
                 let turn = text.as_ref().map(|text| self.record_turn(text));
                 self.request_boundary(super::conversation::Boundary::Plan { text, turn })?;
@@ -64,6 +117,7 @@ impl Runner {
             Control::Stop => {
                 self.session.boundary = None;
                 self.session.compact_pending = false;
+                self.session.skill_pending.clear();
                 self.halt(
                     Status::Stopped,
                     "stop requested; cancelling active operations",
@@ -155,12 +209,12 @@ impl Runner {
         }
         Ok(())
     }
-    fn submit_work_message(&mut self, text: String) -> anyhow::Result<()> {
-        let id = uuid::Uuid::new_v4().to_string();
-        self.session.turns.push(super::conversation::Turn {
-            id: id.clone(),
-            text: text.clone(),
-        });
+    pub(super) fn submit_work_message(&mut self, text: String) -> anyhow::Result<()> {
+        let id = self.record_turn(&text);
+        self.work_turn(text, id)
+    }
+
+    pub(super) fn work_turn(&mut self, text: String, id: String) -> anyhow::Result<()> {
         let prompt_only = self.session.condition == super::condition::Condition::Prompt;
         self.session.inbox.push(UserMessage {
             id,
@@ -222,7 +276,7 @@ impl Runner {
         }
         Ok(())
     }
-    fn record_turn(&mut self, text: &str) -> String {
+    pub(super) fn record_turn(&mut self, text: &str) -> String {
         if self.session.title.trim().is_empty() && !text.trim().is_empty() {
             self.session.title = text.into();
         }

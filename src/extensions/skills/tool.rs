@@ -9,21 +9,27 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 pub fn tools(knowledge: Arc<Knowledge>) -> Vec<Arc<dyn Tool>> {
-    [Operation::List, Operation::Load, Operation::Instructions]
-        .into_iter()
-        .map(|operation| {
-            Arc::new(SkillTool {
-                knowledge: knowledge.clone(),
-                operation,
-            }) as Arc<dyn Tool>
-        })
-        .collect()
+    [
+        Operation::List,
+        Operation::Load,
+        Operation::Instructions,
+        Operation::Changes,
+    ]
+    .into_iter()
+    .map(|operation| {
+        Arc::new(SkillTool {
+            knowledge: knowledge.clone(),
+            operation,
+        }) as Arc<dyn Tool>
+    })
+    .collect()
 }
 #[derive(Clone, Copy)]
 enum Operation {
     List,
     Load,
     Instructions,
+    Changes,
 }
 struct SkillTool {
     knowledge: Arc<Knowledge>,
@@ -34,6 +40,12 @@ struct SkillTool {
 impl Tool for SkillTool {
     fn spec(&self) -> ToolSpec {
         let (name, description, properties, required) = match self.operation {
+            Operation::Changes => (
+                "project_diff",
+                "Read Git status plus staged and unstaged diffs without shell interpolation, external diff drivers or textconv. Untracked file contents require separate read_file calls.",
+                json!({}),
+                json!([]),
+            ),
             Operation::List => (
                 "skills_list",
                 "Refresh available project/user skill metadata. Loading metadata does not execute instructions.",
@@ -70,6 +82,17 @@ impl Tool for SkillTool {
         anyhow::ensure!(!cancel.is_cancelled(), "instruction load cancelled");
         let mut files = crate::domain::Fingerprints::new();
         let data = match self.operation {
+            Operation::Changes => {
+                let before = context.workspace.fingerprints()?;
+                let data = super::changes::changes(&context.workspace.root, &cancel).await?;
+                let after = context.workspace.fingerprints()?;
+                anyhow::ensure!(
+                    before == after,
+                    "workspace changed during review; obtain a fresh diff"
+                );
+                files = after;
+                data
+            }
             Operation::List => {
                 self.knowledge.refresh()?;
                 self.knowledge.metadata()?

@@ -145,7 +145,23 @@ fn knowledge_initialization_does_not_discover_skills() {
     let knowledge = Knowledge::new(root.path().into(), vec![]).unwrap();
     assert!(knowledge.skills.read().unwrap().entries.is_empty());
     knowledge.refresh().unwrap();
-    assert_eq!(knowledge.skills.read().unwrap().entries.len(), 1);
+    let catalog = knowledge.skills.read().unwrap();
+    assert_eq!(
+        catalog
+            .entries
+            .iter()
+            .filter(|entry| entry.source == "project")
+            .count(),
+        1
+    );
+    assert_eq!(
+        catalog
+            .entries
+            .iter()
+            .filter(|entry| entry.source == "bundled")
+            .count(),
+        2
+    );
 }
 
 #[tokio::test]
@@ -346,6 +362,55 @@ async fn workspace_waiter_cannot_dispatch_engineering_until_owner_settles() {
     assert!(root.path().join("second.txt").exists());
     first.stop().await;
     second.stop().await;
+}
+
+#[tokio::test]
+async fn workspace_waiter_reasserts_waiting_after_a_nudge_with_the_same_owner() {
+    let root = tempfile::tempdir().unwrap();
+    let first_provider = Engineer::new(true);
+    let mut first = Live::start(
+        Session::new(root.path().into(), "Create first.txt", 1_000_000, 60),
+        first_provider,
+    );
+    first
+        .until(|e| matches!(e, EventData::ModelRequested { .. }))
+        .await;
+    let second_provider=Arc::new(Script {requests:Mutex::new(vec![]),responses:Mutex::new(vec![call("classify_input",json!({"intent":"nudge","updates":{},"additions":[],"answer":"","reason":"continue current task"}))].into())});
+    let mut second = Live::start(
+        Session::new(root.path().into(), "Create second.txt", 1_000_000, 60),
+        second_provider.clone(),
+    );
+    second.until(|e|matches!(e,EventData::Status {reason,..} if reason.starts_with("waiting for workspace"))).await;
+    second
+        .control
+        .send(Control::Message {
+            text: "Continue current task".into(),
+        })
+        .await
+        .unwrap();
+    second.until(|e|matches!(e,EventData::Diagnostic {message} if message=="user input classified and applied")).await;
+    let saved = second.saved();
+    let status = saved.status.clone();
+    let owner = saved.owner.clone();
+    let destination = saved.owner_status.clone();
+    let first_id = first.id.clone();
+    second.stop().await;
+    first.stop().await;
+    assert_eq!(
+        status,
+        Status::Waiting,
+        "a nudge cannot turn a blocked workspace into apparent active execution"
+    );
+    assert_eq!(owner.as_deref(), Some(first_id.as_str()));
+    assert_eq!(destination, Some(Status::Running));
+    assert!(
+        second_provider
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|r| r.instructions.starts_with("ROLE: steering"))
+    );
 }
 
 #[tokio::test]

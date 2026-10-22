@@ -164,15 +164,15 @@ impl Runner {
     }
 
     pub(super) fn conversation_message(&mut self, text: String) -> anyhow::Result<()> {
+        let turn = self.record_turn(&text);
+        self.conversation_turn(text, turn)
+    }
+
+    pub(super) fn conversation_turn(&mut self, text: String, turn: String) -> anyhow::Result<()> {
         if self.session.actors["main"].busy != 0 || !self.jobs.is_empty() {
-            let turn = uuid::Uuid::new_v4().to_string();
-            self.session.turns.push(Turn {
-                id: turn.clone(),
-                text: text.clone(),
-            });
             self.request_boundary(Boundary::Conversation { text, turn })?;
         } else {
-            self.add_turn(&text, true, None);
+            self.add_turn(&text, true, Some(turn));
             self.status(Status::Running, "answering user input")?;
         }
         Ok(())
@@ -207,7 +207,11 @@ impl Runner {
     }
 
     pub(super) fn side_question(&mut self, text: String) -> anyhow::Result<()> {
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = self.record_turn(&text);
+        self.side_turn(text, id)
+    }
+
+    pub(super) fn side_turn(&mut self, text: String, id: String) -> anyhow::Result<()> {
         self.session.inbox.push(UserMessage {
             id: id.clone(),
             text: text.clone(),
@@ -227,10 +231,6 @@ impl Runner {
             },
         );
         actor.turn = id.clone();
-        self.session.turns.push(Turn {
-            id,
-            text: text.clone(),
-        });
         self.session.actors.insert(actor.id.clone(), actor);
         self.emit(EventData::User { message: text })
     }
