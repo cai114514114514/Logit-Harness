@@ -19,6 +19,8 @@ pub struct Args {
 }
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Configure the API interactively; secrets are never command arguments.
+    Setup,
     Run {
         prompt: String,
         #[arg(long)]

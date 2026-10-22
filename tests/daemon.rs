@@ -326,6 +326,13 @@ async fn detached_cli_exits_while_daemon_finishes_and_accepts_reattach() {
     )
     .unwrap();
     let gate = Arc::new(Semaphore::new(0));
+    // The detached process must load /setup's stored credential without inheriting a key.
+    loh::config::api::save(
+        &paths,
+        &format!("http://{}", listener.local_addr().unwrap()),
+        Some("fixture-key-not-a-real-secret"),
+    )
+    .unwrap();
     let server_gate = gate.clone();
     let server = tokio::spawn(async move {
         loop {
@@ -344,7 +351,7 @@ async fn detached_cli_exits_while_daemon_finishes_and_accepts_reattach() {
             "--detach",
             "--json",
         ])
-        .env("DEEPSEEK_API_KEY", "fixture-key-not-a-real-secret")
+        .env_remove("DEEPSEEK_API_KEY")
         .kill_on_drop(true)
         .output();
     let output = tokio::time::timeout(Duration::from_secs(5), child)

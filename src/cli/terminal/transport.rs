@@ -125,7 +125,7 @@ async fn session(paths: &Paths, id: &str, after: u64) -> anyhow::Result<Option<S
                     None => break,
                     Some(Err(error)) => return Err(error.into()),
                     Some(Ok(event)) => {
-                        if actions::handle(event, &mut screen, &mut jobs, &socket) { break; }
+                        if actions::handle(event, &mut screen, &mut jobs, &socket, paths) { break; }
                     }
                 }
                 dirty = true;

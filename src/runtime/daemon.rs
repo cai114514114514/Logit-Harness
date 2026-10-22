@@ -39,8 +39,8 @@ pub async fn serve(paths: Paths, id: &str) -> anyhow::Result<()> {
     }
     let _owner = workspace_lock(&session.workspace, id)?;
     super::recovery::reconcile(&mut session, &store, &paths.logs(id)?).await?;
-    let key = std::env::var("DEEPSEEK_API_KEY")
-        .map_err(|_| anyhow::anyhow!("DEEPSEEK_API_KEY is missing"))?;
+    let key = crate::config::api::key(&paths, &config.base_url)?
+        .ok_or_else(|| anyhow::anyhow!("API Key 未配置，请运行 loh setup"))?;
     let mut provider: Arc<dyn crate::model::Provider> = Arc::new(DeepSeek::new(
         config.base_url.clone(),
         config.model.clone(),

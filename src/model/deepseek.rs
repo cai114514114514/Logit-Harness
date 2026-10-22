@@ -114,10 +114,13 @@ impl Provider for DeepSeek {
             // reservation instead of hiding multiple uncertain calls behind one allowance.
             let status = response.status();
             if !status.is_success() {
-                // The body is truncated: provider errors sometimes echo request data, and this
-                // message travels to logs and the UI. It can never contain our API key, which
-                // is only ever sent as a request header.
-                let detail = response.text().await.unwrap_or_default();
+                // Providers may echo request headers. Redact the key before truncating
+                // because this error can travel to durable logs and the terminal.
+                let detail = response
+                    .text()
+                    .await
+                    .unwrap_or_default()
+                    .replace(&self.key, "[REDACTED]");
                 let detail: String = detail.chars().take(ERROR_BODY_CHARS).collect();
                 anyhow::bail!("provider HTTP {status}: {detail}");
             }

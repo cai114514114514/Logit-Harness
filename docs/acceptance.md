@@ -1,10 +1,14 @@
 # Engineering acceptance
 
 Product: **Logit- Harness**. Command: **`loh`**. macOS ARM64, version 0.1.0.
-The installed executable is `/opt/homebrew/bin/loh`; the ordinary launching environment must export
-`DEEPSEEK_API_KEY`. Build and use instructions are in [README](../README.md).
+The installed executable is `/opt/homebrew/bin/loh`. Configure credentials with `/setup`, `loh setup`
+or `DEEPSEEK_API_KEY`. Build and use instructions are in [README](../README.md).
 
-## Current executable
+## Frozen research executable
+
+The following measurements belong to the frozen research build. Later cache, terminal and API
+setup changes have separate engineering evidence in [progress](progress.md); they do not inherit
+this build's real-provider acceptance results.
 
 - Source hash: `1c16dc63d232a4e91ed4cefb06dd68dbc61b237d817c4c5ace32f9e068cd3ba7`.
 - Executable SHA-256: `41242b0b92eae3a9c3103099e088cebfd86cb27922781020f60134ad4827533d`.

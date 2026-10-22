@@ -5,6 +5,7 @@
 /dist/
 .DS_Store
 .env
+credentials.json
 __pycache__/
 *.pyc
 *.sqlite-wal

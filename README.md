@@ -17,13 +17,16 @@ cargo build --release --locked
 ./target/release/loh doctor
 ```
 
-启动环境中需要 `DEEPSEEK_API_KEY`。例如在 zsh 中隐式输入密钥，避免写进命令历史：
+运行设置向导，填写 API 地址和密钥（输入会隐藏）：
 
 ```sh
-read -rs 'DEEPSEEK_API_KEY?DeepSeek API key: '
-export DEEPSEEK_API_KEY
+./target/release/loh setup
 ./target/release/loh
 ```
+
+也可在 `loh` 中输入 `/setup`。Enter 从地址切换到密钥，再按 Enter 保存，Esc 取消。
+设置仅在本机校验和保存，不会发起收费模型请求。仍支持 `DEEPSEEK_API_KEY` 环境变量，
+它优先于保存的密钥；密钥不要放入命令参数或聊天消息。
 
 也可以直接给出任务，当前目录就是工作目录：
 
@@ -56,6 +59,11 @@ workers = 2
 search_limit = 50
 ```
 
+`/setup` 将密钥单独保存到状态目录的 `credentials.json`，目录权限为 700、文件权限为 600。
+这是受文件权限保护的明文文件，并非加密存储或 macOS 钥匙串。每个密钥绑定完整 API Base URL；
+更换地址需要该地址对应的密钥。留空保留已有密钥。新任务自动读取保存的配置，正在运行的后台
+会话在重启后读取新配置。`loh doctor` 可检查是否已配置，但不代表已经联网验证。
+
 所有角色共享任务 token 和时间限额。达到限额后保存未完成状态；`/budget <tokens> [seconds]`
 设置绝对限额，再 `/resume`。搜索与抓取计次单独持久化。只有配置了明确费率时才计算费用估计。
 
@@ -77,7 +85,7 @@ cargo test --all-targets
 loh eval status
 ```
 
-工程测试、真实 API 冒烟和对照实验分别记录，不能相互代替。当前 143 项完整工程测试通过。
+工程测试、真实 API 冒烟和对照实验分别记录，不能相互代替。当前 148 项完整工程测试通过。
 缓存优化前的冻结版本通过了 36 项发布模式测试和真实 JSON→SQLite 中途纠正验收；缓存优化
 后的真实 API 命中率尚待测量。完整对照实验受本次总预算限制，**尚未证明
 动态纠偏比最强基线更可靠或更省人工**。开发集完成 20/180 次、保留集完成 15/360 次；原始

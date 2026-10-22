@@ -7,6 +7,7 @@ mod input;
 mod launch;
 mod menu;
 mod render;
+mod setup;
 mod state;
 mod surface;
 mod text;
@@ -14,6 +15,7 @@ mod transcript;
 mod transport;
 
 pub use input::{Input, Intent, parse};
+pub use launch::configure;
 pub use launch::{Launch, welcome};
 pub use render::render;
 pub use state::Recent;

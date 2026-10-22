@@ -29,6 +29,7 @@ pub struct Screen {
     pub(super) menu_hidden: bool,
     pub(super) activity: String,
     pub(super) next_session: Option<String>,
+    pub(super) setup: Option<super::setup::Form>,
     sequence: u64,
     snapshot: u64,
 }

@@ -1,7 +1,7 @@
 # Using the Logit- Harness terminal
 
 The executable is `loh`. In a development checkout, build with `cargo build` and run
-`./target/debug/loh run "任务描述"`. Export `DEEPSEEK_API_KEY` in the launching environment.
+`./target/debug/loh run "任务描述"`. Configure credentials with `loh setup` or `/setup` in the UI.
 Configuration and session state default to `~/.loh`, configurable with `LOH_HOME` or `--home`.
 
 Running `loh` alone now opens a complete welcome screen with the current model, project directory,
@@ -38,6 +38,7 @@ The footer keeps token usage and the measured KV input hit rate visible; `/budge
 
 | Command | Behavior |
 |---|---|
+| `/setup` | Configure the API Base URL and hidden API Key locally |
 | `/status` | Read the current saved session state |
 | `/sessions` | Select a saved task in this directory from welcome or a live conversation; switching clients does not stop the old task |
 | `/diff` | Show the current Git worktree, including pre-existing user changes |
@@ -51,6 +52,24 @@ The footer keeps token usage and the measured KV input hit rate visible; `/budge
 | `/detach` or Ctrl-D | Disconnect this terminal; background execution continues |
 | `/help` | Show command usage |
 
+`/setup` works in the welcome screen, live conversations and saved-record view. `loh setup`
+opens the same form directly. Tab or Up/Down switches fields; Enter advances from the URL to the
+key, then saves. Ctrl-U clears the selected field and Escape cancels without saving. Keys are
+masked and the form is separate from chat history and persisted session events. Inline arguments
+such as `/setup <key>` are rejected; paste the key only into the hidden field.
+
+The default endpoint is `https://api.deepseek.com`. Enter a Base URL, without `/responses`;
+HTTPS is required except for localhost testing. Saved keys are bound to the complete normalized
+URL, including its path. A blank key retains credentials already configured for that endpoint.
+Nonempty `DEEPSEEK_API_KEY` takes precedence, and the form labels that override.
+
+The key is stored separately in `~/.loh/credentials.json` (or the selected state home), with file
+mode 600 inside a mode-700 directory. This is permission-protected plaintext, not encryption or
+macOS Keychain. The ordinary `config.toml` contains no key; unrelated settings are preserved.
+Saving performs local validation only, with no model request. New daemons read the saved key;
+an already-running daemon keeps its initialized provider until restarted. `doctor --json` reports
+credential presence and source, never its value.
+
 An authorization request displays the concrete tool, redacted arguments, current origin where
 applicable, and a private JSON review-file path for the full preview. The ID binds the original
 action; approving it queues that action for a fresh scope check. A changed origin requires a new
@@ -62,7 +81,7 @@ inspect the session before resubmitting to avoid duplicates. The display does no
 when replaying older events or receiving a delayed status snapshot.
 
 If the daemon is unavailable, `attach` opens the saved transcript without a model connection.
-It supports `/status`, `/budget`, `/diff`, `/help`, output expansion and scrolling. `/resume` is an
+It supports `/setup`, `/status`, `/budget`, `/diff`, `/help`, output expansion and scrolling. `/resume` is an
 explicit request to reconnect/recover; just reading a saved conversation cannot restart work.
 Leave this saved-record view and reopen `loh` to choose a different session.
 

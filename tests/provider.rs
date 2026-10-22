@@ -184,6 +184,35 @@ async fn real_http_transport_preserves_history_and_extracts_usage() {
 }
 
 #[tokio::test]
+async fn provider_errors_redact_echoed_credentials_before_truncation() {
+    // Deliberately synthetic. Some proxies echo Authorization in their error body.
+    const KEY: &str = "fixture-provider-error-secret";
+    let app = axum::Router::new().route(
+        "/responses",
+        axum::routing::post(|| async {
+            (
+                axum::http::StatusCode::UNAUTHORIZED,
+                format!("{}Authorization: Bearer {KEY}", "x".repeat(480)),
+            )
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let provider = DeepSeek::new(url, "deepseek-flash".into(), KEY.into()).unwrap();
+    let (events, _) = mpsc::unbounded_channel();
+    let error = provider
+        .respond(request(), CancellationToken::new(), events)
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("401"));
+    assert!(error.contains("[REDACTED]"));
+    assert!(!error.contains("fixture-provider"));
+    server.abort();
+}
+
+#[tokio::test]
 async fn cancellation_interrupts_a_silent_provider() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let provider = DeepSeek::new(

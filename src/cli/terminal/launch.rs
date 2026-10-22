@@ -1,7 +1,7 @@
 //! Starting a task uses the same editor as steering one; no raw read_line detour.
 use super::{Intent, Recent, Screen, edit, menu, parse, render};
 use crate::{
-    config::{Config, Paths},
+    config::{Config, Paths, api},
     runtime::state::Control,
     store::Store,
 };
@@ -48,11 +48,28 @@ impl Drop for Restore {
 }
 
 pub async fn welcome(paths: &Paths, config: &Config, cwd: &Path) -> anyhow::Result<Launch> {
+    launch(paths, config, cwd, false).await
+}
+
+pub async fn configure(paths: &Paths, config: &Config, cwd: &Path) -> anyhow::Result<()> {
+    launch(paths, config, cwd, true).await?;
+    Ok(())
+}
+
+async fn launch(
+    paths: &Paths,
+    config: &Config,
+    cwd: &Path,
+    setup_only: bool,
+) -> anyhow::Result<Launch> {
     let mut screen = Screen::default();
     screen.workspace = cwd.to_owned();
     screen.model = config.model.clone();
-    screen.key_present = std::env::var("DEEPSEEK_API_KEY").is_ok_and(|key| !key.trim().is_empty());
+    screen.key_present = api::configured(paths, &config.base_url)?;
     screen.recent = recent(paths, cwd)?;
+    if setup_only {
+        super::setup::open(&mut screen, paths);
+    }
     let _restore = Restore;
     let mut terminal = super::surface::open(true)?;
     crossterm::execute!(std::io::stdout(), EnableBracketedPaste)?;
@@ -63,6 +80,14 @@ pub async fn welcome(paths: &Paths, config: &Config, cwd: &Path) -> anyhow::Resu
             _ = tokio::signal::ctrl_c() => return Ok(Launch::Exit),
             event = events.next() => match event { Some(event) => event?, None => return Ok(Launch::Exit) },
         };
+        if super::setup::handle(&mut screen, &event, paths) {
+            if setup_only && screen.setup.is_none() {
+                // Keep the save result visible when the standalone wizard exits.
+                terminal.draw(|frame| render(frame, &screen))?;
+                return Ok(Launch::Exit);
+            }
+            continue;
+        }
         match event {
             Event::Paste(text) => {
                 screen.input.insert(&text);
@@ -88,6 +113,9 @@ pub async fn welcome(paths: &Paths, config: &Config, cwd: &Path) -> anyhow::Resu
                     continue;
                 }
                 let draft = screen.input.text().to_owned();
+                if super::setup::reject_inline(&mut screen, &draft) {
+                    continue;
+                }
                 if draft.trim().is_empty() {
                     continue;
                 }
@@ -96,7 +124,12 @@ pub async fn welcome(paths: &Paths, config: &Config, cwd: &Path) -> anyhow::Resu
                         if screen.key_present {
                             return Ok(Launch::Task(text));
                         }
-                        screen.note("尚未配置 DEEPSEEK_API_KEY。任务草稿仍在输入区；请配置环境变量后重新打开 loh。未启动模型请求。");
+                        screen
+                            .note("尚未配置 API Key。输入 /setup 设置后即可开始；未启动模型请求。");
+                    }
+                    Ok(Intent::Setup) => {
+                        screen.input.take();
+                        super::setup::open(&mut screen, paths);
                     }
                     Ok(Intent::Sessions) => {
                         screen.input.take();

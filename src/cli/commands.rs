@@ -73,9 +73,18 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             detach: false,
         }
     };
+    // /setup may have changed the endpoint while the welcome screen was open.
+    let config = Config::load(&paths.home)?;
     match command {
+        Command::Setup => {
+            anyhow::ensure!(
+                std::io::stdin().is_terminal() && std::io::stdout().is_terminal(),
+                "loh setup 需要交互终端；也可使用 DEEPSEEK_API_KEY 环境变量"
+            );
+            super::terminal::configure(&paths, &config, &cwd).await?;
+        }
         Command::Doctor { json } => {
-            let result = json!({"model":config.model,"base_url":config.base_url,"api_key_present":std::env::var("DEEPSEEK_API_KEY").is_ok_and(|v|!v.trim().is_empty()),
+            let result = json!({"model":config.model,"base_url":config.base_url,"api_key_present":crate::config::api::configured(&paths, &config.base_url)?,"api_key_source":crate::config::api::source(&paths, &config.base_url)?,
                 "chrome_present":config.chrome.is_file(),"service_sandbox_present":std::path::Path::new("/usr/bin/sandbox-exec").is_file(),
                 "paid_probe_performed":false,"state_directory":paths.home,"platform":std::env::consts::OS,
                 "version":env!("CARGO_PKG_VERSION"),"source_hash":env!("LOH_SOURCE_HASH")});
@@ -88,7 +97,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
                     if result["api_key_present"] == true {
                         "configured"
                     } else {
-                        "set DEEPSEEK_API_KEY"
+                        "run loh setup"
                     },
                     if config.chrome.is_file() {
                         "available"
@@ -124,6 +133,10 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             json,
             detach,
         } => {
+            anyhow::ensure!(
+                crate::config::api::configured(&paths, &config.base_url)?,
+                "API Key 未配置，请运行 loh setup"
+            );
             paths.prepare()?;
             let store = Store::open(&paths.database())?;
             let mut session = Session::new(cwd, &prompt, config.tokens, config.seconds);

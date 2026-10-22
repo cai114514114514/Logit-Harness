@@ -48,7 +48,16 @@ pub(super) fn apply(reply: Reply, screen: &mut Screen) {
     }
 }
 
-pub(super) fn handle(event: Event, screen: &mut Screen, jobs: &mut Jobs, socket: &Path) -> bool {
+pub(super) fn handle(
+    event: Event,
+    screen: &mut Screen,
+    jobs: &mut Jobs,
+    socket: &Path,
+    paths: &crate::config::Paths,
+) -> bool {
+    if super::setup::handle(screen, &event, paths) {
+        return false;
+    }
     let key = match event {
         Event::Paste(text) => {
             screen.input.insert(&text);
@@ -71,21 +80,30 @@ pub(super) fn handle(event: Event, screen: &mut Screen, jobs: &mut Jobs, socket:
     match key.code {
         KeyCode::Char('c') if control => request(jobs, socket, Control::Pause),
         KeyCode::Char('d') if control => return true,
-        KeyCode::Enter => return submit(screen, jobs, socket),
+        KeyCode::Enter => return submit(screen, jobs, socket, paths),
         _ => (),
     }
     false
 }
 
-fn submit(screen: &mut Screen, jobs: &mut Jobs, socket: &Path) -> bool {
+fn submit(
+    screen: &mut Screen,
+    jobs: &mut Jobs,
+    socket: &Path,
+    paths: &crate::config::Paths,
+) -> bool {
     if !screen.complete() {
         return false;
     }
     let text = screen.input.take();
+    if super::setup::reject_inline(screen, &text) {
+        return false;
+    }
     if text.trim().is_empty() {
         return false;
     }
     match parse(&text) {
+        Ok(Intent::Setup) => super::setup::open(screen, paths),
         Ok(Intent::Detach) => return true,
         Ok(Intent::Help) => screen.note(super::menu::help()),
         Ok(Intent::Sessions) => {

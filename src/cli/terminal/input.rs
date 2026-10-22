@@ -170,6 +170,7 @@ impl Input {
 }
 
 pub enum Intent {
+    Setup,
     Control(Control),
     Status,
     Budget,
@@ -187,6 +188,7 @@ pub fn parse(text: &str) -> anyhow::Result<Intent> {
     }
     let parts: Vec<_> = text.split_whitespace().collect();
     Ok(match parts[0] {
+        "/setup" if parts.len() == 1 => Intent::Setup,
         "/pause" if parts.len() == 1 => Intent::Control(Control::Pause),
         "/resume" if parts.len() == 1 => Intent::Control(Control::Resume),
         "/stop" if parts.len() == 1 => Intent::Control(Control::Stop),

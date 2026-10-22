@@ -510,3 +510,30 @@ Spec: docs/spec.md
   actual PTY checks and visual review at 100 and 54 columns pass. Logs: `artifacts/terminal/mark-*`.
   Locked macOS release build and executable signature verification pass; installed `loh` updated.
   No execution, model, cache or evaluation behavior changed.
+
+## API setup
+
+- Added `/setup` to welcome, live conversations and saved-record view, plus standalone `loh setup`.
+  The blue form has a Base URL and a separate masked key editor. Enter advances/saves, Tab switches
+  fields, Ctrl-U clears and Escape cancels. Saving does not initiate a provider call. Tiny terminals
+  request more space; changing the endpoint refreshes the existing-key indicator.
+- Credentials are endpoint-bound and saved atomically in `credentials.json` with mode 600 inside
+  the private state directory. This is permission-protected plaintext, not Keychain or encryption.
+  The secret never enters chat input, history or session events. Ordinary config preserves unrelated
+  settings; nonempty `DEEPSEEK_API_KEY` retains priority. New daemons load saved credentials without
+  an environment key; existing providers keep their initialized credentials until restarted.
+- Added regressions for endpoint binding, permission/symlink rejection, config preservation, masked
+  doctor output, environment priority and redaction when HTTP errors echo credentials. The detached
+  CLI/daemon test now reads a saved fixture credential and completes its real tool workflow.
+- Complete suite: 148 tests passed. After a small viewport guard adjustment, 21 affected tests passed
+  again; strict all-target Clippy and the locked release build pass. Actual installed-binary PTY
+  checks cover hidden paste, save feedback, cancellation, endpoint changes, resize, restart lookup
+  and absence of chat/session creation. Evidence: `artifacts/setup/` logs, `interaction.json`,
+  `install.json` and rendered PTY grids; these are not native Terminal-window screenshots.
+- Installed `/opt/homebrew/bin/loh` source hash:
+  `1dc1138cdffafa46aa9917ce0a1754b6617a403705d6fc3f2c41297ac402b698`.
+  macOS ARM64 architecture, ad-hoc signature and isolated-home doctor verified. Packaged separately
+  under `dist/setup`. Earlier packages and the frozen research executable remain intact.
+- No real key was entered or copied into the user's settings by these tests, and no paid request
+  was made. This validates configuration and transport handling, not the user's live authentication
+  or an improvement in real-model reliability. The research-budget blocker remains unchanged.

@@ -50,6 +50,9 @@ pub(super) async fn open(paths: &Paths, id: &str, after: u64) -> anyhow::Result<
             _ = tokio::signal::ctrl_c() => return Ok(false),
             event = keys.next() => match event { Some(event) => event?, None => return Ok(false) },
         };
+        if super::setup::handle(&mut screen, &event, paths) {
+            continue;
+        }
         match event {
             Event::Paste(text) => screen.input.insert(&text),
             Event::Key(key) if key.kind != KeyEventKind::Release => {
@@ -65,14 +68,18 @@ pub(super) async fn open(paths: &Paths, id: &str, after: u64) -> anyhow::Result<
                     continue;
                 }
                 let draft = screen.input.take();
+                if super::setup::reject_inline(&mut screen, &draft) {
+                    continue;
+                }
                 match parse(&draft) {
                     Ok(Intent::Control(Control::Resume)) => {
-                        if std::env::var("DEEPSEEK_API_KEY").is_ok_and(|key| !key.trim().is_empty())
-                        {
+                        let config = Config::load(&paths.home)?;
+                        if crate::config::api::configured(paths, &config.base_url)? {
                             return Ok(true);
                         }
-                        screen.note("恢复执行需要 DEEPSEEK_API_KEY；配置后运行 loh resume <会话 ID>。记录仍然保留。");
+                        screen.note("恢复执行需要 API Key；输入 /setup 配置后，再输入 /resume。");
                     }
+                    Ok(Intent::Setup) => super::setup::open(&mut screen, paths),
                     Ok(Intent::Status) => screen.note(screen.status()),
                     Ok(Intent::Budget) => screen.note(screen.budget()),
                     Ok(Intent::Help) => screen.note(menu::help()),

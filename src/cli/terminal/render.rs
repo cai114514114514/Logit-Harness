@@ -13,6 +13,10 @@ use ratatui::{
 };
 
 pub fn render(frame: &mut Frame, screen: &Screen) {
+    if let Some(form) = &screen.setup {
+        super::setup::render(frame, screen, form);
+        return;
+    }
     let area = frame.area();
     if area.width < 24 || area.height < 10 {
         frame.render_widget("Logit- Harness\n请扩大终端窗口", area);
@@ -215,11 +219,11 @@ fn welcome_lines(screen: &Screen) -> Vec<Line<'static>> {
     ];
     if !screen.key_present {
         lines.push(Line::styled(
-            "尚未配置 DEEPSEEK_API_KEY",
+            "尚未配置 API Key · 输入 /setup 设置",
             Style::default().fg(ACCENT),
         ));
         lines.push(Line::styled(
-            "配置后重新打开 loh。现在仍可浏览已有会话和命令。",
+            "设置后即可开始任务，也可以先浏览已有会话。",
             Style::default().fg(MUTED),
         ));
         lines.push(Line::default());

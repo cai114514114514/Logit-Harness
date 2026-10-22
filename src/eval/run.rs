@@ -71,8 +71,8 @@ pub async fn run(options: Options, paths: Paths, config: Config) -> anyhow::Resu
         "the registered study uses the official deepseek-flash endpoint"
     );
     anyhow::ensure!(
-        std::env::var("DEEPSEEK_API_KEY").is_ok_and(|key| !key.trim().is_empty()),
-        "DEEPSEEK_API_KEY is missing"
+        crate::config::api::configured(&paths, &config.base_url)?,
+        "API Key 未配置，请运行 loh setup"
     );
     let campaign = config.campaign.as_ref().ok_or_else(|| {
         anyhow::anyhow!("evaluation requires the existing shared monetary campaign")

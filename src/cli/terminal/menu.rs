@@ -7,6 +7,11 @@ pub struct Command {
 
 pub const COMMANDS: &[Command] = &[
     Command {
+        name: "/setup",
+        description: "设置 API 地址和密钥",
+        arguments: false,
+    },
+    Command {
         name: "/status",
         description: "查看任务与当前进度",
         arguments: false,
