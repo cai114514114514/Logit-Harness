@@ -576,3 +576,23 @@ Spec: docs/spec.md
 - The GitHub upload is a source-history checkpoint, not a release or a claim that the approved
   interaction plan is complete. Local credentials, session databases, provider logs, build outputs
   and packaged experiment artifacts are excluded from tracked uploads.
+
+## Command backend review corrections
+
+- Commit `e625307` resolves both Important and both adjacent Minor findings from the preceding
+  checkpoint; scoped re-review found no new Critical or Important issues. `/tools` now inspects
+  actual registered capabilities without requiring a session or provider; past calls use
+  `/history tools [query]`. Scalar argument whitespace and initialization/configuration help align
+  with their runtime behavior.
+- Read-only Git inspection uses bounded copied metadata with an isolated configuration, cleared
+  environment and disabled lazy fetching/helper/submodule execution. Fixtures cover fsmonitor,
+  clean/process filters, nested submodules, and linked worktrees with packed refs/worktreeConfig;
+  ordinary staged/unstaged patches remain available and the source index stays unchanged.
+  Repository-defined conversions and submodule/gitlink changes are explicitly outside this
+  inspection result; unsupported object/ref formats fail explicitly.
+- Final covering checks: 33 tests passed across commands, command-runtime, extensions, MCP and web;
+  strict Clippy, formatting and diff checks pass. The earlier 190-test full run predates this fix;
+  the complete final regression remains a delivery gate.
+- Terminal integration, visible activity, original-buffer scrollback and full-history UI are now
+  in progress under the updated interaction specification. This checkpoint does not claim those
+  interfaces are already delivered.
