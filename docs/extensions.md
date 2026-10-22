@@ -7,6 +7,20 @@ body or a relative resource. Duplicate names keep distinct IDs and provenance. C
 requires refreshing the catalog. Symlinked resources and paths escaping the skill directory are
 rejected. Executing a skill's scripts still uses the ordinary tool permission checks.
 
+Discovery is lazy: ordinary greetings and knowledge questions do not scan the project for Skills
+or load project instructions. Opening slash discovery reads metadata; `/skills` refreshes it.
+Use `/<skill-name> literal arguments` or `/skills run <name-or-source-ID> literal arguments`.
+Duplicate aliases keep a source choice, and built-in control commands cannot be replaced.
+Arguments are user text, including quotes and dollar signs; there is no Shell interpolation.
+Browsing the menu does not insert its metadata into model context.
+
+Bundled `/init` creates missing project guidance through normal engineering execution and
+independent acceptance. Existing guidance is protected: the workflow proposes changes instead of
+overwriting it. In Plan mode it only proposes content. `/review` is read-only; its Git inspection
+uses isolated metadata/configuration to avoid executing repository-defined helpers. Filters,
+text conversions and submodule/gitlink changes are excluded explicitly; unsupported object/ref
+formats fail explicitly. Review those excluded areas separately when needed.
+
 The format follows the [Agent Skills specification](https://agentskills.io/specification).
 Skills provide guidance beneath explicit user requirements. Their `allowed-tools` metadata does
 not grant new authorization. Project `AGENTS.md` is loaded for the root and the directories of
@@ -14,10 +28,22 @@ observed files; `project_instructions` reads rules for a new path. Patches requi
 hashes. Ordinary shell commands still depend on model compliance with scoped instructions and the
 application policy; this is not isolation from arbitrary code.
 
+Markdown cannot register native code, change budgets or grant permissions. A coding workflow
+explicitly requested by the user can enter engineering mode, while all workflows stay read-only
+inside `/plan` until an explicit user instruction authorizes implementation. No additional plugin
+runtime or plugin marketplace is used.
+
 MCP servers are configured in `~/.loh/config.toml`. Both stdio and Streamable HTTP use the official
 Rust SDK, currently RMCP 3.6. Its built-in `Auto` lifecycle negotiates `2026-07-28` discovery or
 the standard initialize handshake; both paths use the same SDK client and tool admission rules. Tool schemas are loaded on
 demand with `mcp_list` and `mcp_schema`; `mcp_call` invokes a discovered tool.
+
+`/mcp` and `/mcp inspect <server>` inspect configuration locally. `/mcp reconnect <server>`,
+`/mcp enable <server>` and `/mcp disable <server>` apply after active calls settle. Disabled state
+belongs to the session. Capability order remains stable; configuration changes that affect the
+cached input prefix are recorded. Neither disabling nor reconnecting silently resolves uncertain
+external writes. `/tools` shows capabilities and prerequisites, not a promise that a remote service
+is currently reachable or that every concrete action is already authorized.
 
 ```toml
 [mcp.local.transport]

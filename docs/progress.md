@@ -596,3 +596,31 @@ Spec: docs/spec.md
 - Terminal integration, visible activity, original-buffer scrollback and full-history UI are now
   in progress under the updated interaction specification. This checkpoint does not claim those
   interfaces are already delivered.
+
+## Interaction integration — reviewed implementation, final delivery checks
+
+- Product commits `6fc65c5`, `a5ca613`, `8262fb2` integrate the shared command service across
+  welcome/live/offline views, native scrollback, durable searchable history, visible measured
+  activity and recoverable startup failures. `/new` preserves background work; `/resume` retains
+  its execution meaning. Local menu actions do not call a model.
+- Independent task review closed initial async-submission/session-binding races, stale Skill
+  choices, lost source-qualified completion and hidden cancellation settlement. Markdown export
+  now preserves complete persisted streams alongside bounded final results, including quiet or
+  partially streamed unsettled actions with their true actor and start metadata. Explicit JSON
+  export and refusal to overwrite existing files remain available.
+- Final engineering checks on `8262fb2`: `cargo fmt --all --check`,
+  `cargo test --locked --all-targets` (**214 passed, 0 failed**, 46 result groups), and
+  `cargo clippy --locked --all-targets -- -D warnings` all passed. Source-matched logs and the
+  summary are under `artifacts/interaction/final-*` and `engineering.json`.
+- Debug-build actual macOS PTY evidence covers real fixture commands, cancellation, side questions,
+  new chat while old work runs, Chinese input, masked setup, startup recovery, rename/export,
+  defaults on a new session, bare Plan without a request, 401-event history, resize and reconnect
+  without duplicate settled output. Tracked reproduction: `tests/pty/interaction.py --binary ...
+  --output ...`; it uses a local fixture provider with zero paid calls. Captures in
+  `artifacts/interaction/debug-final` render captured PTY buffers, not a native Terminal window.
+- Terminal/extension documentation is reconciled with the command catalog. Packaging selects
+  tracked documentation, brand assets and bundled Skills; unrelated untracked local documents are
+  excluded. A temporary-output packaging check passed without modifying user files.
+- At this checkpoint, broad final review, final-source release/install, installed-binary PTY,
+  bounded real Flash samples and the final package remain delivery gates. The prior real greeting
+  and frozen research results above are not presented as verification of this new executable.

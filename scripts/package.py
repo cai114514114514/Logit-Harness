@@ -11,6 +11,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+def copy_tracked(folder, destination):
+    """Package reviewed inputs only, leaving unrelated local documents private."""
+    names = subprocess.check_output(["git", "ls-files", "-z", "--", folder])
+    for name in names.split(b"\0"):
+        if not name:
+            continue
+        source = Path(name.decode())
+        if source.is_symlink() or not source.is_file():
+            raise ValueError(f"package input must be a regular tracked file: {source}")
+        target = destination / source
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, default=Path("target/release/loh"))
@@ -28,8 +42,9 @@ def main():
     directory.mkdir(parents=True)
     shutil.copy2(binary, directory / "loh")
     shutil.copy2("README.md", directory / "README.md")
-    shutil.copytree("docs", directory / "docs")
-    shutil.copytree("assets/brand", directory / "assets/brand")
+    copy_tracked("docs", directory)
+    copy_tracked("assets/brand", directory)
+    copy_tracked("skills", directory)
     (directory / "scripts").mkdir()
     shutil.copy2("scripts/replay.py", directory / "scripts/replay.py")
     shutil.copy2("scripts/cache_report.py", directory / "scripts/cache_report.py")
