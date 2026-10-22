@@ -1,10 +1,10 @@
-use crate::runtime::state::Control;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Default)]
 pub struct Input {
     text: String,
+    revision: u64,
     cursor: usize,
     history: Vec<String>,
     history_index: Option<usize>,
@@ -12,6 +12,9 @@ pub struct Input {
 }
 
 impl Input {
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
     pub fn text(&self) -> &str {
         &self.text
     }
@@ -25,6 +28,9 @@ impl Input {
             .collect();
         if self.text.len().saturating_add(text.len()) > 256 * 1024 {
             return;
+        }
+        if !text.is_empty() {
+            self.revision = self.revision.wrapping_add(1);
         }
         self.text.insert_str(self.cursor, &text);
         self.cursor += text.len();
@@ -58,15 +64,22 @@ impl Input {
     pub fn backspace(&mut self) {
         let end = self.cursor;
         self.left();
+        if self.cursor != end {
+            self.revision = self.revision.wrapping_add(1);
+        }
         self.text.replace_range(self.cursor..end, "");
     }
     pub fn delete(&mut self) {
         let start = self.cursor;
         self.right();
+        if start != self.cursor {
+            self.revision = self.revision.wrapping_add(1);
+        }
         self.text.replace_range(start..self.cursor, "");
         self.cursor = start;
     }
     pub fn take(&mut self) -> String {
+        self.revision = self.revision.wrapping_add(1);
         self.cursor = 0;
         self.history_index = None;
         self.draft.clear();
@@ -81,6 +94,7 @@ impl Input {
         }
     }
     pub fn replace(&mut self, text: &str) {
+        self.revision = self.revision.wrapping_add(1);
         self.text.clear();
         self.cursor = 0;
         self.insert(text);
@@ -167,67 +181,6 @@ impl Input {
         }
         (x, y)
     }
-}
-
-pub enum Intent {
-    Setup,
-    Control(Control),
-    Status,
-    Budget,
-    Diff,
-    Help,
-    Detach,
-    Sessions,
-}
-
-pub fn parse(text: &str) -> anyhow::Result<Intent> {
-    let text = text.trim();
-    anyhow::ensure!(!text.is_empty(), "输入不能为空");
-    if !text.starts_with('/') {
-        return Ok(Intent::Control(Control::Message { text: text.into() }));
-    }
-    let parts: Vec<_> = text.split_whitespace().collect();
-    Ok(match parts[0] {
-        "/setup" if parts.len() == 1 => Intent::Setup,
-        "/pause" if parts.len() == 1 => Intent::Control(Control::Pause),
-        "/resume" if parts.len() == 1 => Intent::Control(Control::Resume),
-        "/stop" if parts.len() == 1 => Intent::Control(Control::Stop),
-        "/status" if parts.len() == 1 => Intent::Status,
-        "/diff" if parts.len() == 1 => Intent::Diff,
-        "/help" if parts.len() == 1 => Intent::Help,
-        "/sessions" if parts.len() == 1 => Intent::Sessions,
-        "/detach" if parts.len() == 1 => Intent::Detach,
-        "/budget" if parts.len() == 1 => Intent::Budget,
-        "/budget" if (2..=3).contains(&parts.len()) => {
-            let tokens: u64 = parts[1].parse()?;
-            let seconds: Option<u64> = parts.get(2).map(|value| value.parse()).transpose()?;
-            anyhow::ensure!(
-                tokens > 0 && seconds.is_none_or(|value| value > 0),
-                "预算上限必须为正数"
-            );
-            Intent::Control(Control::Budget {
-                tokens: Some(tokens),
-                seconds,
-            })
-        }
-        "/approve" if parts.len() == 2 => Intent::Control(Control::Approve {
-            id: parts[1].into(),
-        }),
-        "/answer" if parts.len() >= 3 => {
-            let answer = text
-                .strip_prefix("/answer")
-                .unwrap()
-                .trim_start()
-                .strip_prefix(parts[1])
-                .unwrap()
-                .trim_start();
-            Intent::Control(Control::Answer {
-                id: parts[1].into(),
-                text: answer.into(),
-            })
-        }
-        _ => anyhow::bail!("未知命令或参数有误；输入 /help 查看用法"),
-    })
 }
 
 fn display_width(symbol: &str) -> usize {

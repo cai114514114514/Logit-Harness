@@ -1,10 +1,8 @@
-use loh::cli::terminal::{Input, Intent, Screen, parse, render};
+use loh::cli::terminal::{Input, Screen, render};
+use loh::commands::{Command, Kind, parse};
 use loh::{
     domain::{EventData, SessionEvent, Status},
-    runtime::{
-        ipc::ServerMessage,
-        state::{Control, Session},
-    },
+    runtime::{ipc::ServerMessage, state::Session},
 };
 
 #[test]
@@ -25,20 +23,33 @@ fn editing_keeps_cjk_combining_marks_and_emoji_clusters_intact() {
 fn commands_distinguish_control_from_ordinary_corrections() {
     assert!(matches!(
         parse("/pause").unwrap(),
-        Intent::Control(Control::Pause)
+        Command::Builtin {
+            kind: Kind::Pause,
+            ..
+        }
     ));
-    assert!(matches!(parse("/detach").unwrap(), Intent::Detach));
+    assert!(matches!(
+        parse("/detach").unwrap(),
+        Command::Builtin {
+            kind: Kind::Detach,
+            ..
+        }
+    ));
     assert!(matches!(
         parse("/budget 6000000 30000").unwrap(),
-        Intent::Control(Control::Budget {
-            tokens: Some(6_000_000),
-            seconds: Some(30_000)
-        })
+        Command::Builtin {
+            kind: Kind::Budget,
+            ..
+        }
     ));
     assert!(parse("/budget 0").is_err());
-    assert!(parse("/delete-all").is_err());
+    // Unknown slash names are source-resolved Skills, not a second parser table.
+    assert!(matches!(
+        parse("/delete-all").unwrap(),
+        Command::Skill { .. }
+    ));
     match parse("存储改成 SQLite\n保留界面").unwrap() {
-        Intent::Control(Control::Message { text }) => assert!(text.contains('\n')),
+        Command::Message(text) => assert!(text.contains('\n')),
         _ => panic!("correction must stay a user message"),
     }
 }
@@ -244,7 +255,7 @@ async fn actual_pty_accepts_multiline_corrections_pauses_and_detaches_without_st
         session.id.clone(),
         store.clone(),
         control,
-        events,
+        events.clone(),
     )
     .await
     .unwrap();
@@ -326,6 +337,64 @@ async fn actual_pty_accepts_multiline_corrections_pauses_and_detaches_without_st
     })
     .await
     .unwrap();
+    let before = store
+        .append(
+            &session.id,
+            EventData::Message {
+                actor: "main".into(),
+                text: "settled-before-reconnect".into(),
+            },
+        )
+        .unwrap();
+    events.send(before).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !String::from_utf8_lossy(&screen).contains("settled-before-reconnect") {
+            screen.extend(chunks.recv().await.unwrap());
+        }
+    })
+    .await
+    .unwrap();
+    cancel.cancel();
+    serving.await.unwrap().unwrap();
+    let server = Server::bind(
+        socket.clone(),
+        session.id.clone(),
+        store.clone(),
+        mpsc::channel(8).0,
+        events.clone(),
+    )
+    .await
+    .unwrap();
+    let cancel = CancellationToken::new();
+    let serving = tokio::spawn(server.run(cancel.clone()));
+    let after = store
+        .append(
+            &session.id,
+            EventData::Message {
+                actor: "main".into(),
+                text: "settled-after-reconnect".into(),
+            },
+        )
+        .unwrap();
+    let _ = events.send(after);
+    tokio::time::timeout(Duration::from_secs(8), async {
+        while !String::from_utf8_lossy(&screen).contains("settled-after-reconnect") {
+            screen.extend(chunks.recv().await.unwrap());
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&screen)
+            .matches("settled-before-reconnect")
+            .count(),
+        1
+    );
+    assert_eq!(
+        screen.windows(4).filter(|part| *part == b"\x1b[6n").count(),
+        1,
+        "reconnect must not query cursor again"
+    );
     writer.write_all(b"/detach\r").unwrap();
     writer.flush().unwrap();
     let exited = tokio::time::timeout(Duration::from_secs(5), async {

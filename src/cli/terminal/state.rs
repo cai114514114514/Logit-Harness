@@ -1,4 +1,4 @@
-use super::{Input, menu, transcript::Transcript};
+use super::{Input, transcript::Transcript};
 use crate::{
     domain::{EventData, Status},
     runtime::{ipc::ServerMessage, view::SessionView},
@@ -15,7 +15,6 @@ pub struct Recent {
 pub struct Screen {
     pub input: Input,
     pub session: Option<SessionView>,
-    pub scroll: usize,
     pub connected: bool,
     pub transcript: Transcript,
     pub workspace: PathBuf,
@@ -24,11 +23,12 @@ pub struct Screen {
     pub recent: Vec<Recent>,
     pub picker: bool,
     pub selection: usize,
-    pub expanded: bool,
     pub(super) frame: usize,
     pub(super) menu_hidden: bool,
     pub(super) activity: String,
-    pub(super) next_session: Option<String>,
+    pub(super) completions: Option<Vec<crate::commands::Completion>>,
+    pub(super) skill_choices: Option<(Vec<crate::extensions::skills::Entry>, String)>,
+    pub(super) history: Option<super::history::Browser>,
     pub(super) setup: Option<super::setup::Form>,
     sequence: u64,
     snapshot: u64,
@@ -38,39 +38,60 @@ impl Screen {
     pub fn note(&mut self, text: impl Into<String>) {
         self.transcript.note(&text.into());
     }
-    pub fn menu(&self) -> Vec<&'static menu::Command> {
-        if self.menu_hidden || self.picker {
-            vec![]
+    pub fn menu(&self) -> Vec<crate::commands::Completion> {
+        if self.menu_hidden || self.picker || !self.input.text().starts_with('/') {
+            return vec![];
+        }
+        let prefix = self.input.text().split_whitespace().next().unwrap_or("/");
+        if let Some(entries) = &self.completions {
+            entries
+                .iter()
+                .filter(|e| e.name.starts_with(prefix) || e.insert.starts_with(self.input.text()))
+                .cloned()
+                .collect()
         } else {
-            menu::matches(self.input.text())
+            crate::commands::matches(self.input.text())
+                .iter()
+                .map(|e| crate::commands::Completion {
+                    name: e.name.into(),
+                    description: e.description.into(),
+                    source: e.source.into(),
+                    timing: e.timing,
+                    insert: format!("{}{}", e.name, if e.arguments { " " } else { "" }),
+                })
+                .collect()
         }
     }
     pub fn complete(&mut self) -> bool {
+        let draft = self.input.text();
+        // Exact optional-argument commands execute on the first Enter. Never replace
+        // a typed argument tail with a menu entry (especially literal Skill input).
+        if draft.chars().any(char::is_whitespace)
+            || crate::commands::DIRECTORY.iter().any(|e| e.name == draft)
+        {
+            return true;
+        }
         let menu = self.menu();
         let Some(command) = menu.get(self.selection.min(menu.len().saturating_sub(1))) else {
             return true;
         };
-        let text = format!(
-            "{}{}",
-            command.name,
-            if command.arguments { " " } else { "" }
-        );
-        let ready = !command.arguments;
-        self.input.replace(&text);
+        let name = command.name.clone();
+        let ready = crate::commands::parse(&name).is_ok();
+        self.input
+            .replace(if ready { &name } else { &command.insert });
         self.menu_hidden = true;
         self.selection = 0;
         ready
     }
     pub fn receive(&mut self, message: ServerMessage) {
         match message {
-            ServerMessage::Snapshot { state, sequence } => {
-                self.receive(ServerMessage::View {
-                    state: Box::new((*state).into()),
-                    sequence,
-                });
-            }
+            ServerMessage::Snapshot { state, sequence } => self.receive(ServerMessage::View {
+                state: Box::new((*state).into()),
+                sequence,
+            }),
             ServerMessage::View { state, sequence } => {
                 if sequence >= self.snapshot.max(self.sequence) {
+                    self.transcript.reconcile(&state.activities);
                     self.workspace = state.workspace.clone();
                     self.session = Some(*state);
                     self.snapshot = sequence;
@@ -82,8 +103,6 @@ impl Screen {
                     return;
                 }
                 self.sequence = event.sequence;
-                // Subscription starts with a current snapshot, then replays old history.
-                // History is visible but cannot rewind live status or double-count usage.
                 if event.sequence > self.snapshot
                     && let Some(session) = &mut self.session
                 {
@@ -107,92 +126,31 @@ impl Screen {
                                 cached: *cached,
                             });
                         }
+                        EventData::ModelFinished { actor, .. } => {
+                            session.activities.retain(|a| a.id != *actor)
+                        }
+                        EventData::ActionFinished { id, .. } => {
+                            session.activities.retain(|a| a.id != *id)
+                        }
                         _ => (),
                     }
                 }
-                match event.data {
-                    EventData::Message { actor, text } => {
-                        self.transcript.message(&actor, &text);
-                        self.activity.clear();
-                    }
-                    EventData::Created { objective, .. } => {
-                        self.input.remember(&objective);
-                        self.transcript.user(&objective);
-                    }
-                    EventData::User { message } => {
-                        self.input.remember(&message);
-                        self.transcript.user(&message);
-                    }
-                    EventData::Delta { actor, text } => {
-                        self.transcript.delta(&actor, &text);
-                    }
-                    EventData::ModelRequested { actor, .. } => {
-                        self.activity = if actor.starts_with("verify") {
-                            "正在独立验收"
-                        } else if actor.starts_with("steer") {
-                            "正在理解你的补充"
-                        } else {
-                            "正在思考"
-                        }
-                        .into();
-                    }
-                    EventData::ActionStarted {
-                        id,
-                        tool,
-                        arguments,
-                    } => self.transcript.start(&id, &tool, &arguments),
-                    EventData::ActionFinished {
-                        id,
-                        success,
-                        result,
-                    } => {
-                        self.transcript.finish(&id, success, &result);
-                        self.activity.clear();
-                    }
-                    EventData::Status { status, reason } => {
-                        if matches!(
-                            status,
-                            Status::Paused
-                                | Status::Stopped
-                                | Status::Completed
-                                | Status::Failed
-                                | Status::Exhausted
-                        ) {
-                            self.transcript.settle();
-                        }
-                        if status != Status::Running {
-                            self.note(format!("{} · {reason}", label(&status)));
-                        }
-                        self.activity.clear();
-                    }
-                    EventData::Diagnostic { message } => self.note(format!("系统 › {message}")),
-                    EventData::Approval {
-                        id,
-                        tool,
-                        reason,
-                        arguments,
-                        details,
-                    } => {
-                        let preview = serde_json::to_string_pretty(&arguments).unwrap_or_default();
-                        let shortened = preview.chars().take(10_000).collect::<String>();
-                        self.note(format!("需要授权 › {tool}\n{reason}\n完整审阅文件：{details}\n/approve {id}\n请求参数：\n{shortened}"));
-                        if shortened.len() < preview.len() {
-                            self.note("参数预览已截断，请先查看上面的完整审阅文件。");
-                        }
-                    }
-                    EventData::Revised { revision, changed } => {
-                        self.note(format!("需求修订 {revision} › {}", changed.join(", ")))
-                    }
-                    EventData::Worker { id, status, task } => {
-                        let _ = id;
-                        self.note(format!("工作者 · {status} · {task}"))
-                    }
-                    _ => (),
+                if let EventData::Created {
+                    objective: text, ..
                 }
+                | EventData::User { message: text } = &event.data
+                {
+                    self.input.remember(text);
+                }
+                self.transcript.receive(&event);
+                self.activity.clear();
             }
             ServerMessage::Error { message } => self.note(message),
             ServerMessage::Ack => (),
         }
+    }
+    pub fn activity_lines(&self) -> Vec<String> {
+        super::activity::lines(self)
     }
     pub fn budget(&self) -> String {
         match &self.session {

@@ -17,6 +17,12 @@ pub struct SessionView {
     pub owner: Option<String>,
     #[serde(default)]
     pub queue: Vec<super::conversation::Task>,
+    #[serde(default)]
+    pub activities: Vec<Activity>,
+    #[serde(default)]
+    pub approval_actions: Vec<String>,
+    #[serde(default)]
+    pub verifying: bool,
     pub id: String,
     pub workspace: PathBuf,
     pub goal: Goal,
@@ -29,7 +35,45 @@ pub struct SessionView {
 }
 impl From<Session> for SessionView {
     fn from(session: Session) -> Self {
+        let mut activities = session
+            .actions
+            .values()
+            .filter(|a| a.running)
+            .map(|a| Activity {
+                id: a.id.clone(),
+                actor: a.actor.clone(),
+                title: format!(
+                    "{} {}",
+                    a.pending.call.name,
+                    a.pending.call.arguments["command"]
+                        .as_str()
+                        .or_else(|| a.pending.call.arguments["path"].as_str())
+                        .unwrap_or("")
+                ),
+            })
+            .collect::<Vec<_>>();
+        for actor in session.actors.values().filter(|a| !a.retired && a.busy > 0) {
+            if !activities.iter().any(|a| a.actor == actor.id) {
+                activities.push(Activity {
+                    id: actor.id.clone(),
+                    actor: actor.id.clone(),
+                    title: format!("模型响应 · {}", actor.task.lines().next().unwrap_or("")),
+                });
+            }
+        }
+        let approval_actions = session
+            .actions
+            .values()
+            .filter_map(|a| {
+                a.approval
+                    .as_ref()
+                    .map(|id| format!("{} · /approve {id}", a.pending.call.name))
+            })
+            .collect();
         Self {
+            activities,
+            approval_actions,
+            verifying: session.verification_pending,
             title: if session.title.is_empty() {
                 if session.goal.original.is_empty() {
                     "新对话".into()
@@ -53,4 +97,12 @@ impl From<Session> for SessionView {
             elapsed: session.elapsed,
         }
     }
+}
+
+/// Lightweight execution facts; never expose model contexts or private reasoning.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Activity {
+    pub id: String,
+    pub actor: String,
+    pub title: String,
 }

@@ -6,7 +6,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 pub(super) fn edit(screen: &mut Screen, key: KeyEvent) -> bool {
     let control = key.modifiers.contains(KeyModifiers::CONTROL);
     let menu = screen.menu();
-    let choices = if screen.picker {
+    let choices = if let Some((entries, _)) = &screen.skill_choices {
+        entries.len()
+    } else if screen.picker {
         screen.recent.len()
     } else {
         menu.len()
@@ -16,13 +18,13 @@ pub(super) fn edit(screen: &mut Screen, key: KeyEvent) -> bool {
         KeyCode::Down if choices > 0 => screen.selection = (screen.selection + 1).min(choices - 1),
         KeyCode::Esc => {
             screen.picker = false;
+            screen.skill_choices = None;
             screen.menu_hidden = true;
             screen.selection = 0;
         }
         KeyCode::Tab if !menu.is_empty() => {
             screen.complete();
         }
-        KeyCode::Char('o') if control => screen.expanded = !screen.expanded,
         KeyCode::Char('u') if control => {
             screen.input.take();
             screen.menu_hidden = false;
@@ -54,8 +56,6 @@ pub(super) fn edit(screen: &mut Screen, key: KeyEvent) -> bool {
         KeyCode::Down => screen.input.down(),
         KeyCode::Home => screen.input.home(),
         KeyCode::End => screen.input.end(),
-        KeyCode::PageUp => screen.scroll = screen.scroll.saturating_add(10),
-        KeyCode::PageDown => screen.scroll = screen.scroll.saturating_sub(10),
         _ => return false,
     }
     true

@@ -1,0 +1,336 @@
+//! One client loop serves welcome, live and archived sessions. The daemon owns work.
+use super::{
+    Screen,
+    jobs::{Context, Jobs, Reply},
+    render,
+};
+use crate::{
+    commands::{Command, Navigation, Outcome},
+    config::{Config, Paths},
+    runtime::{
+        ipc::{self, ServerMessage},
+        state::Control,
+    },
+};
+use crossterm::event::{
+    DisableBracketedPaste, EnableBracketedPaste, Event, EventStream, KeyCode, KeyEventKind,
+    KeyModifiers,
+};
+use futures::StreamExt;
+use std::{path::Path, time::Duration};
+use tokio::{sync::mpsc, task::JoinHandle};
+
+struct Restore;
+impl Drop for Restore {
+    fn drop(&mut self) {
+        let _ = crossterm::execute!(std::io::stdout(), DisableBracketedPaste);
+        ratatui::restore();
+    }
+}
+struct Connection(Option<JoinHandle<()>>);
+impl Drop for Connection {
+    fn drop(&mut self) {
+        if let Some(task) = self.0.take() {
+            task.abort();
+        }
+    }
+}
+impl Connection {
+    fn close(&mut self) {
+        if let Some(task) = self.0.take() {
+            task.abort();
+        }
+    }
+    fn open(
+        &mut self,
+        paths: &Paths,
+        id: &str,
+        after: u64,
+        generation: u64,
+        sender: mpsc::Sender<(u64, anyhow::Result<ServerMessage>)>,
+    ) -> anyhow::Result<()> {
+        self.close();
+        let socket = paths.socket(id)?;
+        self.0 = Some(tokio::spawn(async move {
+            let mut reader = match ipc::subscribe(&socket, after).await {
+                Ok(reader) => reader,
+                Err(error) => {
+                    let _ = sender.send((generation, Err(error))).await;
+                    return;
+                }
+            };
+            // A dedicated reader keeps partial JSON frames across UI ticks.
+            loop {
+                let message = ipc::receive(&mut reader).await;
+                let failed = message.is_err();
+                if sender.send((generation, message)).await.is_err() || failed {
+                    break;
+                }
+            }
+        }));
+        Ok(())
+    }
+}
+
+pub(super) async fn run(
+    paths: &Paths,
+    cwd: &Path,
+    id: Option<String>,
+    setup_only: bool,
+) -> anyhow::Result<()> {
+    let config = Config::load(&paths.home)?;
+    let mut screen = fresh(paths, &config, cwd)?;
+    let mut generation = 0;
+    let mut jobs = Jobs::new();
+    let mut connection = Connection(None);
+    let (sender, mut incoming) = mpsc::channel(128);
+    let mut opening = id.is_some();
+    if let Some(id) = id {
+        Context::new(generation, paths, &screen).open(&mut jobs, id);
+    }
+    if setup_only {
+        super::setup::open(&mut screen, paths);
+    }
+    let _restore = Restore;
+    let mut terminal = super::surface::open(true)?;
+    crossterm::execute!(std::io::stdout(), EnableBracketedPaste)?;
+    let mut keys = EventStream::new();
+    let mut frames = tokio::time::interval(Duration::from_millis(80));
+    let mut refresh = tokio::time::interval(Duration::from_secs(2));
+    let mut hangup = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())?;
+    let mut dirty = true;
+    let mut catalog_loading = false;
+    let mut reconnect = false;
+    let mut failure_after_open: Option<(String, String, u64)> = None;
+    loop {
+        tokio::select! {
+            _ = hangup.recv() => break,
+            _ = tokio::signal::ctrl_c() => {
+                if screen.session.is_some() { Context::new(generation, paths, &screen).control(&mut jobs, Control::Pause, "/pause".into(), screen.connected); }
+                else { break; }
+            }
+            _ = frames.tick() => {
+                screen.frame = screen.frame.wrapping_add(1);
+                dirty |= screen.frame.is_multiple_of(12);
+                if dirty {
+                    let modal = screen.history.is_some();
+                    terminal.modal(modal)?;
+                    if !modal {
+                        let (columns, rows) = crossterm::terminal::size()?;
+                        terminal.layout(super::render::height(&screen, columns, rows))?;
+                        let lines = screen.transcript.drain_settled(terminal.width().saturating_sub(4) as usize);
+                        terminal.append(&lines)?;
+                    }
+                    terminal.draw(|frame| render(frame, &screen))?;
+                    dirty = false;
+                }
+            }
+            _ = refresh.tick(), if screen.session.is_some() && !opening => {
+                if reconnect {
+                    if let Some(session) = &screen.session {
+                        connection.open(paths, &session.id, screen.transcript.sequence(), generation, sender.clone())?;
+                    }
+                } else if screen.connected {
+                    let context = Context::new(generation, paths, &screen);
+                    let socket = paths.socket(&screen.session.as_ref().unwrap().id)?;
+                    jobs.spawn(async move { (context.generation, ipc::request(&socket, ipc::ClientMessage::Status).await.map(Reply::Message)) });
+                }
+            }
+            Some((origin, result)) = incoming.recv() => {
+                if origin != generation { continue; }
+                match result {
+                    Ok(message) => { screen.receive(message); reconnect = false; },
+                    Err(error) => {
+                        if screen.connected { screen.note(format!("连接断开：{error}。会话和输入已保留；正在重连，未重发输入。")); reconnect = true; }
+                        else { screen.activity = "后台未连接 · /resume 恢复执行 · /history 查看记录".into(); }
+                        screen.connected = false;
+                    }
+                }
+                dirty = true;
+            }
+            Some(result) = jobs.join_next(), if !jobs.is_empty() => {
+                let (origin, reply) = match result { Ok(reply) => reply, Err(error) => { screen.note(format!("本地操作中断：{error}")); dirty = true; continue; } };
+                // Navigation increments generation. A late command/control reply must
+                // never edit the fresh conversation or its unsubmitted draft.
+                if origin != generation { continue; }
+                match reply {
+                    Err(error) => { screen.note(format!("操作失败：{error}")); screen.activity.clear(); opening = false; }
+                    Ok(Reply::Catalog(entries)) => { screen.completions = Some(entries); catalog_loading = false; }
+                    Ok(Reply::Open { session, transcript, recent }) => {
+                        let sequence = transcript.sequence(); let id = session.id.clone();
+                        screen.activity.clear(); screen.transcript = transcript; screen.recent = recent;
+                        screen.receive(ServerMessage::Snapshot { state: session, sequence }); screen.connected = false;
+                        terminal.append(&screen.transcript.recent(terminal.width().saturating_sub(4) as usize))?;
+                        if let Some((error, draft, revision)) = failure_after_open.take() {
+                            screen.note(format!("后台启动失败：{error}\n会话 {id} 与输入已保存。/resume 恢复；请先核对记录，避免重复发送。"));
+                            restore_draft(&mut screen, draft, revision);
+                        }
+                        connection.open(paths, &id, sequence, generation, sender.clone())?;
+                        opening = false;
+                    }
+                    Ok(Reply::Created { id, error, draft, revision }) => {
+                        if let Some(error) = error { failure_after_open = Some((error, draft, revision)); }
+                        Context::new(generation, paths, &screen).open(&mut jobs, id); opening = true;
+                    }
+                    Ok(Reply::Message(message)) => screen.receive(message),
+                    Ok(Reply::Sent) => { screen.activity.clear(); if !screen.connected { reconnect = true; } }
+                    Ok(Reply::Failed { text, draft, revision }) => { screen.activity.clear(); screen.note(text); restore_draft(&mut screen, draft, revision); opening = false; }
+                    Ok(Reply::History(browser)) => screen.history = Some(browser),
+                    Ok(Reply::Copied) => screen.note("已复制所选记录原文。"),
+                    Ok(Reply::Command { outcome, draft, revision }) => {
+                        let mut context = Context::new(generation, paths, &screen);
+                        context.revision = revision;
+                        match outcome {
+                        Outcome::Local { title, text } => {
+                            screen.note(format!("{title}\n{text}"));
+                            if draft.trim() == "/skills" {
+                                catalog_loading = true;
+                                context.catalog(&mut jobs);
+                            }
+                        },
+                        Outcome::Setup => super::setup::open(&mut screen, paths),
+                        Outcome::Navigate(Navigation::Detach) => break,
+                        Outcome::Navigate(Navigation::New) => {
+                            generation += 1; connection.close(); opening = false; reconnect = false; catalog_loading = false;
+                            let cwd = screen.workspace.clone();
+                            screen = fresh(paths, &Config::load(&paths.home)?, &cwd)?;
+                            screen.note("新对话 · 原任务继续后台；/sessions 可切回。");
+                        }
+                        Outcome::Navigate(Navigation::Sessions) => {
+                            screen.recent = super::launch::recent(paths, &screen.workspace)?;
+                            screen.selection = 0; screen.picker = true;
+                            if screen.recent.is_empty() { screen.note("当前工作区还没有保存的会话。"); }
+                        }
+                        Outcome::Control(control) => {
+                            if screen.session.is_none() {
+                                context.clone().create(&mut jobs, control, draft); opening = true;
+                            } else { context.clone().control(&mut jobs, control, draft, screen.connected); }
+                            screen.activity = "正在提交（输入尚未确认处理）".into();
+                        }
+                        Outcome::Skill(invocation) => {
+                            let control = invocation.control();
+                            if screen.session.is_none() { context.clone().create(&mut jobs, control, draft); opening = true; }
+                            else { context.clone().control(&mut jobs, control, draft, screen.connected); }
+                        }
+                        Outcome::ChooseSkill { entries, arguments } => { screen.skill_choices = Some((entries, arguments)); screen.selection = 0; }
+                        Outcome::History(history) => Context::new(generation, paths, &screen).history(&mut jobs, history.query, history.tools_only),
+                        Outcome::Copy { selector } => {
+                            if selector.is_empty() { Context::new(generation, paths, &screen).history(&mut jobs, String::new(), false); }
+                            else { Context::new(generation, paths, &screen).copy_selector(&mut jobs, selector); }
+                        }
+                        }
+                    },
+                }
+                dirty = true;
+            }
+            event = keys.next() => {
+                let event = match event { Some(Ok(event)) => event, Some(Err(error)) => return Err(error.into()), None => break };
+                dirty = true;
+                if let Some(browser) = &mut screen.history {
+                    match event {
+                        Event::Paste(text) => browser.paste(&text),
+                        Event::Key(key) if key.kind != KeyEventKind::Release => match browser.key(key) {
+                            super::history::Action::Close => screen.history = None,
+                            super::history::Action::Copy(text) => Context::new(generation, paths, &screen).copy(&mut jobs, text),
+                            super::history::Action::Stay => (),
+                        },
+                        _ => (),
+                    }
+                    continue;
+                }
+                if super::setup::handle(&mut screen, &event, paths) {
+                    if setup_only && screen.setup.is_none() { terminal.append(&screen.transcript.drain_settled(terminal.width() as usize))?; break; }
+                    continue;
+                }
+                match event {
+                    Event::Paste(text) => { screen.input.insert(&text); screen.menu_hidden = false; }
+                    Event::Key(key) if key.kind != KeyEventKind::Release => {
+                        let control = key.modifiers.contains(KeyModifiers::CONTROL);
+                        if (key.code == KeyCode::Char('o') && control) || key.code == KeyCode::PageUp {
+                            Context::new(generation, paths, &screen).history(&mut jobs, String::new(), false); continue;
+                        }
+                        if screen.picker && key.code == KeyCode::Enter {
+                            if let Some(recent) = screen.recent.get(screen.selection) {
+                                let id = recent.id.clone(); let workspace = screen.workspace.clone();
+                                generation += 1; connection.close(); screen = fresh(paths, &Config::load(&paths.home)?, &workspace)?;
+                                Context::new(generation, paths, &screen).open(&mut jobs, id); opening = true; reconnect = false; catalog_loading = false;
+                            }
+                            continue;
+                        }
+                        if screen.skill_choices.is_some() && key.code == KeyCode::Enter {
+                            let (entries, arguments) = screen.skill_choices.take().unwrap();
+                            if let Some(entry) = entries.get(screen.selection) {
+                                let command = Command::Skill { selector: entry.id.clone(), arguments: arguments.clone() };
+                                Context::new(generation, paths, &screen).command(&mut jobs, command, format!("/skills run {} {}", entry.id, arguments));
+                            }
+                            continue;
+                        }
+                        if super::edit::edit(&mut screen, key) { }
+                        else if key.code == KeyCode::Char('d') && control { break; }
+                        else if key.code == KeyCode::Char('c') && control {
+                            if screen.session.is_some() { Context::new(generation, paths, &screen).control(&mut jobs, Control::Pause, "/pause".into(), screen.connected); } else { break; }
+                        } else if key.code == KeyCode::Enter && screen.complete() {
+                            let draft = screen.input.text().to_owned();
+                            if super::setup::reject_inline(&mut screen, &draft) || draft.trim().is_empty() { continue; }
+                            if opening { screen.note("正在打开会话；草稿保留，请稍后发送。"); continue; }
+                            match crate::commands::parse(&draft) {
+                                Ok(command) => {
+                                    screen.input.take(); screen.input.remember(&draft); screen.menu_hidden = true;
+                                    Context::new(generation, paths, &screen).command(&mut jobs, command, draft);
+                                }
+                                Err(error) => screen.note(error.to_string()),
+                            }
+                        }
+                    }
+                    _ => (),
+                }
+                if screen.input.text().starts_with('/') && screen.completions.is_none() && !catalog_loading {
+                    catalog_loading = true; Context::new(generation, paths, &screen).catalog(&mut jobs);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+fn restore_draft(screen: &mut Screen, draft: String, revision: u64) {
+    if draft.is_empty() {
+        return;
+    }
+    if screen.input.text().is_empty() && screen.input.revision() == revision {
+        screen.input.replace(&draft);
+    } else {
+        screen.note(format!("未确认送达的输入（保留）：\n{draft}"));
+    }
+}
+fn fresh(paths: &Paths, config: &Config, cwd: &Path) -> anyhow::Result<Screen> {
+    let mut screen = Screen::default();
+    screen.workspace = cwd.to_owned();
+    screen.model = config.model.clone();
+    screen.key_present = crate::config::api::configured(paths, &config.base_url)?;
+    screen.recent = super::launch::recent(paths, cwd)?;
+    Ok(screen)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn failed_async_input_does_not_replace_a_revised_or_deleted_draft() {
+        let mut screen = Screen::default();
+        let original = screen.input.revision();
+        screen.input.insert("newer draft");
+        screen.input.take();
+        restore_draft(&mut screen, "old request".into(), original);
+        assert!(screen.input.text().is_empty());
+        assert!(
+            screen
+                .transcript
+                .lines(80, true)
+                .iter()
+                .any(|line| line.to_string().contains("old request"))
+        );
+        let current = screen.input.revision();
+        restore_draft(&mut screen, "recover me".into(), current);
+        assert_eq!(screen.input.text(), "recover me");
+    }
+}

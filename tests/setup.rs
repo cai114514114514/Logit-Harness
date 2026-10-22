@@ -1,5 +1,5 @@
 use loh::{
-    cli::terminal::{Intent, parse},
+    commands::{Command, Kind, parse},
     config::{Config, Paths, api},
 };
 use std::os::unix::fs::{PermissionsExt, symlink};
@@ -138,6 +138,12 @@ fn doctor_uses_saved_credentials_without_printing_them() {
     assert!(!text.contains("fixture-environment-override"));
     let result: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert_eq!(result["api_key_source"], "environment");
-    assert!(matches!(parse("/setup").unwrap(), Intent::Setup));
+    assert!(matches!(
+        parse("/setup").unwrap(),
+        Command::Builtin {
+            kind: Kind::Setup,
+            ..
+        }
+    ));
     assert!(parse("/setup secret").is_err());
 }

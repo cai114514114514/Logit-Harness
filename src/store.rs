@@ -220,6 +220,37 @@ impl Store {
         })
         .collect()
     }
+    /// Keyset pagination keeps durable replay independent of the terminal's visible window.
+    pub fn event_page(
+        &self,
+        session: &str,
+        after: u64,
+        limit: usize,
+    ) -> anyhow::Result<Vec<SessionEvent>> {
+        let connection = self.conn()?;
+        let mut statement = connection.prepare(
+            "SELECT sequence,timestamp,data FROM events WHERE session=?1 AND sequence>?2 ORDER BY sequence LIMIT ?3",
+        )?;
+        let records = statement.query_map(params![session, after, limit.min(1000)], |row| {
+            Ok((
+                row.get::<_, u64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        records
+            .map(|record| {
+                let (sequence, timestamp, data) = record?;
+                Ok(SessionEvent {
+                    sequence,
+                    session: session.into(),
+                    timestamp,
+                    data: serde_json::from_str(&data)?,
+                })
+            })
+            .collect()
+    }
+
     /// Replays every event after `after` with no pagination. A chatty session
     /// (one row per streamed delta) can make this large; subscribers use it
     /// only to catch up after `after`, and lagged-replay bursts are short.

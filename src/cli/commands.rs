@@ -42,16 +42,6 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         && std::io::stdout().is_terminal()
     {
         match super::terminal::welcome(&paths, &config, &cwd).await? {
-            super::terminal::Launch::Task(prompt) => Command::Run {
-                prompt,
-                json: false,
-                detach: false,
-            },
-            super::terminal::Launch::Attach(id) => Command::Attach {
-                id,
-                after: 0,
-                json: false,
-            },
             super::terminal::Launch::Exit => return Ok(()),
         }
     } else {

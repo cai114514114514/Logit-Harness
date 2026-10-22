@@ -12,7 +12,38 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
+/// Reserve only content that is currently interactive; completed text belongs
+/// to native scrollback, so idle sessions do not keep a screenful of blank rows.
+pub(super) fn height(screen: &Screen, columns: u16, rows: u16) -> u16 {
+    let width = columns.saturating_sub(4) as usize;
+    let body = if screen.session.is_none() {
+        welcome_lines(screen)
+            .into_iter()
+            .flat_map(|line| super::text::wrap(line.spans, width))
+            .count()
+    } else {
+        screen.transcript.active_lines(width).len().clamp(1, 8)
+    };
+    let choices = if let Some((entries, _)) = &screen.skill_choices {
+        entries.len()
+    } else if screen.picker {
+        screen.recent.len()
+    } else {
+        screen.menu().len()
+    };
+    let menu = choices.min(6) + usize::from(choices > 0);
+    let composer = (wrap(screen.input.text(), width.saturating_sub(2)).len() + 2).clamp(3, 6);
+    let activity = screen.activity_lines().len().clamp(1, 6);
+    (3 + body + activity + menu + composer + 1)
+        .clamp(10, rows.max(10) as usize)
+        .min(rows as usize) as u16
+}
+
 pub fn render(frame: &mut Frame, screen: &Screen) {
+    if let Some(history) = &screen.history {
+        history.render(frame);
+        return;
+    }
     if let Some(form) = &screen.setup {
         super::setup::render(frame, screen, form);
         return;
@@ -26,17 +57,21 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
     let input_lines = wrap(screen.input.text(), width.saturating_sub(2));
     let input_height = (input_lines.len() as u16 + 2).clamp(3, (area.height / 3).max(3));
     let menu = screen.menu();
-    let choices = if screen.picker {
+    let choices = if let Some((entries, _)) = &screen.skill_choices {
+        entries.len()
+    } else if screen.picker {
         screen.recent.len()
     } else {
         menu.len()
     };
     let menu_height = (choices.min(6) as u16 + u16::from(choices > 0))
         .min(area.height.saturating_sub(input_height + 7));
+    let activities = screen.activity_lines();
+    let activity_height = (activities.len() as u16).clamp(1, (area.height / 3).max(1));
     let [header, body, progress, menu_area, composer, footer] = Layout::vertical([
         Constraint::Length(3),
         Constraint::Min(1),
-        Constraint::Length(1),
+        Constraint::Length(activity_height),
         Constraint::Length(menu_height),
         Constraint::Length(input_height),
         Constraint::Length(1),
@@ -45,41 +80,25 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
     super::brand::render(frame, screen, inset(header, 2));
 
     let content = inset(body, 2);
-    let mut lines = screen.transcript.lines(width, screen.expanded);
-    if lines.is_empty() {
+    let mut lines = screen.transcript.active_lines(width);
+    if lines.is_empty() && screen.session.is_none() {
         lines = welcome_lines(screen)
             .into_iter()
             .flat_map(|line| super::text::wrap(line.spans, width))
             .collect();
     }
-    let end = lines
-        .len()
-        .saturating_sub(screen.scroll.min(lines.len().saturating_sub(1)));
+    let end = lines.len();
     let start = end.saturating_sub(content.height as usize);
     frame.render_widget(Paragraph::new(lines[start..end].to_vec()), content);
 
-    let spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"][(screen.frame / 2) % 10];
-    let status = if screen.scroll > 0 {
-        format!("↑ 历史记录 · 距最新 {} 行 · PgDn 返回", screen.scroll)
-    } else if let Some(active) = screen.transcript.active() {
-        format!("{spinner} {active} · Ctrl+C 暂停")
-    } else if !screen.activity.is_empty() {
-        format!("{spinner} {} · 随时输入补充", screen.activity)
-    } else if let Some(session) = &screen.session {
-        format!(
-            "{}{}",
-            label(&session.status),
-            if screen.connected {
-                ""
-            } else {
-                " · 连接已断开"
-            }
-        )
-    } else {
-        "输入任务开始 · / 查看命令".into()
-    };
     frame.render_widget(
-        Paragraph::new(status).style(Style::default().fg(ACCENT)),
+        Paragraph::new(
+            activities
+                .into_iter()
+                .map(|line| Line::raw(super::state::clean(&line)))
+                .collect::<Vec<_>>(),
+        )
+        .style(Style::default().fg(ACCENT)),
         inset(progress, 2),
     );
 
@@ -88,21 +107,32 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
         let visible = menu_area.height.saturating_sub(1) as usize;
         let first = selected.saturating_sub(visible.saturating_sub(1));
         let mut rows = vec![];
-        let labels = if screen.picker {
+        let labels = if let Some((entries, _)) = &screen.skill_choices {
+            entries
+                .iter()
+                .map(|e| format!("{} · {} · {}", e.name, e.source, e.path.display()))
+                .collect()
+        } else if screen.picker {
             screen
                 .recent
                 .iter()
                 .map(|recent| {
                     format!(
-                        "{}  {}",
+                        "{} [{}]  {}",
                         label(&recent.status),
+                        recent.id.chars().take(12).collect::<String>(),
                         recent.objective.lines().next().unwrap_or("")
                     )
                 })
                 .collect::<Vec<_>>()
         } else {
             menu.iter()
-                .map(|command| format!("{:<12} {}", command.name, command.description))
+                .map(|command| {
+                    format!(
+                        "{:<12} {} [{} · {:?}]",
+                        command.name, command.description, command.source, command.timing
+                    )
+                })
                 .collect()
         };
         for (index, text) in labels.iter().enumerate().skip(first).take(visible) {
@@ -153,7 +183,7 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
             if screen.session.is_some() {
                 "补充要求、纠正方向，或输入 /"
             } else {
-                "描述你想实现或修改的内容…"
+                "输入消息、问题，或需要实现的目标…"
             },
             Style::default().fg(MUTED),
         )]
@@ -207,10 +237,10 @@ fn welcome_lines(screen: &Screen) -> Vec<Line<'static>> {
     let mut lines = vec![
         Line::default(),
         Line::styled(
-            "从一个任务开始。",
+            "从一段对话开始。",
             Style::default().add_modifier(Modifier::BOLD),
         ),
-        Line::from("描述目标，Logit 会检查项目、执行修改并验证结果。"),
+        Line::from("可以打招呼、提问，或交代需要实现的目标。"),
         Line::styled(
             "执行中可以随时插话；离开终端后，任务仍在后台继续。",
             Style::default().fg(MUTED),
@@ -230,7 +260,7 @@ fn welcome_lines(screen: &Screen) -> Vec<Line<'static>> {
     }
     if !screen.recent.is_empty() {
         lines.push(Line::styled(
-            "最近的任务  /sessions",
+            "最近的会话  /sessions",
             Style::default().fg(MUTED),
         ));
         for recent in screen.recent.iter().take(3) {
