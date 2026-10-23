@@ -7,9 +7,13 @@ mod export;
 mod inspect;
 mod parse;
 mod service;
+mod team;
+pub mod window;
 
 pub use catalog::{DIRECTORY, Entry, Kind, Timing, help, matches};
 pub use completion::Completion;
 pub use inspect::doctor;
 pub use parse::{Command, parse};
 pub use service::{History, Navigation, Outcome, Service};
+
+pub use crate::runtime::view::ViewTarget;

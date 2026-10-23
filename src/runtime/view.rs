@@ -1,4 +1,6 @@
-//! A terminal refresh needs execution state, not every actor's model and image history.
+mod target;
+pub use target::{ActorBinding, TargetView, ViewTarget};
+// A terminal refresh needs execution state, not private model history.
 use super::{
     graph::Graph,
     state::{Question, Session},
@@ -9,6 +11,8 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SessionView {
+    #[serde(default)]
+    pub bindings: BTreeMap<String, ActorBinding>,
     #[serde(default)]
     pub team: super::team::TeamView,
     #[serde(default)]
@@ -37,6 +41,7 @@ pub struct SessionView {
 }
 impl From<Session> for SessionView {
     fn from(session: Session) -> Self {
+        let bindings = session.actor_bindings();
         let mut team = session.team.view();
         team.targets = session
             .actors
@@ -84,6 +89,7 @@ impl From<Session> for SessionView {
             })
             .collect();
         Self {
+            bindings,
             team,
             activities,
             approval_actions,

@@ -8,7 +8,7 @@ use crate::{domain::EventData, tools::Scope};
 
 impl Runner {
     pub(crate) async fn directed_control(&mut self, request: Request) -> anyhow::Result<()> {
-        let key = format!("{}:{}", request.client_id, request.id);
+        let key = request.key();
         if let Some(receipt) = self.session.team.receipts.get(&key) {
             if receipt.request != request {
                 self.emit(EventData::Diagnostic {
@@ -20,12 +20,14 @@ impl Runner {
         self.session.team.receipts.insert(
             key.clone(),
             Receipt {
+                applying: true,
                 request: request.clone(),
                 status: ReceiptStatus::Pending,
                 error: None,
                 pending_input: None,
             },
         );
+        self.publish_metadata()?;
         let inbox_before = self.session.inbox.len();
         let result = self.apply_member_control(&request).await;
         self.sync_assignments().await;
@@ -36,21 +38,58 @@ impl Runner {
             .skip(inbox_before)
             .find(|m| !m.applied)
             .map(|m| m.id.clone());
-        let queued = self.session.team.mail.iter().any(|mail| {
-            mail.id == format!("user:{}:{}", request.client_id, request.id)
-                && !mail.delivered
-                && mail.error.is_none()
-        });
+        let queued =
+            self.session.team.mail.iter().any(|mail| {
+                mail.id == request.mail_id() && !mail.delivered && mail.error.is_none()
+            });
         let receipt = self.session.team.receipts.get_mut(&key).unwrap();
+        receipt.applying = false;
         receipt.pending_input = pending_input;
-        receipt.status = if result.is_ok() && (queued || receipt.pending_input.is_some()) {
-            ReceiptStatus::Pending
-        } else if result.is_ok() {
-            ReceiptStatus::Applied
-        } else {
-            ReceiptStatus::Failed
-        };
+        let pending_skill =
+            request.target != Target::Main && matches!(request.action, MemberControl::Skill { .. });
+        receipt.status =
+            if result.is_ok() && (queued || pending_skill || receipt.pending_input.is_some()) {
+                ReceiptStatus::Pending
+            } else if result.is_ok() {
+                ReceiptStatus::Applied
+            } else {
+                ReceiptStatus::Failed
+            };
+        let accepted = result.is_ok();
         receipt.error = result.err().map(|e| e.to_string());
+        let receipt = receipt.clone();
+        let can_resolve_review = request.target == Target::Main
+            || matches!(
+                request.target,
+                Target::Member {
+                    assignment: Some(_),
+                    ..
+                }
+            );
+        if accepted && can_resolve_review {
+            let reviews = self
+                .session
+                .team
+                .receipts
+                .values()
+                .filter(|old| {
+                    old.status == ReceiptStatus::Failed
+                        && old.request.action == request.action
+                        && old.request.target.member_id() == request.target.member_id()
+                })
+                .map(|old| old.request.recovery_id())
+                .collect::<Vec<_>>();
+            for id in reviews {
+                if let Some(question) = self.session.questions.get_mut(&id)
+                    && question.answer.is_none()
+                {
+                    question.answer = Some(format!(
+                        "User resubmitted intended input as {}",
+                        request.key()
+                    ));
+                }
+            }
+        }
         let message = format!(
             "directed request {key}: {:?}{}",
             receipt.status,
@@ -64,15 +103,57 @@ impl Runner {
     }
 
     async fn apply_member_control(&mut self, request: &Request) -> anyhow::Result<()> {
-        self.session.team.validate(&request.target)?;
+        let archived_skill = matches!(request.action, MemberControl::Skill { .. })
+            && self.session.archived_target(&request.target).is_some();
+        if !archived_skill {
+            self.session.team.validate(&request.target)?;
+        }
+        if let MemberControl::Skill {
+            id,
+            hash,
+            arguments,
+        } = &request.action
+            && request.target != Target::Main
+        {
+            return self.validate_member_skill(id, hash, arguments);
+        }
         if request.target == Target::Main {
             let control = match &request.action {
                 MemberControl::Pause => Control::Pause,
                 MemberControl::Resume => Control::Resume,
                 MemberControl::Stop => Control::Stop,
                 MemberControl::Compact => Control::Compact,
-                MemberControl::Message { text } => Control::Message { text: text.clone() },
+                MemberControl::Message { text } => {
+                    let turn = request.key();
+                    self.session
+                        .team
+                        .receipts
+                        .get_mut(&request.key())
+                        .unwrap()
+                        .pending_input = Some(turn.clone());
+                    if !self.session.turns.iter().any(|t| t.id == turn) {
+                        self.session.turns.push(crate::runtime::conversation::Turn {
+                            id: turn.clone(),
+                            text: text.clone(),
+                        });
+                    }
+                    return self.submit_message(text.clone(), Some(turn));
+                }
                 MemberControl::Side { text } => Control::Side { text: text.clone() },
+                MemberControl::Skill {
+                    id,
+                    hash,
+                    arguments,
+                } => {
+                    let turn = request.key();
+                    self.session
+                        .team
+                        .receipts
+                        .get_mut(&request.key())
+                        .unwrap()
+                        .pending_input = Some(turn.clone());
+                    return self.invoke_skill_turn(id, hash, arguments, Some(turn));
+                }
                 MemberControl::Limit { limit } => {
                     self.session.team.limit = *limit;
                     return Ok(());
@@ -83,6 +164,7 @@ impl Runner {
         let id = request.target.member_id();
         let member = self.session.team.members.get_mut(id).unwrap();
         match &request.action {
+            MemberControl::Skill { .. } => unreachable!("validated pending skill"),
             MemberControl::Limit { .. } => anyhow::bail!("team limit requires main target"),
             MemberControl::Pause | MemberControl::Stop => {
                 member.paused = true;
@@ -101,14 +183,14 @@ impl Runner {
                 // Global status remains authoritative; an idle member is never revived.
             }
             MemberControl::Compact => member.compact_pending = true,
-            MemberControl::Side { text } => self.member_question(id, text, &request.id)?,
+            MemberControl::Side { text } => self.member_question(id, text, &request.key())?,
             MemberControl::Message { text } => {
                 if member.assignment.is_none() {
-                    self.member_question(id, text, &request.id)?;
+                    self.member_question(id, text, &request.key())?;
                 } else {
                     // Unknown user intent interrupts only this assignment until classified.
                     self.session.team.send(
-                        &format!("user:{}:{}", request.client_id, request.id),
+                        &request.mail_id(),
                         "user",
                         request.target.clone(),
                         text,

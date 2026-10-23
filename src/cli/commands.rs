@@ -31,10 +31,18 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     };
     let paths = Paths::new(home);
     let config = Config::load(&paths.home)?;
-    let cwd = args
-        .cwd
-        .unwrap_or(std::env::current_dir()?)
-        .canonicalize()?;
+    let cwd = if let Some(Command::Attach { id, .. }) = args.command.as_ref() {
+        // History remains attachable even when the original workspace no longer
+        // exists. The caller's shell directory never defines session commands.
+        let id = resolve(&paths, id)?;
+        Store::open(&paths.database())?
+            .load::<Session>(&id)?
+            .workspace
+    } else {
+        args.cwd
+            .unwrap_or(std::env::current_dir()?)
+            .canonicalize()?
+    };
     let command = if let Some(command) = args.command {
         command
     } else if args.prompt.is_none()
@@ -152,9 +160,16 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             }
         }
         Command::Serve { id } => daemon::serve(paths, &id).await?,
-        Command::Attach { id, after, json } => {
+        Command::Attach {
+            id,
+            agent,
+            after,
+            json,
+        } => {
             let id = resolve(&paths, &id)?;
-            super::stream::attach(&paths, &id, after, json).await?;
+            let state: Session = Store::open(&paths.database())?.load(&id)?;
+            let target = state.resolve_view(&agent)?;
+            super::stream::attach_view(&paths, &id, after, json, target).await?;
         }
         Command::Pause { id } => {
             let id = resolve(&paths, &id)?;

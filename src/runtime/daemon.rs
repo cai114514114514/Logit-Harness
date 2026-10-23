@@ -220,6 +220,10 @@ pub async fn launch(paths: &Paths, id: &str) -> anyhow::Result<()> {
 }
 
 pub async fn resume(paths: &Paths, id: &str) -> anyhow::Result<()> {
+    let socket = paths.socket(id)?;
+    if tokio::net::UnixStream::connect(&socket).await.is_ok() {
+        ipc::check_protocol(&socket).await?;
+    }
     let store = Store::open(&paths.database())?;
     // Resume is idempotent. Save it before startup: a Stopped runner otherwise
     // exits before a client can reach the socket and deliver the instruction.
@@ -247,7 +251,7 @@ pub async fn resume(paths: &Paths, id: &str) -> anyhow::Result<()> {
 pub async fn launch_with(paths: &Paths, id: &str, executable: &Path) -> anyhow::Result<()> {
     let socket = paths.socket(id)?;
     if tokio::net::UnixStream::connect(&socket).await.is_ok() {
-        return Ok(());
+        return ipc::check_protocol(&socket).await;
     }
     let logs = paths.logs(id)?;
     std::fs::create_dir_all(&logs)?;
@@ -283,7 +287,7 @@ pub async fn launch_with(paths: &Paths, id: &str, executable: &Path) -> anyhow::
     let mut child = command.spawn()?;
     for _ in 0..200 {
         if tokio::net::UnixStream::connect(&socket).await.is_ok() {
-            return Ok(());
+            return ipc::check_protocol(&socket).await;
         }
         if let Some(status) = child.try_wait()? {
             let text = std::fs::read_to_string(logs.join("runner.log")).unwrap_or_default();

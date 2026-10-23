@@ -249,6 +249,13 @@ impl Runner {
 
     pub(super) fn finish_question(&mut self, actor_id: &str) -> anyhow::Result<()> {
         if self.session.actors[actor_id]
+            .target
+            .as_ref()
+            .is_some_and(|t| matches!(t, super::team::Target::Member { .. }))
+        {
+            return Ok(());
+        }
+        if self.session.actors[actor_id]
             .parent
             .as_ref()
             .is_some_and(|id| self.session.team.members.contains_key(id))

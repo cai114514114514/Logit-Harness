@@ -5,7 +5,11 @@ use crate::{
         mcp::Operation,
         skills::{Invocation, Skills},
     },
-    runtime::state::{Control, Session},
+    runtime::{
+        state::{Control, Session},
+        team::MemberControl,
+        view::ViewTarget,
+    },
     store::Store,
 };
 use serde_json::{Value, json};
@@ -21,12 +25,28 @@ pub enum Navigation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct History {
+    pub origin: ViewTarget,
     pub query: String,
     pub tools_only: bool,
 }
 
 #[derive(Debug)]
 pub enum Outcome {
+    Focus {
+        origin: ViewTarget,
+        target: ViewTarget,
+        window: bool,
+    },
+    ScopedSkill {
+        origin: ViewTarget,
+        invocation: Box<Invocation>,
+        request: Box<crate::runtime::team::Request>,
+    },
+    ScopedChoice {
+        origin: ViewTarget,
+        entries: Vec<crate::extensions::skills::Entry>,
+        arguments: String,
+    },
     Local {
         title: String,
         text: String,
@@ -42,15 +62,19 @@ pub enum Outcome {
     Navigate(Navigation),
     History(History),
     Copy {
+        origin: ViewTarget,
         selector: String,
     },
     Setup,
 }
 
+#[derive(Clone)]
 pub struct Service<'a> {
-    paths: &'a Paths,
+    pub(super) paths: &'a Paths,
     workspace: &'a Path,
     session: Option<&'a str>,
+    pub(super) origin: ViewTarget,
+    pub(super) client_id: String,
 }
 
 impl<'a> Service<'a> {
@@ -59,18 +83,56 @@ impl<'a> Service<'a> {
             paths,
             workspace,
             session,
+            origin: ViewTarget::main(),
+            client_id: uuid::Uuid::new_v4().to_string(),
         }
     }
 
+    pub fn in_view(mut self, origin: ViewTarget) -> Self {
+        self.origin = origin;
+        self
+    }
+    pub fn with_client(mut self, id: impl Into<String>) -> Self {
+        self.client_id = id.into();
+        self
+    }
     pub fn execute(&self, command: Command) -> anyhow::Result<Outcome> {
+        if self.session.is_some() {
+            let session = self.load()?;
+            let mut bound = self.clone();
+            bound.workspace = &session.workspace;
+            return bound.execute_bound(command);
+        }
+        self.execute_bound(command)
+    }
+    fn execute_bound(&self, command: Command) -> anyhow::Result<Outcome> {
         let (kind, arguments) = match command {
-            Command::Message(text) => return Ok(Outcome::Control(Control::Message { text })),
+            Command::Message(text) => {
+                return if self.origin.is_main() {
+                    Ok(Outcome::Control(Control::Message { text }))
+                } else {
+                    self.member_control(Control::Message { text })
+                };
+            }
             Command::Skill {
                 selector,
                 arguments,
             } => return self.skill(&selector, &arguments),
             Command::Builtin { kind, arguments } => (kind, arguments),
         };
+        if matches!(kind, Kind::Team | Kind::Agent | Kind::Tell) {
+            return self.team_command(kind, &arguments);
+        }
+        if !self.origin.is_main() {
+            let mutation = match kind {
+                Kind::Goal | Kind::Budget => !arguments.is_empty(),
+                Kind::Config => !split(&arguments).1.is_empty(),
+                Kind::Mcp => matches!(split(&arguments).0, "enable" | "disable" | "reconnect"),
+                Kind::Setup | Kind::Plan | Kind::Approve | Kind::Answer | Kind::Rename => true,
+                _ => false,
+            };
+            anyhow::ensure!(!mutation, "此操作需要 main 视图");
+        }
         let control = match kind {
             Kind::Pause => Some(Control::Pause),
             Kind::Resume => Some(Control::Resume),
@@ -108,7 +170,11 @@ impl<'a> Service<'a> {
             _ => None,
         };
         if let Some(control) = control {
-            return Ok(Outcome::Control(control));
+            return if self.origin.is_main() {
+                Ok(Outcome::Control(control))
+            } else {
+                self.member_control(control)
+            };
         }
         match kind {
             Kind::Setup => Ok(Outcome::Setup),
@@ -131,6 +197,7 @@ impl<'a> Service<'a> {
                 let (head, tail) = split(&arguments);
                 let tools_only = head == "tools";
                 Ok(Outcome::History(History {
+                    origin: self.origin.clone(),
                     query: if tools_only { tail.into() } else { arguments },
                     tools_only,
                 }))
@@ -138,6 +205,7 @@ impl<'a> Service<'a> {
             Kind::Copy => {
                 self.id()?;
                 Ok(Outcome::Copy {
+                    origin: self.origin.clone(),
                     selector: arguments,
                 })
             }
@@ -177,7 +245,7 @@ impl<'a> Service<'a> {
                 )
             }
             Kind::Usage => pretty("已报告用量", inspect::usage(&self.load()?)),
-            Kind::Context => pretty("上下文", inspect::context(&self.load()?)),
+            Kind::Context => pretty("上下文", inspect::context_in(&self.load()?, &self.origin)?),
             Kind::Goal => {
                 let s = self.load()?;
                 pretty(
@@ -197,7 +265,7 @@ impl<'a> Service<'a> {
     fn id(&self) -> anyhow::Result<&str> {
         self.session.ok_or_else(|| anyhow::anyhow!("请先打开会话"))
     }
-    fn load(&self) -> anyhow::Result<Session> {
+    pub(super) fn load(&self) -> anyhow::Result<Session> {
         let id = self.id()?;
         crate::config::validate_id(id)?;
         anyhow::ensure!(self.paths.database().exists(), "会话数据库不存在");
@@ -220,18 +288,50 @@ impl<'a> Service<'a> {
                 roots.push(user.home_dir().join(".agents/skills"));
             }
         }
-        Ok(Skills::discover(self.workspace, &roots)?.with_bundled())
+        let workspace = self.optional_session()?.map(|s| s.workspace);
+        Ok(
+            Skills::discover(workspace.as_deref().unwrap_or(self.workspace), &roots)?
+                .with_bundled(),
+        )
     }
     fn skill(&self, selector: &str, arguments: &str) -> anyhow::Result<Outcome> {
         let skills = self.skills()?;
         let entries = skills.candidates(selector);
+        if !self.origin.is_main() {
+            self.load()?.target_view(&self.origin)?;
+        }
+        if entries.len() > 1 && !self.origin.is_main() {
+            return Ok(Outcome::ScopedChoice {
+                origin: self.origin.clone(),
+                entries: entries.into_iter().cloned().collect(),
+                arguments: arguments.into(),
+            });
+        }
         if entries.len() > 1 {
             return Ok(Outcome::ChooseSkill {
                 entries: entries.into_iter().cloned().collect(),
                 arguments: arguments.into(),
             });
         }
-        Ok(Outcome::Skill(skills.invoke(selector, arguments)?))
+        let invocation = skills.invoke(selector, arguments)?;
+        if self.origin.is_main() {
+            return Ok(Outcome::Skill(invocation));
+        }
+        let Outcome::Control(Control::Directed { request }) = self.addressed(
+            self.origin.clone(),
+            MemberControl::Skill {
+                id: invocation.id.clone(),
+                hash: invocation.hash.clone(),
+                arguments: invocation.arguments.clone(),
+            },
+        ) else {
+            unreachable!()
+        };
+        Ok(Outcome::ScopedSkill {
+            origin: self.origin.clone(),
+            invocation: Box::new(invocation),
+            request: Box::new(request),
+        })
     }
     fn config(&self, arguments: &str) -> anyhow::Result<Outcome> {
         let (key, value) = split(arguments);
@@ -355,6 +455,6 @@ fn local(title: &str, text: String) -> Outcome {
         text,
     }
 }
-fn pretty(title: &str, value: Value) -> anyhow::Result<Outcome> {
+pub(super) fn pretty(title: &str, value: Value) -> anyhow::Result<Outcome> {
     Ok(local(title, serde_json::to_string_pretty(&value)?))
 }

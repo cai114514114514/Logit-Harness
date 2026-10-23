@@ -9,6 +9,7 @@ use serde_json::json;
 use std::path::Path;
 
 pub async fn reconcile(session: &mut Session, store: &Store, logs: &Path) -> anyhow::Result<()> {
+    super::team::recover_requests(session, store)?;
     let interrupted = session.actions.values().any(|a| a.running)
         || session
             .actors

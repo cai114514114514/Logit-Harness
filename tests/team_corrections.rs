@@ -191,14 +191,14 @@ async fn classify(
         loop {
             let event = events.recv().await.unwrap();
             if let EventData::Diagnostic { message } = event.data {
-                if message.starts_with("directed request test:input:") {
+                if message.starts_with("directed request [\"test\",\"input\"]:") {
                     statuses.push(ReceiptStatus::Pending);
                 }
                 let saved = store.load::<Session>(&id).unwrap();
                 if saved
                     .team
                     .receipts
-                    .get("test:input")
+                    .get("[\"test\",\"input\"]")
                     .is_some_and(|r| r.status == ReceiptStatus::Applied)
                 {
                     statuses.push(ReceiptStatus::Applied);
@@ -306,6 +306,10 @@ async fn directed_main_correction_receipt_also_waits_for_canonical_application()
         vec![ReceiptStatus::Pending, ReceiptStatus::Applied]
     );
     assert_eq!(s.goal.requirements["r1"].source, "require CSV");
-    assert!(s.team.receipts["test:input"].pending_input.is_none());
+    assert!(
+        s.team.receipts["[\"test\",\"input\"]"]
+            .pending_input
+            .is_none()
+    );
     assert!(s.inbox[0].applied);
 }

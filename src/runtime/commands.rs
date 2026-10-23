@@ -24,6 +24,15 @@ impl Runner {
         hash: &str,
         arguments: &str,
     ) -> anyhow::Result<()> {
+        self.invoke_skill_turn(id, hash, arguments, None)
+    }
+    pub(crate) fn invoke_skill_turn(
+        &mut self,
+        id: &str,
+        hash: &str,
+        arguments: &str,
+        turn: Option<String>,
+    ) -> anyhow::Result<()> {
         let knowledge = self
             .tools
             .knowledge
@@ -45,7 +54,15 @@ impl Runner {
             || invocation.name == "review"
             || (invocation.name == "init"
                 && std::fs::symlink_metadata(self.session.workspace.join("AGENTS.md")).is_ok());
-        let turn = self.record_turn(&text);
+        let turn = if let Some(turn) = turn {
+            self.session.turns.push(super::conversation::Turn {
+                id: turn.clone(),
+                text: text.clone(),
+            });
+            turn
+        } else {
+            self.record_turn(&text)
+        };
         let initialize = invocation.id == "bundled:init";
         let description = format!(
             "capability changed: skill {} [{}] hash={} turn={turn}; arguments are literal data; permissions and budget unchanged",

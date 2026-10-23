@@ -47,6 +47,7 @@ pub(super) enum Wire {
     },
     Tool {
         id: String,
+        index: usize,
         event: ToolEvent,
     },
 }
@@ -78,6 +79,7 @@ pub struct Runner {
     pub(super) recover: bool,
     clock: super::clock::Clock,
     observer: Option<Arc<dyn Observer>>,
+    pub(super) public: std::sync::Mutex<super::public::Public>,
     pub(super) session: Session,
     pub(super) store: Arc<Store>,
     pub(super) provider: Arc<dyn Provider>,
@@ -87,6 +89,8 @@ pub struct Runner {
     pub(super) events: broadcast::Sender<SessionEvent>,
     pub(super) wire: mpsc::UnboundedReceiver<Wire>,
     pub(super) send: mpsc::UnboundedSender<Wire>,
+    pub(super) tool_seen: BTreeMap<String, usize>,
+    pub(super) tool_logs: BTreeMap<String, Arc<std::sync::Mutex<super::tool_stream::Log>>>,
     pub(super) tasks: JoinSet<(String, ResultData)>,
     pub(super) jobs: BTreeMap<String, Job>,
 }
@@ -130,6 +134,7 @@ impl Runner {
                 recover: false,
                 clock: super::clock::Clock::new(),
                 observer: None,
+                public: Default::default(),
                 session,
                 store,
                 provider,
@@ -138,6 +143,8 @@ impl Runner {
                 control: receiver,
                 events,
                 send,
+                tool_seen: BTreeMap::new(),
+                tool_logs: BTreeMap::new(),
                 wire,
                 tasks: JoinSet::new(),
                 jobs: BTreeMap::new(),
@@ -147,6 +154,7 @@ impl Runner {
         )
     }
     pub(super) fn emit(&self, data: EventData) -> anyhow::Result<()> {
+        self.publish_metadata()?;
         let event = if matches!(&data, EventData::Delta { .. }) {
             self.store.append(&self.session.id, data)?
         } else {
@@ -209,6 +217,7 @@ impl Runner {
                 self.handle_control(control).await?;
             }
             self.settle_members()?;
+            self.settle_member_skills()?;
             if self.jobs.is_empty() {
                 self.settle_mcp().await?;
                 if let Some(target) = self.session.transition.take() {
@@ -288,7 +297,7 @@ impl Runner {
         }
         Ok(())
     }
-    fn check_time(&mut self) -> anyhow::Result<()> {
+    pub(super) fn check_time(&mut self) -> anyhow::Result<()> {
         self.account_time()?;
         if matches!(self.session.status, Status::Running | Status::Waiting)
             && self.session.elapsed >= self.session.seconds

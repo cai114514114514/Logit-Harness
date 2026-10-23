@@ -21,6 +21,19 @@ pub enum Status {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventData {
+    ActorBound {
+        actor: String,
+        target: crate::runtime::team::Target,
+        goal: Option<String>,
+    },
+    Mail {
+        goal: String,
+        mail: crate::runtime::team::Mail,
+    },
+    RequestReceipt {
+        goal: String,
+        receipt: crate::runtime::team::Receipt,
+    },
     /// Correlates legacy events with stable user-turn, response and goal IDs.
     /// Tool events retain their action ID; model deltas use the response ID.
     Identity {

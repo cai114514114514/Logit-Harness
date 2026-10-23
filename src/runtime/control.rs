@@ -190,28 +190,39 @@ impl Runner {
                 }
                 self.status(Status::Running, "authorized action queued for revalidation")?;
             }
-            Control::Message { text } => {
-                let trimmed = text.trim().trim_end_matches(['。', '!', '！', '.']);
-                if matches!(trimmed, "stop" | "停止" | "停下" | "停") {
-                    return self.halt(Status::Stopped, "user requested stop");
-                }
-                if self.session.mode == super::conversation::Mode::Conversation
-                    && self.session.followup_goal().is_some()
-                {
-                    return self.submit_work_message(text);
-                }
-                if matches!(trimmed, "pause" | "暂停" | "等一下" | "等一下，停着") {
-                    return self.halt(Status::Paused, "user requested pause");
-                }
-                if self.session.mode != super::conversation::Mode::Engineering {
-                    self.emit(EventData::User {
-                        message: text.clone(),
-                    })?;
-                    return self.conversation_message(text);
-                }
-                self.submit_work_message(text)?;
-            }
+            Control::Message { text } => self.submit_message(text, None)?,
         }
+        Ok(())
+    }
+    /// Directed inputs provide a stable turn so recovery can quarantine exactly
+    /// this input, without guessing by text or replaying an uncertain effect.
+    pub(crate) fn submit_message(
+        &mut self,
+        text: String,
+        turn: Option<String>,
+    ) -> anyhow::Result<()> {
+        let trimmed = text.trim().trim_end_matches(['。', '!', '！', '.']);
+        if matches!(trimmed, "stop" | "停止" | "停下" | "停") {
+            return self.halt(Status::Stopped, "user requested stop");
+        }
+        if self.session.mode == super::conversation::Mode::Conversation
+            && self.session.followup_goal().is_some()
+        {
+            let turn = turn.unwrap_or_else(|| self.record_turn(&text));
+            return self.work_turn(text, turn);
+        }
+        if matches!(trimmed, "pause" | "暂停" | "等一下" | "等一下，停着") {
+            return self.halt(Status::Paused, "user requested pause");
+        }
+        if self.session.mode != super::conversation::Mode::Engineering {
+            self.emit(EventData::User {
+                message: text.clone(),
+            })?;
+            let turn = turn.unwrap_or_else(|| self.record_turn(&text));
+            return self.conversation_turn(text, turn);
+        }
+        let turn = turn.unwrap_or_else(|| self.record_turn(&text));
+        self.work_turn(text, turn)?;
         Ok(())
     }
     fn resume_readonly(&mut self) -> anyhow::Result<()> {

@@ -52,6 +52,7 @@ pub(super) type Jobs = JoinSet<(u64, anyhow::Result<Reply>)>;
 #[derive(Clone)]
 pub(super) struct Context {
     pub generation: u64,
+    pub view: crate::runtime::view::ViewTarget,
     pub revision: u64,
     pub paths: Paths,
     pub workspace: PathBuf,
@@ -61,6 +62,7 @@ impl Context {
     pub fn new(generation: u64, paths: &Paths, screen: &Screen) -> Self {
         Self {
             generation,
+            view: screen.view.clone(),
             revision: screen.input.revision(),
             paths: Paths::new(paths.home.clone()),
             workspace: screen.workspace.clone(),
@@ -74,6 +76,7 @@ impl Context {
                 &context.workspace,
                 context.session.as_deref(),
             )
+            .in_view(context.view.clone())
             .execute(command)
         });
     }
@@ -232,6 +235,10 @@ impl Context {
                         .as_ref()
                         .ok_or_else(|| anyhow::anyhow!("请先打开会话"))?;
                     if !connected {
+                        let socket = self.paths.socket(id)?;
+                        if tokio::net::UnixStream::connect(&socket).await.is_ok() {
+                            ipc::check_protocol(&socket).await?;
+                        }
                         if matches!(command, Control::Resume) {
                             daemon::resume(&self.paths, id).await?;
                             return Ok(Reply::Sent);

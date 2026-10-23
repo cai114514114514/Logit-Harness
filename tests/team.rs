@@ -163,8 +163,10 @@ async fn receipt(
 ) {
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {
-            if let EventData::Diagnostic { message } = events.recv().await.unwrap().data
-                && message.starts_with(&format!("directed request fixture:{id}:"))
+            if let EventData::RequestReceipt { receipt, .. } = events.recv().await.unwrap().data
+                && receipt.request.client_id == "fixture"
+                && receipt.request.id == id
+                && receipt.status != ReceiptStatus::Pending
             {
                 break;
             }
@@ -308,11 +310,11 @@ async fn idle_side_question_uses_fresh_readonly_actor_and_stale_control_keeps_re
         .unwrap()
         .unwrap();
     assert_eq!(
-        s.team.receipts["fixture:stale"].status,
+        s.team.receipts["[\"fixture\",\"stale\"]"].status,
         ReceiptStatus::Failed
     );
     assert!(
-        s.team.receipts["fixture:stale"]
+        s.team.receipts["[\"fixture\",\"stale\"]"]
             .error
             .as_ref()
             .unwrap()

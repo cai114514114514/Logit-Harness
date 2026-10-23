@@ -295,8 +295,15 @@ with tempfile.TemporaryDirectory(prefix='loh-layout-') as tmp:
                 with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
                     connection.settimeout(1)
                     connection.connect(str(endpoint))
-                    connection.sendall(b'{"type":"command","command":{"type":"stop"}}\n')
-                    connection.recv(4096)
+                    with connection.makefile("rb") as replies:
+                        connection.sendall(b'{"type":"hello","protocol":1}\n')
+                        assert json.loads(replies.readline())["type"] == "hello"
+                        connection.sendall(b'{"type":"command","command":{"type":"stop"}}\n')
+                        assert json.loads(replies.readline())["type"] == "ack"
+                deadline = time.monotonic() + 5
+                while endpoint.exists() and time.monotonic() < deadline:
+                    time.sleep(.05)
+                assert not endpoint.exists(), f"fixture daemon did not settle: {endpoint}"
             except OSError:
                 pass
 server.shutdown()

@@ -190,7 +190,17 @@ with tempfile.TemporaryDirectory(prefix='loh-task3-') as tmp:
         for endpoint in [endpoint for state_home in homes for endpoint in (state_home/'run').glob('*.sock')]:
             try:
                 with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as conn:
-                    conn.settimeout(1);conn.connect(str(endpoint));conn.sendall(b'{"type":"command","command":{"type":"stop"}}\n');conn.recv(4096)
+                    conn.settimeout(1)
+                    conn.connect(str(endpoint))
+                    with conn.makefile("rb") as replies:
+                        conn.sendall(b'{"type":"hello","protocol":1}\n')
+                        assert json.loads(replies.readline())["type"] == "hello"
+                        conn.sendall(b'{"type":"command","command":{"type":"stop"}}\n')
+                        assert json.loads(replies.readline())["type"] == "ack"
+                deadline = time.monotonic() + 5
+                while endpoint.exists() and time.monotonic() < deadline:
+                    time.sleep(.05)
+                assert not endpoint.exists(), f"fixture daemon did not settle: {endpoint}"
             except OSError:pass
         time.sleep(.2)
 server.shutdown()

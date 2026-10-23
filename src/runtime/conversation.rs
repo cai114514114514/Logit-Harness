@@ -165,11 +165,6 @@ impl Runner {
         Ok(false)
     }
 
-    pub(super) fn conversation_message(&mut self, text: String) -> anyhow::Result<()> {
-        let turn = self.record_turn(&text);
-        self.conversation_turn(text, turn)
-    }
-
     pub(super) fn conversation_turn(&mut self, text: String, turn: String) -> anyhow::Result<()> {
         if self.session.actors["main"].busy != 0 || !self.jobs.is_empty() {
             self.request_boundary(Boundary::Conversation { text, turn })?;

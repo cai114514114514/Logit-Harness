@@ -1,5 +1,8 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
+    Team,
+    Agent,
+    Tell,
     Setup,
     Status,
     Diff,
@@ -81,6 +84,33 @@ macro_rules! entry {
 }
 
 pub const DIRECTORY: &[Entry] = &[
+    entry!(
+        Team,
+        "/team",
+        "成员、任务与全局团队控制",
+        "/team [pause|resume|stop|limit N]",
+        "/team",
+        Optional,
+        Runtime
+    ),
+    entry!(
+        Agent,
+        "/agent",
+        "切换成员视图或打开成员窗口",
+        "/agent NAME [--window]",
+        "/agent main",
+        Required,
+        Local
+    ),
+    entry!(
+        Tell,
+        "/tell",
+        "向指定成员发送持久消息",
+        "/tell NAME TEXT",
+        "/tell Ada 检查接口",
+        Answer,
+        Runtime
+    ),
     entry!(
         Setup,
         "/setup",

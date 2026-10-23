@@ -20,6 +20,13 @@ impl Runner {
         {
             return Ok(());
         }
+        if let Wire::Tool { id, index, .. } = &wire {
+            let seen = self.tool_seen.entry(id.clone()).or_default();
+            if *index < *seen {
+                return Ok(());
+            }
+            *seen = index + 1;
+        }
         if let Wire::Model { id, .. } = &wire {
             let Some(job) = self.jobs.get(id) else {
                 return Ok(());
@@ -35,6 +42,11 @@ impl Runner {
                 return Ok(());
             }
         }
+        let acknowledgement = if let Wire::Tool { id, index, .. } = &wire {
+            Some((id.clone(), *index))
+        } else {
+            None
+        };
         match wire {
             Wire::Model {
                 id: _,
@@ -55,10 +67,12 @@ impl Runner {
             })?,
             Wire::Tool {
                 id,
+                index: _,
                 event: ToolEvent::Output(text),
             } => self.emit(EventData::Delta { actor: id, text })?,
             Wire::Tool {
                 id,
+                index: _,
                 event: ToolEvent::Process { pid },
             } => {
                 if let Some(action) = self.session.actions.get_mut(&id) {
@@ -67,6 +81,13 @@ impl Runner {
                 self.emit(EventData::ProcessStarted { id, pid })?;
             }
         }
+        if let Some((id, index)) = acknowledgement
+            && let Some(log) = self.tool_logs.get(&id)
+        {
+            log.lock()
+                .map_err(|_| anyhow::anyhow!("tool relay log poisoned"))?
+                .acknowledge(index);
+        }
         Ok(())
     }
     pub(super) async fn handle_result(
@@ -74,6 +95,35 @@ impl Runner {
         id: String,
         result: ResultData,
     ) -> anyhow::Result<()> {
+        if matches!(&result, ResultData::Tool(_)) {
+            // Drain only this finished tool's unseen tail. Live acknowledgements
+            // have already released its consumed prefix from memory.
+            let tail = self
+                .tool_logs
+                .get(&id)
+                .map(|log| {
+                    log.lock()
+                        .map(|mut log| log.drain())
+                        .map_err(|_| anyhow::anyhow!("tool relay log poisoned"))
+                })
+                .transpose()?
+                .unwrap_or_default();
+            for (offset, (index, event)) in tail.into_iter().enumerate() {
+                if offset > 0 && offset % 64 == 0 {
+                    self.check_time()?;
+                    self.drain_inbox().await?;
+                    while let Ok(control) = self.control.try_recv() {
+                        self.handle_control(control).await?;
+                    }
+                    tokio::task::yield_now().await;
+                }
+                self.handle_wire(Wire::Tool {
+                    id: id.clone(),
+                    index,
+                    event,
+                })?;
+            }
+        }
         let job = self
             .jobs
             .remove(&id)
@@ -268,6 +318,8 @@ impl Runner {
                 }
             }
             (JobKind::Tool { action }, ResultData::Tool(result)) => {
+                self.tool_logs.remove(&action);
+                self.tool_seen.remove(&action);
                 let mut record = self
                     .session
                     .actions
@@ -402,3 +454,6 @@ impl Runner {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;

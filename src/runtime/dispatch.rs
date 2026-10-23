@@ -508,21 +508,33 @@ impl Runner {
         let host = self.tools.clone();
         let send = self.send.clone();
         let action = id.clone();
+        let log = std::sync::Arc::new(std::sync::Mutex::new(super::tool_stream::Log::default()));
+        self.tool_logs.insert(id.clone(), log.clone());
         self.tasks.spawn(async move {
-            let (output, mut receiver) = mpsc::unbounded_channel();
+            let (output, mut receiver) = mpsc::unbounded_channel::<crate::tools::ToolEvent>();
             let relay = tokio::spawn(async move {
                 while let Some(event) = receiver.recv().await {
+                    let index = log
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("tool relay log poisoned"))?
+                        .push(event.clone());
                     let _ = send.send(Wire::Tool {
                         id: action.clone(),
+                        index,
                         event,
                     });
                 }
+                anyhow::Ok(())
             });
             // Log paths use our action ID; the provider's call ID remains in the transcript.
             let mut call = pending.call;
             call.id = id.clone();
             let result = host.execute(call, pending.scope, token, output).await;
-            let _ = relay.await;
+            let result = match relay.await {
+                Ok(Ok(())) => result,
+                Ok(Err(error)) => Err(error),
+                Err(error) => Err(error.into()),
+            };
             (id, ResultData::Tool(result))
         });
         Ok(())

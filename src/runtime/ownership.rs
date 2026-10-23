@@ -117,6 +117,7 @@ impl Runner {
         self.lease = Some(Lease(file));
         if self.recover {
             super::recovery::reconcile(&mut self.session, &self.store, &self.tools.logs).await?;
+            self.refresh_questions().await;
             self.recover = false;
         }
         let destination = self.session.owner_status.take().unwrap_or(Status::Running);

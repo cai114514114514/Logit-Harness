@@ -180,6 +180,16 @@ impl Session {
 
     /// Deterministic migration: old actor IDs become member IDs, never reused actors.
     pub fn normalize_team(&mut self) {
+        self.team.receipts = std::mem::take(&mut self.team.receipts)
+            .into_values()
+            .map(|receipt| (receipt.request.key(), receipt))
+            .collect();
+        for archive in &mut self.archives {
+            archive.team.receipts = std::mem::take(&mut archive.team.receipts)
+                .into_values()
+                .map(|receipt| (receipt.request.key(), receipt))
+                .collect();
+        }
         for member in self.team.members.values_mut() {
             member.interrupted = self.team.mail.iter().any(|m| {
                 m.user && m.target.member_id() == member.id && !m.delivered && m.error.is_none()

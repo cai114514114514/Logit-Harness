@@ -209,6 +209,9 @@ pub(super) async fn run(
                                 context.catalog(&mut jobs);
                             }
                         },
+                        Outcome::Focus { target, .. } => screen.note(format!("成员视图：{}", target.target.member_id())),
+                        Outcome::ScopedSkill { request, .. } => context.control(&mut jobs, Control::Directed { request: *request }, draft, screen.connected),
+                        Outcome::ScopedChoice { entries, arguments, .. } => { submission::install_choice(&mut screen, context, entries, arguments, &draft); },
                         Outcome::Setup => super::setup::open(&mut screen, paths),
                         Outcome::Navigate(Navigation::Detach) => break,
                         Outcome::Navigate(Navigation::New) => {
@@ -240,7 +243,7 @@ pub(super) async fn run(
                             submission::install_choice(&mut screen, context, entries, arguments, &draft);
                         }
                         Outcome::History(history) => context.history(&mut jobs, history.query, history.tools_only),
-                        Outcome::Copy { selector } => {
+                        Outcome::Copy { selector, .. } => {
                             if selector.is_empty() { context.history(&mut jobs, String::new(), false); }
                             else { context.copy_selector(&mut jobs, selector); }
                         }

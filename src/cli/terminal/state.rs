@@ -13,6 +13,7 @@ pub struct Recent {
 
 #[derive(Default)]
 pub struct Screen {
+    pub view: crate::runtime::view::ViewTarget,
     pub input: Input,
     pub session: Option<SessionView>,
     pub connected: bool,
@@ -163,7 +164,14 @@ impl Screen {
                 self.activity.clear();
             }
             ServerMessage::Error { message } => self.note(message),
-            ServerMessage::Ack => (),
+            ServerMessage::TargetView { state, sequence } => self.receive(ServerMessage::View {
+                state: Box::new(state.session),
+                sequence,
+            }),
+            ServerMessage::Ack
+            | ServerMessage::Hello { .. }
+            | ServerMessage::Accepted { .. }
+            | ServerMessage::Receipt { .. } => (),
         }
     }
     pub fn activity_lines(&self) -> Vec<String> {

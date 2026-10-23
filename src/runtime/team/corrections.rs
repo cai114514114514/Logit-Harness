@@ -242,7 +242,7 @@ impl Runner {
         mail.error = error.clone();
         let member = mail.target.member_id().to_owned();
         for receipt in self.session.team.receipts.values_mut().filter(|r| {
-            format!("user:{}:{}", r.request.client_id, r.request.id) == mail_id
+            r.request.mail_id() == mail_id
                 && matches!(r.request.action, MemberControl::Message { .. })
         }) {
             receipt.status = if error.is_none() {

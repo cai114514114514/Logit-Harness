@@ -289,7 +289,7 @@ async fn archived_followup_stays_readonly_until_a_real_correction_is_classified(
         runner.apply_steering(&id,&serde_json::json!({"intent":"refine","updates":{},"additions":["CSV export"],"answer":"","reason":"additional acceptance"})).await.unwrap();
         assert_eq!(runner.session.goal.id, goal);
         assert_eq!(
-            runner.session.team.receipts["late:correction"].status,
+            runner.session.team.receipts["[\"late\",\"correction\"]"].status,
             crate::runtime::team::ReceiptStatus::Applied
         );
         assert_eq!(

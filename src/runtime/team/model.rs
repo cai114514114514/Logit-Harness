@@ -87,6 +87,19 @@ pub enum Target {
         assignment: Option<AssignmentRef>,
     },
 }
+impl Request {
+    /// JSON tuple encoding is injective even when either ID contains separators.
+    pub fn key(&self) -> String {
+        serde_json::to_string(&[&self.client_id, &self.id]).expect("string tuple serialization")
+    }
+    pub fn recovery_id(&self) -> String {
+        format!("recovery-{}", blake3::hash(self.key().as_bytes()).to_hex())
+    }
+    pub fn mail_id(&self) -> String {
+        format!("user:{}", self.key())
+    }
+}
+
 impl Target {
     pub fn member_id(&self) -> &str {
         match self {
@@ -112,13 +125,28 @@ pub enum MemberControl {
     Resume,
     Stop,
     Compact,
-    Message { text: String },
-    Side { text: String },
-    Limit { limit: usize },
+    Message {
+        text: String,
+    },
+    Side {
+        text: String,
+    },
+    Limit {
+        limit: usize,
+    },
+    Skill {
+        id: String,
+        hash: String,
+        arguments: String,
+    },
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Receipt {
+    /// A crash during handler execution is an uncertain outcome, never an
+    /// implied success. Queued asynchronous work clears this marker normally.
+    #[serde(default)]
+    pub applying: bool,
     pub request: Request,
     pub status: ReceiptStatus,
     pub error: Option<String>,
@@ -133,7 +161,7 @@ pub enum ReceiptStatus {
     Failed,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Mail {
     pub id: String,
     pub from: String,
@@ -185,11 +213,20 @@ impl Team {
         if name == "main" {
             return Ok(Target::Main);
         }
-        let member = self
-            .members
-            .values()
-            .find(|m| m.id == name || m.name == name)
-            .ok_or_else(|| anyhow::anyhow!("unknown member: {name}"))?;
+        let member = if let Some(member) = self.members.get(name) {
+            member
+        } else {
+            let matches = self
+                .members
+                .values()
+                .filter(|m| m.name == name)
+                .collect::<Vec<_>>();
+            anyhow::ensure!(
+                matches.len() == 1,
+                "unknown or ambiguous member: {name}; use its stable member ID"
+            );
+            matches[0]
+        };
         Ok(Target::Member {
             id: member.id.clone(),
             assignment: member.assignment.as_ref().map(|id| {

@@ -9,7 +9,7 @@ use loh::{
 };
 use std::{os::unix::fs::PermissionsExt, sync::Arc};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::AsyncBufReadExt,
     sync::{broadcast, mpsc},
 };
 use tokio_util::sync::CancellationToken;
@@ -104,24 +104,11 @@ async fn socket_routes_controls_and_replays_after_a_cursor() {
         serde_json::from_value::<Control>(queued[0].1.clone()).unwrap(),
         Control::Pause
     ));
-    let mut stream = tokio::net::UnixStream::connect(&path).await.unwrap();
-    stream
-        .write_all(
-            format!(
-                "{}\n",
-                serde_json::to_string(&ClientMessage::Subscribe {
-                    after: first.sequence
-                })
-                .unwrap()
-            )
-            .as_bytes(),
-        )
-        .await
-        .unwrap();
-    let mut lines = BufReader::new(stream).lines();
+    let stream = ipc::subscribe(&path, first.sequence).await.unwrap();
+    let mut lines = stream.lines();
     let snapshot: ServerMessage =
         serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
-    assert!(matches!(snapshot, ServerMessage::Snapshot { .. }));
+    assert!(matches!(snapshot, ServerMessage::View { .. }));
     let replay: ServerMessage =
         serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
     assert!(matches!(replay,ServerMessage::Event{event} if event.sequence==second.sequence));

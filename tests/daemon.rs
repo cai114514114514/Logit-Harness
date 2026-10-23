@@ -608,7 +608,7 @@ async fn detached_cli_exits_while_daemon_finishes_and_accepts_reattach() {
     );
     let mut attached = ipc::subscribe(&socket, 0).await.unwrap();
     assert!(
-        matches!(ipc::receive(&mut attached).await.unwrap(),ServerMessage::Snapshot{state,..}if state.id==completed.id)
+        matches!(ipc::receive(&mut attached).await.unwrap(),ServerMessage::View{state,..}if state.id==completed.id)
     );
     drop(attached);
     ipc::request(
