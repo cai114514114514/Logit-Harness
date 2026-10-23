@@ -142,7 +142,7 @@ pub const DIRECTORY: &[Entry] = &[
         Budget,
         "/budget",
         "当前任务 token 和时间额度",
-        "/budget [tokens] [seconds]",
+        "/budget [tokens|unlimited] [seconds|unlimited]",
         "/budget",
         Budget,
         Runtime

@@ -77,6 +77,11 @@ pub fn save(paths: &Paths, key: &str, value: &str) -> anyhow::Result<Value> {
         }
         "base_url" => toml::Value::String(super::api::endpoint(value)?),
         "user_skills" => toml::Value::Boolean(value.parse()?),
+        "tokens" | "seconds"
+            if crate::domain::limit::parse(value)? == crate::domain::limit::UNLIMITED =>
+        {
+            toml::Value::String("unlimited".into())
+        }
         _ => {
             let number: i64 = value.parse()?;
             anyhow::ensure!(

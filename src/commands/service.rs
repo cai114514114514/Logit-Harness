@@ -162,9 +162,15 @@ impl<'a> Service<'a> {
             }
             Kind::Budget if !arguments.is_empty() => {
                 let (tokens, seconds) = split(&arguments);
+                let tokens = crate::domain::limit::parse(tokens)?;
+                let seconds = if seconds.is_empty() {
+                    (tokens == crate::domain::limit::UNLIMITED).then_some(tokens)
+                } else {
+                    Some(crate::domain::limit::parse(seconds)?)
+                };
                 Some(Control::Budget {
-                    tokens: Some(tokens.parse()?),
-                    seconds: (!seconds.is_empty()).then(|| seconds.parse()).transpose()?,
+                    tokens: Some(tokens),
+                    seconds,
                 })
             }
             _ => None,
@@ -233,16 +239,20 @@ impl<'a> Service<'a> {
             Kind::Mcp => self.mcp(&arguments),
             Kind::Diff => pretty("改动", crate::extensions::skills::inspect(self.workspace)?),
             Kind::Export => self.export(&arguments),
-            Kind::Status => pretty(
-                "状态",
-                serde_json::to_value(crate::runtime::view::SessionView::from(self.load()?))?,
-            ),
+            Kind::Status => {
+                let state = crate::runtime::view::SessionView::from(self.load()?);
+                let mut value = serde_json::to_value(&state)?;
+                value["budget"]["limit"] = crate::domain::limit::value(state.budget.limit);
+                value["seconds"] = crate::domain::limit::value(state.seconds);
+                pretty("状态", value)
+            }
             Kind::Budget => {
                 let s = self.load()?;
-                pretty(
-                    "当前预算",
-                    json!({"budget":s.budget,"seconds":s.seconds,"elapsed":s.elapsed,"campaign":s.campaign}),
-                )
+                pretty("当前预算", {
+                    let mut budget = serde_json::to_value(&s.budget)?;
+                    budget["limit"] = crate::domain::limit::value(s.budget.limit);
+                    json!({"budget":budget,"seconds":crate::domain::limit::value(s.seconds),"elapsed":s.elapsed,"campaign":s.campaign})
+                })
             }
             Kind::Usage => pretty("已报告用量", inspect::usage(&self.load()?)),
             Kind::Context => pretty("上下文", inspect::context_in(&self.load()?, &self.origin)?),

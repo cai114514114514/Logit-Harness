@@ -47,7 +47,7 @@ pub fn parse(text: &str) -> anyhow::Result<Command> {
             words.len() <= 2
                 && words
                     .iter()
-                    .all(|word| word.parse::<u64>().is_ok_and(|value| value > 0))
+                    .all(|word| crate::domain::limit::parse(word).is_ok())
         }
         Arguments::Skills => {
             words.is_empty() || (words.first() == Some(&"run") && words.len() >= 2)

@@ -2,6 +2,7 @@ mod budget;
 mod event;
 mod evidence;
 mod goal;
+pub mod limit;
 pub mod notes;
 
 pub use budget::{Budget, Usage};

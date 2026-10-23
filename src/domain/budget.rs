@@ -55,7 +55,7 @@ impl Budget {
     pub fn reserve(&mut self, tokens: u64) -> anyhow::Result<String> {
         anyhow::ensure!(tokens > 0, "cannot reserve zero tokens");
         anyhow::ensure!(
-            tokens <= self.remaining(),
+            self.limit == super::limit::UNLIMITED || tokens <= self.remaining(),
             "token budget exhausted: requested {tokens}, remaining {}",
             self.remaining()
         );
@@ -80,6 +80,9 @@ impl Budget {
         Ok(())
     }
     pub fn remaining(&self) -> u64 {
+        if self.limit == super::limit::UNLIMITED {
+            return super::limit::UNLIMITED;
+        }
         self.limit
             .saturating_sub(self.used)
             .saturating_sub(self.uncertain)

@@ -37,7 +37,7 @@ pub(super) fn context_in(
 }
 
 pub(super) fn usage(session: &Session) -> Value {
-    json!({"reported":session.budget.reported,"kv_hit_ratio":session.budget.reported.cache_hit(),"accounted_tokens":session.budget.used,"uncertain_tokens":session.budget.uncertain,"reserved_tokens":session.budget.reservations,"remaining_tokens":session.budget.remaining(),"elapsed_seconds":session.elapsed,"cost":"not inferred from context bytes; campaign ledger remains authoritative"})
+    json!({"reported":session.budget.reported,"kv_hit_ratio":session.budget.reported.cache_hit(),"accounted_tokens":session.budget.used,"uncertain_tokens":session.budget.uncertain,"reserved_tokens":session.budget.reservations,"remaining_tokens":crate::domain::limit::value(session.budget.remaining()),"elapsed_seconds":session.elapsed,"cost":"not inferred from context bytes; campaign ledger remains authoritative"})
 }
 
 pub(super) fn permissions(session: Option<&Session>) -> Value {

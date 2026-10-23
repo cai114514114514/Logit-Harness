@@ -12,7 +12,9 @@ pub struct Config {
     pub campaign: Option<crate::runtime::state::Campaign>,
     pub model: String,
     pub base_url: String,
+    #[serde(with = "crate::domain::limit")]
     pub tokens: u64,
+    #[serde(with = "crate::domain::limit")]
     pub seconds: u64,
     pub max_output: u32,
     pub context_bytes: usize,
@@ -28,8 +30,8 @@ impl Default for Config {
             campaign: None,
             model: "deepseek-flash".into(),
             base_url: "https://api.deepseek.com".into(),
-            tokens: 5_000_000,
-            seconds: 21600,
+            tokens: crate::domain::limit::UNLIMITED,
+            seconds: crate::domain::limit::UNLIMITED,
             max_output: 32768,
             context_bytes: 262144,
             workers: 2,

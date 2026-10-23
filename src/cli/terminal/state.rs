@@ -225,11 +225,11 @@ impl Screen {
             Some(session) => format!(
                 "Token：已用 {} / 上限 {}，未确定 {}，预留 {}。运行时间：{} / {} 秒。\n{}\n/budget <总 token 上限> [总秒数上限]，调整后 /resume。实验总金额上限不会随此命令改变。",
                 session.budget.used,
-                session.budget.limit,
+                crate::domain::limit::label(session.budget.limit),
                 session.budget.uncertain,
                 session.budget.reservations.values().sum::<u64>(),
                 session.elapsed,
-                session.seconds,
+                crate::domain::limit::label(session.seconds),
                 self.cache(),
             ),
             None => "正在读取会话预算…".into(),

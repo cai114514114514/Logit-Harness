@@ -300,6 +300,7 @@ impl Runner {
     pub(super) fn check_time(&mut self) -> anyhow::Result<()> {
         self.account_time()?;
         if matches!(self.session.status, Status::Running | Status::Waiting)
+            && self.session.seconds != crate::domain::limit::UNLIMITED
             && self.session.elapsed >= self.session.seconds
         {
             self.halt(Status::Exhausted, "execution time budget reached")?;
