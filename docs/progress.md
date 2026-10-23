@@ -791,3 +791,28 @@ Spec: docs/spec.md
   unverified under the recorded safety denial; live Flash teamwork remains
   unmeasured under the unchanged shared allowance. Engineering delivery does not
   establish either native-window acceptance or a model-quality improvement.
+
+## Collaboration-first terminal redesign — 2026-10-23/24
+
+- Implemented the approved B design in the original tree. Settled tool summaries, raw detail,
+  member chrome, urgent state, choice menus and the shared composer are separate modules.
+  Native Surface append/scrollback behavior, runtime control scope and model tools are unchanged.
+- Enter feedback now follows an operation and its captured view. Directed Pending receipts
+  remain associated with both sender and recipient; terminal receipts beat late acknowledgements.
+  Completed tool reads normally occupy one line; failures reserve the actual ProcessOutput exit
+  code and four tail rows, and running commands keep a bounded live preview.
+- An independent whole-change review found retired-actor execution labels, archived identity
+  ambiguity, pause priority and compact Pending-state loss. All four reproduced before repair.
+  Full regression also caught active approval content being obscured before the first snapshot;
+  the existing approval integration test reproduced and then passed without weakening assertions.
+- Final source `44eeeee85e0dd495c8a268c023a81aa1db1166d3` passed **369 tests, 0 failures,
+  0 ignored**, 61 result groups, formatting, locked strict Clippy and release build.
+- The signed executable was atomically installed to `/opt/homebrew/bin/loh`. Source hash:
+  `460baba3f9809eede6d52e39c7205404630d5d0ac847ed3835ab687d60fb4ccd`; signed binary SHA-256:
+  `a007a2e99821128157b24d3124c888f900ed2b91d7bd22d7453951ed473543c5`.
+  All 89 process identities observed immediately before installation remained afterward.
+- All four installed PTY suites passed against that binary; final grids were inspected.
+  [Terminal redesign acceptance](terminal-redesign-acceptance.md) records exact paths, limits and
+  decisions. Evidence is `artifacts/terminal-redesign-2026-10-23`. This implementation made no
+  paid calls, preserved both budget ledgers and frozen research, and does not establish real
+  Flash quality or native Apple Terminal acceptance.

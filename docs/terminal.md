@@ -5,7 +5,7 @@ The executable is `loh`. In a development checkout, build with `cargo build` and
 Configuration and session state default to `~/.loh`, configurable with `LOH_HOME` or `--home`.
 
 Running `loh` alone prints the blue L, current model and project directory once, then opens a
-compact welcome editor and recent sessions. The brand is never redrawn between replies or tools,
+compact welcome editor; `/sessions` opens saved conversations. The brand is never redrawn between replies or tools,
 including after `/new`, session switching, resize or reconnect. It remains usable without an API key: commands and saved
 conversations can be inspected, while starting/resuming model work requires the key. Missing-key
 submission retains the draft and does not create a task or issue a provider request.
@@ -52,21 +52,40 @@ Ctrl-W or Alt-Backspace deletes the previous word, Ctrl-K clears the rest of the
 Alt-Left/Right or Alt-B/F moves by word. Input changes repaint immediately; streaming tool output
 is still batched to avoid redrawing for every output fragment.
 
-The persistent activity area shows actual outstanding model requests, commands, workers and
-verification, plus measured elapsed time and time since output. Workspace wait, pending questions,
-approval, cancellation settlement, pause and completion have distinct labels and relevant commands.
-It does not infer progress from the last model-request text or display invented percentages.
+The activity area keeps one primary action, with measured elapsed time and time since output.
+An old draft, pending authorization/question, cancellation settlement or workspace wait takes
+priority over ordinary progress. If the available rows cannot contain an entire actionable command,
+`/status` provides the complete list; a partial authorization ID is never presented as a usable command.
+Enter shows local sending feedback immediately. Directed requests remain visibly pending until
+their durable terminal receipt; late acknowledgements cannot restart waiting or clear another view's
+submission. An ordinary main-view acknowledgement proves persistence only, not application or completion.
 
 Input prompts follow the saved session mode: continue a conversation, add read-only Plan context,
 or correct an Engineering task. Tool activity is grouped by action; full source, identity and local
 start time are in details. Shell output is literal;
-read/search/patch results have their own formatting. Normal results show a summary; failures retain
-the useful tail and folding is labeled. Known routine diagnostics stay in full history, while failures,
+read/search/patch results have their own formatting. A settled successful tool normally occupies one
+line. Adjacent successful reads/searches from the same member, assignment, turn and response can be
+grouped within one append, at most three rows; further steps remain in details. A running command
+keeps up to four rows of live output. Failures keep the exit code and up to four error-tail rows;
+long commands reserve space for that exit code. Full output is retained in history, search and copy.
+Known routine diagnostics and successful delivery receipts stay in full history, while failures,
 unknown outcomes and required actions stay visible. Question and approval commands retain exact IDs.
 Interrupted actions with an unknown result never acquire
 a success marker. Display text cannot execute terminal escapes; explicitly copied content retains
-its original bytes. The footer shows reported token usage and KV input hit rate; `/usage` and
+its original bytes. The footer shows the model, reported token usage and KV input hit rate; `/usage` and
 `/budget` provide details. Context size estimates are separate from provider-reported token usage.
+Main shows the team's total; a member shows only its own reported usage. Missing KV data is `—`.
+Narrow windows first omit secondary shortcuts and token totals, preserving identity, control scope,
+the editor and actionable status. Supported layout checks include 110×34, 80×24, 60×18 and 40×12;
+smaller unusable regions explicitly ask for more space.
+
+When a team exists, its title and one stable member strip sit at the top of the active region,
+below native scrollback. Ordinary chat has no roster. The selected member remains visible;
+overflow is `+N`, and Ctrl-T opens the full picker. A member's header retains its task and
+“仅控制此成员”; archived views retain the original team and “归档只读”. The strip does not reorder
+on progress updates. Main also reports member wait reasons when there is no actual action running.
+The `/` menu shows source and execution timing for the selected command, without repeating those
+tags on every row. Existing command parsing, source-qualified Skills and control scopes are unchanged.
 
 The history browser reads the full durable event record, including entries older than 300 events.
 Use Up/Down to select, PageUp/PageDown for pages, Enter to expand one entry, `j`/`k` to scroll its
