@@ -1,3 +1,4 @@
+mod address;
 pub mod approval;
 pub mod browser;
 mod builtin;

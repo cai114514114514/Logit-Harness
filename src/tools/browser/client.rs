@@ -70,6 +70,7 @@ impl BrowserClient {
                     .join(format!("profile-{}", uuid::Uuid::new_v4())),
             )
             .new_headless_mode()
+            .enable_request_intercept()
             .respect_https_errors()
             .request_timeout(Duration::from_secs(15))
             .build()
@@ -100,19 +101,27 @@ impl BrowserClient {
         })
     }
     pub async fn open(&self, url: &str, cancel: CancellationToken) -> anyhow::Result<String> {
-        let parsed = reqwest::Url::parse(url)?;
-        anyhow::ensure!(
-            matches!(parsed.scheme(), "http" | "https"),
-            "browser requires HTTP(S)"
-        );
+        tokio::select! {
+            biased;
+            _ = cancel.cancelled() => anyhow::bail!("navigation cancelled before admission"),
+            result = super::network::ensure_target(url) => result?,
+        }
+        let mut state = tokio::select! {
+            biased;
+            _ = cancel.cancelled() => anyhow::bail!("navigation cancelled before admission"),
+            state = self.session.lock() => state,
+        };
+        if state.is_none() {
+            *state = Some(self.launch().await?);
+        }
+        let session = state.as_mut().unwrap();
+        let page = session.browser.new_page("about:blank").await?;
+        let id = uuid::Uuid::new_v4().simple().to_string();
+        let first_listener = session.listeners.len();
         let operation = async {
-            let mut state = self.session.lock().await;
-            if state.is_none() {
-                *state = Some(self.launch().await?);
-            }
-            let session = state.as_mut().unwrap();
-            let page = session.browser.new_page("about:blank").await?;
-            let id = uuid::Uuid::new_v4().simple().to_string();
+            session
+                .listeners
+                .push(super::network::listen(&page, self.console.clone(), id.clone()).await?);
             let mut logs = page.event_listener::<EventConsoleApiCalled>().await?;
             let output = self.console.clone();
             let key = id.clone();
@@ -138,10 +147,22 @@ impl BrowserClient {
                 }
             }));
             page.goto(url).await?;
-            session.pages.insert(id.clone(), page);
-            Ok(id)
+            Ok::<_, anyhow::Error>(())
         };
-        tokio::select! { biased; _=cancel.cancelled()=>anyhow::bail!("navigation cancelled; inspect actual browser state before retrying"), result=operation=>result }
+        let result = tokio::select! {
+            biased;
+            _ = cancel.cancelled() => Err(anyhow::anyhow!("navigation cancelled")),
+            result = operation => result,
+        };
+        if let Err(error) = result {
+            for listener in session.listeners.drain(first_listener..) {
+                listener.abort();
+            }
+            let _ = page.close().await;
+            return Err(error);
+        }
+        session.pages.insert(id.clone(), page);
+        Ok(id)
     }
     pub async fn input(
         &self,
@@ -188,6 +209,8 @@ impl BrowserClient {
         let operation = async {
             let state = self.session.lock().await;
             let page = owned_page(&state, id)?;
+            let location: String = page.evaluate("window.location.href").await?.into_value()?;
+            super::network::ensure_target(&location).await?;
             let dom: String = page
                 .evaluate("document.documentElement.outerHTML")
                 .await?
@@ -278,7 +301,7 @@ fn owned_page<'a>(session: &'a Option<Session>, id: &str) -> anyhow::Result<&'a 
         .and_then(|s| s.pages.get(id))
         .ok_or_else(|| anyhow::anyhow!("unknown owned browser page"))
 }
-fn push(output: &StdMutex<BTreeMap<String, Vec<Value>>>, key: &str, event: Value) {
+pub(super) fn push(output: &StdMutex<BTreeMap<String, Vec<Value>>>, key: &str, event: Value) {
     if let Ok(mut output) = output.lock() {
         let entries = output.entry(key.into()).or_default();
         entries.push(event);

@@ -43,8 +43,14 @@ Ctrl+O or `/history` opens a temporary history browser.
 Type `/` to open the command menu; continue typing to filter, use Up/Down to select, Tab to complete,
 Enter to confirm, and Escape to close. Commands requiring arguments insert a trailing space and
 wait for those arguments. Outside the menu, Up/Down move through multiline input and submitted
-message history, retaining the unsent draft. Ctrl-D deletes at the cursor when the draft is nonempty;
-with an empty draft it disconnects. Ctrl-U clears the draft.
+message history, retaining the unsent draft and its cursor. Automatic line wrapping counts as
+editor rows: an arrow only enters history after reaching the first/last displayed row. Once a
+command has a space/arguments, its menu closes so it no longer captures editing arrows.
+Ctrl-D deletes at the cursor when the draft is nonempty; with an empty draft it disconnects.
+Ctrl-U clears the draft. Ctrl-A/Home and Ctrl-E/End move within the current logical line;
+Ctrl-W or Alt-Backspace deletes the previous word, Ctrl-K clears the rest of the line, and
+Alt-Left/Right or Alt-B/F moves by word. Input changes repaint immediately; streaming tool output
+is still batched to avoid redrawing for every output fragment.
 
 The persistent activity area shows actual outstanding model requests, commands, workers and
 verification, plus measured elapsed time and time since output. Workspace wait, pending questions,

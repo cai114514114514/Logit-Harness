@@ -1,4 +1,6 @@
 //! The runner's lifetime is independent from terminal clients.
+mod supervision;
+
 use super::{
     ipc::{self, ClientMessage, ServerMessage},
     runner::{Runner, Settings},
@@ -15,6 +17,8 @@ use crate::{
         web::{WebClient, WebUsage},
     },
 };
+use anyhow::Context;
+use futures::FutureExt;
 use std::{
     os::{fd::AsRawFd, unix::fs::OpenOptionsExt, unix::process::CommandExt},
     path::Path,
@@ -79,123 +83,134 @@ pub async fn serve(paths: Paths, id: &str) -> anyhow::Result<()> {
         tools.workspace.clone(),
         paths.logs(id)?.join("services"),
     ));
-    services.recover().await?;
-    for tool in crate::tools::services::tools(services.clone()) {
-        tools.register(tool)?;
-    }
-    tools.services = Some(services.clone());
     let browser = Arc::new(crate::tools::browser::BrowserClient::new(
         config.chrome.clone(),
         paths.logs(id)?.join("browser"),
     ));
-    browser.recover().await?;
-    for tool in crate::tools::browser::tools(browser.clone()) {
-        tools.register(tool)?;
-    }
     let mcp = Arc::new(crate::extensions::mcp::Registry::new(
         config.mcp.clone(),
         session.workspace.clone(),
         paths.logs(id)?.join("mcp"),
     ));
-    mcp.recover().await?;
-    for name in &session.mcp_disabled {
-        if mcp.names().contains(&name.as_str()) {
-            mcp.control(name, crate::extensions::mcp::Operation::Disable)
-                .await?;
-        }
-    }
-    for tool in crate::extensions::mcp::tools(mcp.clone()) {
-        tools.register(tool)?;
-    }
-    tools.mcp = Some(mcp.clone());
-    let mut skill_roots = vec![];
-    if config.user_skills {
-        skill_roots.push(paths.home.join("skills"));
-        if let Some(user) = directories::BaseDirs::new() {
-            skill_roots.push(user.home_dir().join(".agents/skills"));
-        }
-    }
-    let knowledge = Arc::new(crate::extensions::knowledge::Knowledge::new(
-        session.workspace.clone(),
-        skill_roots,
-    )?);
-    for tool in crate::extensions::skills::tools(knowledge.clone()) {
-        tools.register(tool)?;
-    }
-    tools.knowledge = Some(knowledge);
-    let mut web = WebClient::new(
-        config.base_url.clone(),
-        key,
-        config.search_limit,
-        WebUsage::default(),
-    )?
-    .with_usage_file(paths.logs(id)?.join("web-usage.json"))?;
-    if let (Some(money), Some(campaign)) = (money, &session.campaign) {
-        web = web.with_money(money, campaign.prices.clone());
-    }
-    let web = Arc::new(web);
-    for tool in crate::tools::web::tools(web) {
-        tools.register(tool)?;
-    }
-    let settings = Settings {
-        workers: config.workers,
-        max_output: config.max_output,
-        context_limit: config.context_bytes,
-        linger: true,
-    };
-    let (runner, control, _events) =
-        Runner::new(session, store.clone(), provider, Arc::new(tools), settings);
-    let runner = runner.recover_on_start();
-    let state: Session = store.load(id)?;
-    let runner = if let Some(spec) = state.evaluation {
-        let observer = Arc::new(crate::eval::correction::Correction::new(
-            spec,
-            id.into(),
-            store.clone(),
-        ));
-        observer.recover()?;
-        runner.observe(observer)
-    } else {
-        runner
-    };
-    let server = ipc::Server::bind(
-        paths.socket(id)?,
-        id.into(),
-        store.clone(),
-        control.clone(),
-        runner.events.clone(),
+    // Every fallible setup and runtime path shares this resource shutdown scope.
+    let result = supervision::finish(
+        async {
+            services.recover().await?;
+            for tool in crate::tools::services::tools(services.clone()) {
+                tools.register(tool)?;
+            }
+            tools.services = Some(services.clone());
+            browser.recover().await?;
+            for tool in crate::tools::browser::tools(browser.clone()) {
+                tools.register(tool)?;
+            }
+            mcp.recover().await?;
+            for name in &session.mcp_disabled {
+                if mcp.names().contains(&name.as_str()) {
+                    mcp.control(name, crate::extensions::mcp::Operation::Disable)
+                        .await?;
+                }
+            }
+            for tool in crate::extensions::mcp::tools(mcp.clone()) {
+                tools.register(tool)?;
+            }
+            tools.mcp = Some(mcp.clone());
+            let mut skill_roots = vec![];
+            if config.user_skills {
+                skill_roots.push(paths.home.join("skills"));
+                if let Some(user) = directories::BaseDirs::new() {
+                    skill_roots.push(user.home_dir().join(".agents/skills"));
+                }
+            }
+            let knowledge = Arc::new(crate::extensions::knowledge::Knowledge::new(
+                session.workspace.clone(),
+                skill_roots,
+            )?);
+            for tool in crate::extensions::skills::tools(knowledge.clone()) {
+                tools.register(tool)?;
+            }
+            tools.knowledge = Some(knowledge);
+            let mut web = WebClient::new(
+                config.base_url.clone(),
+                key,
+                config.search_limit,
+                WebUsage::default(),
+            )?
+            .with_usage_file(paths.logs(id)?.join("web-usage.json"))?;
+            if let (Some(money), Some(campaign)) = (money, &session.campaign) {
+                web = web.with_money(money, campaign.prices.clone());
+            }
+            let web = Arc::new(web);
+            for tool in crate::tools::web::tools(web) {
+                tools.register(tool)?;
+            }
+            let settings = Settings {
+                workers: config.workers,
+                max_output: config.max_output,
+                context_limit: config.context_bytes,
+                linger: true,
+            };
+            let (runner, control, _events) =
+                Runner::new(session, store.clone(), provider, Arc::new(tools), settings);
+            let runner = runner.recover_on_start();
+            let state: Session = store.load(id)?;
+            let runner = if let Some(spec) = state.evaluation {
+                let observer = Arc::new(crate::eval::correction::Correction::new(
+                    spec,
+                    id.into(),
+                    store.clone(),
+                ));
+                observer.recover()?;
+                runner.observe(observer)
+            } else {
+                runner
+            };
+            let server = ipc::Server::bind(
+                paths.socket(id)?,
+                id.into(),
+                store.clone(),
+                control.clone(),
+                runner.events.clone(),
+            )
+            .await?;
+            // Registration can fail; do it before spawning tasks that must be joined.
+            let mut termination =
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+            let cancel = tokio_util::sync::CancellationToken::new();
+            let server_task = tokio::spawn(server.run(cancel.clone()));
+            let run_task = tokio::spawn(runner.run());
+            let signal = async {
+                tokio::select! {
+                    _ = termination.recv() => Ok(()),
+                    result = tokio::signal::ctrl_c() => Ok(result?),
+                }
+            };
+            supervision::run(run_task, server_task, control, cancel, signal).await
+        },
+        [
+            ("services", services.shutdown().boxed()),
+            ("browser", browser.close().boxed()),
+            ("MCP", mcp.close().boxed()),
+        ],
     )
-    .await?;
-    let cancel = tokio_util::sync::CancellationToken::new();
-    let mut server_task = tokio::spawn(server.run(cancel.clone()));
-    let mut run_task = tokio::spawn(runner.run());
-    let mut termination =
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-    let result = tokio::select! {
-        result=&mut run_task=>result?,
-        result=&mut server_task=>{
-            control.send(Control::Stop).await?;let _=run_task.await;
-            result??;anyhow::bail!("socket server ended unexpectedly")
-        }
-        _=termination.recv()=>{control.send(Control::Stop).await?;run_task.await?}
-        _=tokio::signal::ctrl_c()=>{control.send(Control::Stop).await?;run_task.await?}
-    };
-    cancel.cancel();
-    services.shutdown().await?;
-    browser.close().await?;
-    mcp.close().await?;
-    let _ = server_task.await;
+    .await;
     if let Err(error) = result {
-        let mut state: Session = store.load(id)?;
-        state.status = Status::Failed;
-        store.commit(
-            id,
-            &state,
-            EventData::Diagnostic {
-                message: format!("runner failed: {error}"),
-            },
-        )?;
-        return Err(error);
+        let diagnostic: anyhow::Result<()> = (|| {
+            let mut state: Session = store.load(id)?;
+            state.status = Status::Failed;
+            store.commit(
+                id,
+                &state,
+                EventData::Diagnostic {
+                    message: format!("daemon failed: {error:#}"),
+                },
+            )?;
+            Ok(())
+        })();
+        let mut failures = supervision::Failures::default();
+        failures.record(Err(error));
+        failures.record(diagnostic.context("could not save daemon failure"));
+        return failures.finish();
     }
     Ok(())
 }

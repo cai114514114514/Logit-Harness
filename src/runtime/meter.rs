@@ -40,11 +40,8 @@ impl Provider for Metered {
                 .ok()
                 .map(|response| self.prices.cost(&response.usage))
                 .or_else(|| {
-                    result
-                        .as_ref()
-                        .err()?
-                        .downcast_ref::<crate::model::ReportedFailure>()
-                        .map(|failure| self.prices.cost(&failure.usage))
+                    crate::model::failure_usage(result.as_ref().err()?)
+                        .map(|usage| self.prices.cost(&usage))
                 }),
         )?;
         result

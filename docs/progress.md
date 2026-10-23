@@ -664,3 +664,30 @@ Spec: docs/spec.md
   reserved 0, conservative available 0.00308728 RMB. No additional model reservation fits; no cap
   or historical uncertainty was changed. Frozen research executable SHA-256 remains
   `41242b0b92eae3a9c3103099e088cebfd86cb27922781020f60134ad4827533d`.
+
+## CLI polish and bug-review corrections — 2026-10-23
+
+- Reviewed the original local bug report without modifying it. The qualified findings and exact
+  limits are recorded in [bug-review-resolution](bug-review-resolution.md). Known unsubmitted or
+  official structured pre-inference rejections now share monetary/token settlement; uncertain
+  submitted outcomes retain liability. Nonretryable errors stop once with concrete Chinese recovery
+  guidance. Historical campaign entries and the 50 RMB cap are unchanged; no paid probes were run.
+- Fixed typed IPv6/mapped-address checks before fetch quota/budget admission. Browser HTTP(S)
+  navigation, redirects and page subresources now screen known private destinations while retaining
+  intentional loopback development access. This is not a complete network sandbox or DNS pinning.
+- Daemon supervision settles the runner and attempts every resource shutdown on socket, task,
+  signal and returned cleanup failures. Original and cleanup errors are retained. No forced writer
+  abortion or user-daemon restart was introduced.
+- The editor now follows visual wrapped rows, preserves draft cursor position after history, closes
+  command completion while editing arguments, and supports word/line shortcuts with grapheme-safe
+  deletion. Key edits repaint immediately; tool streams retain batching. The read_file schema now
+  explicitly documents byte units and the normal default to avoid line-count confusion.
+- Independent review found a wide-character row-start cursor defect; the original failure and its
+  repair are retained. A combining-mark line-join regression was also repaired. Final complete
+  locked all-target regression: **266 passed, 0 failed**, 53 groups. A prior full run failed on an
+  empty PID readiness file in a process fixture; atomic publication repaired the fixture without
+  weakening assertions. The failed log remains alongside final evidence.
+- Source, focused RED/GREEN logs, review and final delivery receipts are under
+  `artifacts/polish-2026-10-23`. Actual PTY grids establish input/scrolling behavior, not native-window
+  appearance or an improvement in real-provider task quality. The previous live-model limitation
+  and frozen research version remain separate.

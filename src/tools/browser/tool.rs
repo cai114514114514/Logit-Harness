@@ -33,7 +33,7 @@ impl Tool for BrowserTool {
     fn spec(&self) -> ToolSpec {
         let (description, properties, required) = match self.name {
             "browser_open" => (
-                "Open an HTTP(S) URL in an owned, isolated Chrome profile. Returns its page ID and actual DOM/AX/screenshot evidence.",
+                "Open an HTTP(S) URL in an owned Chrome profile. Loopback development is allowed; known LAN/link-local addresses are refused, including intercepted redirects and page subresources. Returns DOM/AX/screenshot evidence; this is not a network sandbox.",
                 json!({"url":{"type":"string"}}),
                 json!(["url"]),
             ),

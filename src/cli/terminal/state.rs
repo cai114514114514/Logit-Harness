@@ -42,7 +42,11 @@ impl Screen {
         self.transcript.note(&text.into());
     }
     pub fn menu(&self) -> Vec<crate::commands::Completion> {
-        if self.menu_hidden || self.picker || !self.input.text().starts_with('/') {
+        if self.menu_hidden
+            || self.picker
+            || !self.input.text().starts_with('/')
+            || self.input.text().chars().any(char::is_whitespace)
+        {
             return vec![];
         }
         let prefix = self.input.text().split_whitespace().next().unwrap_or("/");
@@ -241,6 +245,18 @@ pub(super) fn label(status: &Status) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn command_arguments_leave_arrows_to_the_editor() {
+        let mut screen = Screen::default();
+        screen.input.insert("/goal 改进输入体验");
+        assert!(
+            screen.menu().is_empty(),
+            "argument editing reopened command picker"
+        );
+        screen.input.replace("/go");
+        assert!(!screen.menu().is_empty());
+    }
+
     #[test]
     fn selected_skill_completion_preserves_qualified_insertion() {
         let mut screen = Screen::default();

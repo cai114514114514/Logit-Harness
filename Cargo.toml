@@ -36,6 +36,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 walkdir = "2"
 unicode-segmentation = "1"
 unicode-width = "0.2"
+url = "2"
 
 [dev-dependencies]
 axum = "0.8"

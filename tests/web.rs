@@ -100,3 +100,86 @@ async fn attempted_web_calls_keep_their_quota_after_restart() {
             .contains("limit")
     );
 }
+
+#[tokio::test]
+async fn non_public_fetch_literals_are_rejected_before_quota_and_money() {
+    use loh::runtime::money::{Money, Prices, RMB};
+    use std::sync::Arc;
+
+    let prices = Prices {
+        input: 0,
+        cached: 0,
+        output: 0,
+        search: 5_000_000,
+        fetch: 5_000_000,
+    };
+    let directory = tempfile::tempdir().unwrap();
+    let money =
+        Arc::new(Money::open(&directory.path().join("money.db"), "fixture", RMB, &prices).unwrap());
+    let mut failures = Vec::new();
+    for url in [
+        "http://127.0.0.1/",
+        "http://10.0.0.1/",
+        "http://169.254.169.254/",
+        "http://localhost/",
+        "http://[::1]/",
+        "http://[::]/",
+        "http://[fe80::1]/",
+        "http://[fc00::1]/",
+        "http://[ff02::1]/",
+        "http://[::ffff:127.0.0.1]/",
+        "http://[::ffff:169.254.169.254]/",
+        "http://[::ffff:10.0.0.1]/",
+    ] {
+        // The provider endpoint is an unavailable local fixture, never DeepSeek.
+        let client = WebClient::new(
+            "http://127.0.0.1:1".into(),
+            "fixture".into(),
+            1,
+            WebUsage::default(),
+        )
+        .unwrap()
+        .with_money(money.clone(), prices.clone());
+        let error = client
+            .fetch(url, CancellationToken::new())
+            .await
+            .unwrap_err();
+        if !error.to_string().contains("non-public") || client.usage().fetches != 0 {
+            failures.push(format!("{url}: {error}; quota={}", client.usage().fetches));
+        }
+    }
+    let balance = money.balance().unwrap();
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    assert_eq!(
+        (balance.used, balance.reserved, balance.uncertain),
+        (0, 0, 0)
+    );
+}
+
+#[tokio::test]
+async fn public_ipv6_fetch_literals_still_reach_the_provider() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move {
+        let mut requests = Vec::new();
+        for _ in 0..2 {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut buffer = [0; 8192];
+            let size = socket.read(&mut buffer).await.unwrap();
+            requests.push(String::from_utf8_lossy(&buffer[..size]).into_owned());
+            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}").await.unwrap();
+        }
+        requests
+    });
+    let client = WebClient::new(base, "fixture".into(), 2, WebUsage::default()).unwrap();
+    for url in [
+        "https://[2606:4700:4700::1111]/",
+        "https://[::ffff:8.8.8.8]/",
+    ] {
+        client.fetch(url, CancellationToken::new()).await.unwrap();
+    }
+    assert_eq!(client.usage().fetches, 2);
+    for request in server.await.unwrap() {
+        assert!(request.starts_with("POST /v1/tools/fetch "));
+    }
+}

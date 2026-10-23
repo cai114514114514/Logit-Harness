@@ -146,39 +146,18 @@ fn ensure_public_target(url: &reqwest::Url) -> anyhow::Result<()> {
     let host = url
         .host_str()
         .ok_or_else(|| anyhow::anyhow!("fetch URL needs a host"))?;
-    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
-        anyhow::ensure!(is_public(ip), "refusing to fetch a non-public address");
+    if let Some(ip) = super::address::literal(url) {
+        anyhow::ensure!(
+            super::address::is_public(ip),
+            "refusing to fetch a non-public address"
+        );
     } else {
         anyhow::ensure!(
-            !host.eq_ignore_ascii_case("localhost")
-                && !host.to_ascii_lowercase().ends_with(".localhost"),
+            !super::address::is_localhost(host),
             "refusing to fetch a non-public address"
         );
     }
     Ok(())
-}
-
-fn is_public(ip: std::net::IpAddr) -> bool {
-    match ip {
-        std::net::IpAddr::V4(ip) => {
-            !(ip.is_private()
-                || ip.is_loopback()
-                || ip.is_link_local()
-                || ip.is_unspecified()
-                || ip.is_multicast()
-                || ip.is_broadcast())
-        }
-        std::net::IpAddr::V6(ip) => {
-            let segments = ip.segments();
-            !(ip.is_loopback()
-                || ip.is_unspecified()
-                || ip.is_multicast()
-                // fc00::/7 unique local, fe80::/10 link local (std's is_unique_local
-                // and is_unicast_link_local are still unstable)
-                || (segments[0] & 0xfe00) == 0xfc00
-                || (segments[0] & 0xffc0) == 0xfe80)
-        }
-    }
 }
 
 struct WebTool {

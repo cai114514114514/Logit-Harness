@@ -94,16 +94,17 @@ impl Runner {
                     .as_ref()
                     .err()
                     .and_then(|error| error.downcast_ref::<crate::model::ReportedFailure>());
+                let usage = result
+                    .as_ref()
+                    .ok()
+                    .map(|response| response.usage.clone())
+                    .or_else(|| crate::model::failure_usage(result.as_ref().err()?));
                 self.session.budget.settle(
                     &reservation,
                     if refused || not_submitted {
                         Some(&zero)
                     } else {
-                        result
-                            .as_ref()
-                            .ok()
-                            .map(|r| &r.usage)
-                            .or_else(|| failure.map(|failure| &failure.usage))
+                        usage.as_ref()
                     },
                 )?;
                 if let Some(failure) = failure {
@@ -234,12 +235,26 @@ impl Runner {
                         };
                         if !job.cancel.is_cancelled() {
                             actor.failures += 1;
-                            actor.context.user(&format!("The previous model response was not executable: {error}. Retry with a smaller, complete response; split large edits into separate tool calls. No partial tool call was executed."));
                             let failures = actor.failures;
+                            let request_failure =
+                                error.downcast_ref::<crate::model::RequestFailure>();
+                            // Invalid credentials and request formats cannot be repaired by
+                            // asking the model for a smaller completion with the same request.
+                            if request_failure.is_none() {
+                                actor.context.user(&format!("The previous model response was not executable: {error}. Retry with a smaller, complete response; split large edits into separate tool calls. No partial tool call was executed."));
+                            }
+                            let advice = request_failure.map_or("", |failure| failure.advice());
                             self.emit(EventData::Diagnostic {
-                                message: format!("{}: {error}", job.actor),
+                                message: format!("{}: {error} {advice}", job.actor),
                             })?;
-                            if failures >= 3 {
+                            if request_failure.is_some_and(|failure| !failure.retryable()) {
+                                self.halt(
+                                    Status::Failed,
+                                    &format!(
+                                        "provider request stopped; progress is saved. {advice}"
+                                    ),
+                                )?;
+                            } else if failures >= 3 {
                                 self.halt(
                                     Status::Failed,
                                     "provider failed repeatedly; progress is saved",

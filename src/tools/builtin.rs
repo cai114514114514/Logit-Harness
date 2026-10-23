@@ -42,8 +42,11 @@ impl Tool for Builtin {
         let (name, description, parameters, effect) = match self {
             Self::Read => (
                 "read_file",
-                "Read a workspace file and obtain its hash for guarded editing. Large content is truncated explicitly.",
-                json!({"type":"object","properties":{"path":{"type":"string"},"limit":{"type":"integer"}},"required":["path"],"additionalProperties":false}),
+                "Read a workspace file and obtain its hash for guarded editing. Omit limit for a normal read; limit measures UTF-8 bytes, not lines. Large content is truncated explicitly.",
+                json!({"type":"object","properties":{
+                    "path":{"type":"string","description":"Non-empty workspace file path, for example README.md."},
+                    "limit":{"type":"integer","description":"Maximum UTF-8 bytes to read, not a line count. Defaults to 32768; capped at 262144. Omit unless a smaller or larger byte budget is needed.","default":READ_DEFAULT_LIMIT}
+                },"required":["path"],"additionalProperties":false}),
                 Effect::Read,
             ),
             Self::Patch => (

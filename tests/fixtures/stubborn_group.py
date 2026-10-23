@@ -7,7 +7,10 @@ import time
 child = os.fork()
 if child == 0:
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
-    Path("descendant.pid").write_text(str(os.getpid()))
+    # File existence is the readiness signal used by the parent/tests. Publish
+    # only after the PID is complete, not between open(O_CREAT) and write().
+    Path("descendant.pid.tmp").write_text(str(os.getpid()))
+    os.replace("descendant.pid.tmp", "descendant.pid")
     while True:
         time.sleep(0.1)
 else:

@@ -1,5 +1,6 @@
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
+mod navigation;
 
 #[derive(Default)]
 pub struct Input {
@@ -9,6 +10,7 @@ pub struct Input {
     history: Vec<String>,
     history_index: Option<usize>,
     draft: String,
+    draft_cursor: usize,
 }
 
 impl Input {
@@ -34,6 +36,11 @@ impl Input {
         }
         self.text.insert_str(self.cursor, &text);
         self.cursor += text.len();
+        self.align_cursor();
+    }
+    fn align_cursor(&mut self) {
+        // Removing a newline can join a base character and a combining mark.
+        // Keep later movement/deletion outside that newly formed grapheme.
         self.cursor = self
             .text
             .grapheme_indices(true)
@@ -68,6 +75,7 @@ impl Input {
             self.revision = self.revision.wrapping_add(1);
         }
         self.text.replace_range(self.cursor..end, "");
+        self.align_cursor();
     }
     pub fn delete(&mut self) {
         let start = self.cursor;
@@ -77,6 +85,7 @@ impl Input {
         }
         self.text.replace_range(start..self.cursor, "");
         self.cursor = start;
+        self.align_cursor();
     }
     pub fn take(&mut self) -> String {
         self.revision = self.revision.wrapping_add(1);
@@ -120,6 +129,7 @@ impl Input {
         let index = match self.history_index {
             None => {
                 self.draft = self.text.clone();
+                self.draft_cursor = self.cursor;
                 self.history.len() - 1
             }
             Some(index) => index.saturating_sub(1),
@@ -153,32 +163,13 @@ impl Input {
             self.history_index = None;
             let draft = std::mem::take(&mut self.draft);
             self.replace(&draft);
+            self.cursor = self.draft_cursor.min(self.text.len());
         }
     }
     pub fn position(&self, width: usize) -> (usize, usize) {
-        let width = width.max(1);
-        let (mut x, mut y) = (0, 0);
-        let mut wrapped = false;
-        for symbol in self.text[..self.cursor].graphemes(true) {
-            if symbol == "\n" {
-                x = 0;
-                y += usize::from(!wrapped);
-                wrapped = false;
-                continue;
-            }
-            wrapped = false;
-            let size = display_width(symbol).min(width);
-            if x + size > width {
-                x = 0;
-                y += 1;
-            }
-            x += size;
-            if x == width {
-                x = 0;
-                y += 1;
-                wrapped = true;
-            }
-        }
+        let (_, x, y) = navigation::positions(&self.text, width)
+            .find(|(index, _, _)| *index == self.cursor)
+            .unwrap();
         (x, y)
     }
 }

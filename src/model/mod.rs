@@ -5,7 +5,7 @@ mod stream;
 
 pub use context::Context;
 pub use deepseek::DeepSeek;
-pub use failure::ReportedFailure;
+pub use failure::{ReportedFailure, RequestFailure, failure_usage};
 pub use stream::StreamDecoder;
 
 use crate::domain::Usage;

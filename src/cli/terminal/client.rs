@@ -102,10 +102,31 @@ pub(super) async fn run(
     let mut refresh = tokio::time::interval(Duration::from_secs(2));
     let mut hangup = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())?;
     let mut dirty = true;
+    let mut paint = true;
     let mut catalog_loading = false;
     let mut reconnect = false;
     let mut failure_after_open: Option<(String, String, u64)> = None;
     loop {
+        // Keystrokes repaint immediately; model/tool streams remain coalesced by
+        // the frame timer. Typing must not wait behind its 80 ms animation tick.
+        if paint && dirty {
+            let modal = screen.history.is_some();
+            terminal.modal(modal)?;
+            if !modal {
+                let (columns, rows) = crossterm::terminal::size()?;
+                let lines = screen
+                    .transcript
+                    .drain_settled(terminal.width().saturating_sub(4) as usize);
+                terminal.present(
+                    super::render::height(&screen, columns, rows),
+                    screen.session.is_some(),
+                    &lines,
+                )?;
+            }
+            terminal.draw(|frame| render(frame, &screen))?;
+            dirty = false;
+        }
+        paint = false;
         tokio::select! {
             _ = hangup.recv() => break,
             _ = tokio::signal::ctrl_c() => {
@@ -115,17 +136,7 @@ pub(super) async fn run(
             _ = frames.tick() => {
                 screen.frame = screen.frame.wrapping_add(1);
                 dirty |= screen.frame.is_multiple_of(12);
-                if dirty {
-                    let modal = screen.history.is_some();
-                    terminal.modal(modal)?;
-                    if !modal {
-                        let (columns, rows) = crossterm::terminal::size()?;
-                        let lines = screen.transcript.drain_settled(terminal.width().saturating_sub(4) as usize);
-                        terminal.present(super::render::height(&screen, columns, rows), screen.session.is_some(), &lines)?;
-                    }
-                    terminal.draw(|frame| render(frame, &screen))?;
-                    dirty = false;
-                }
+                paint = true;
             }
             _ = refresh.tick(), if screen.session.is_some() && !opening => {
                 if reconnect {
@@ -241,6 +252,7 @@ pub(super) async fn run(
             event = keys.next() => {
                 let event = match event { Some(Ok(event)) => event, Some(Err(error)) => return Err(error.into()), None => break };
                 dirty = true;
+                paint = true;
                 if let Some(browser) = &mut screen.history {
                     match event {
                         Event::Paste(text) => browser.paste(&text),
