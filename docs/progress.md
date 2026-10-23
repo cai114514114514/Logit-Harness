@@ -696,3 +696,98 @@ Spec: docs/spec.md
   installed. Installed editor/layout/interaction checks passed and their colored grids were
   inspected. Binary SHA-256: `f26534930f6a379bb7e9ac78d6848519ac15efb3cf04e3d5858db3994c7dfd30`.
   Existing user daemons were not interrupted; new conversations use the updated runtime.
+
+## Multi-window team engineering delivery (2026-10-23)
+
+- Approved design and task interfaces are recorded in
+  `docs/superpowers/specs/2026-10-23-team-design.md` and
+  `docs/superpowers/plans/2026-10-23-team.md`. Work is in the original checkout;
+  the untracked `docs/bug-review.md` remains outside the delivery.
+- Baseline executable, frozen research inputs, user document and shared allowance
+  receipts are in `artifacts/team-2026-10-23/baseline.json`. Available campaign
+  balance is 0.00308728 RMB; this implementation uses no paid provider calls.
+- Native Terminal UI access was attempted and explicitly rejected by Computer Use:
+  `Computer Use is not allowed to use the app 'com.apple.Terminal' for safety reasons.`
+  Do not bypass that restriction through launcher/AppleScript execution. Launch
+  argument/failure tests and real macOS PTY checks remain separate engineering
+  validation; actual Terminal-window operation and visual acceptance are pending.
+- Team runtime commits `e8d4604` and `3da6f30` add stable member identities,
+  versioned assignments, directed mail/control and wait-state coordination. Initial
+  full regression passed 273 tests; later focused/library checks passed 54 after
+  self-review and review fixes. Strict Clippy and formatting checks passed.
+- Independent review found and verified repairs for two liveness defects: stopping
+  the last worker left main blocked in `wait_workers`, and a repeated wait cycle
+  could lose its second intervention after an unobserved healthy interval. Exact
+  RED/GREEN logs and the task report are retained under `artifacts/team-2026-10-23/task-1`.
+  This is the runtime foundation; correction, transport and terminal integration
+  remain in progress and the installed binary has not yet changed.
+- Correction/acceptance commit `32b3ebe` adds addressed classification, canonical
+  requirement revisions, step/dependent evidence invalidation, assignment authority
+  checked inside the write lock, and transactionally checked completion. Final
+  full regression passed **294 tests, 0 failures**; strict Clippy and formatting
+  passed. Evidence: `artifacts/team-2026-10-23/task-2`.
+- Additional regression repairs preserve late provider settlement without stream
+  starvation, prevent retired-member resurrection, hand idle peer mail to main,
+  and interpret post-completion corrections against the full original goal.
+  Post-completion greeting tests remove the workspace and verify no source scan
+  or engineering activation. Independent review approved the task; one minor
+  buffered successful-tool event-order issue is assigned to the transport stage.
+- Addressed transport/command commit `2656608` adds versioned lightweight IPC,
+  durable request receipts, actor/mail attribution before output, archived member
+  views and scoped commands/Skills. Final full regression passed **314 tests,
+  0 failures**, with strict Clippy and formatting checks passing. Logs and report
+  are under `artifacts/team-2026-10-23/task-3`; independent review is in progress.
+  Fast-tool output is ordered before its result without draining other model
+  output; consumed stream payloads are released. Live subscriptions replay any
+  durable gaps before newer broadcasts. Terminal member interaction is the next
+  stage; these results do not claim window or real-model acceptance.
+- Transport review found two recovery defects and both are fixed in `59cb2ff`:
+  failed uncertain requests could retain an executable mode boundary, and resolved
+  recovery questions could leave stale write restrictions. Focused regression
+  passed **137 tests, 0 failures**; real guarded-write and saved-checkpoint tests
+  reproduce both original failures. Scoped independent review confirmed the fixes.
+  Terminal integration is underway; the old installed binary remains in place.
+- Member terminal commit `aebf737` adds a shared event projection, compact team
+  roster/picker, scoped member views and history, first-edit draft ownership,
+  target-bound asynchronous results and durable receipt display. Complete locked
+  all-target regression passed **327 tests, 0 failures**, with strict Clippy and
+  formatting checks passing. Evidence: `artifacts/team-2026-10-23/task-4`.
+- Actual offline three-PTY checks include near-simultaneous submissions from three
+  distinct clients, independent receipt targets, local/global pause precedence,
+  preserved Chinese multiline drafts, scope rejection, filtered history, resize,
+  detach/reattach and no extra provider requests from view-only actions. A manual
+  fixture serve mode exits cleanly with its own Ctrl-C. Native windows were not opened.
+- Independent terminal review approved the implementation with one minor boundary
+  ordering issue. `55af821` fixes it; exact RED/GREEN, **87 focused checks** and
+  another team PTY run passed, and scoped review confirmed the repair. The whole
+  feature is now under final review; installation remains pending.
+- Whole-change review identified three additional cross-module defects: deferred
+  Skills could overwrite an unexecuted workflow turn, local pause could restart
+  cancelled read-only member replies, and legacy Worker migration omitted the
+  member target. It also found duplicated `/tell main` input. A single focused
+  fix wave is underway; the full report is `artifacts/team-2026-10-23/final-review.md`.
+  These findings supersede any assumption that task-level checks alone completed
+  engineering acceptance. The installed executable has not been replaced.
+- Final fixes `d007c6e` address all four findings using a durable arrival queue,
+  protected workflow turns, per-attempt pause gates, normalized legacy ownership
+  and stable input identities. Scoped review approved the fixes. Root's full
+  regression then exposed two Plan→Implement stalls caused by an internal
+  cancellation barrier creating a user-pause gate. `9e4ac27` repairs the cause
+  and adds an explicit Pause→Plan→Implement regression. Its follow-up review is clean.
+- Persistent main/member team labels were then completed in `10874b7`; archived
+  views retain their original goal identity. A scoped review approved the change.
+- Final source `10874b745292fb8ad917669cd4839c27560e8d78` passed **343 tests,
+  0 failures, 0 ignored**, 59 all-target result groups, locked strict Clippy,
+  formatting and release build. All prior failures remain in the evidence tree;
+  exact final receipts are `artifacts/team-2026-10-23/delivery/final-checks.json`.
+- Source hash `b782357310b6a205e64e60597d1d891243fed0fab4d6b7e4166c384606cd44d3`
+  was signed and atomically installed to `/opt/homebrew/bin/loh`. Binary SHA-256:
+  `ada1090564c29364911e7acbdca2eedab65d41917c27fb9653afed0a9a312d38`.
+  Installed editor/layout/interaction/team PTY suites all passed; final grids
+  were inspected. Pre-existing process identities were unchanged across installation.
+  The verified older binary is retained under `artifacts/team-2026-10-23/previous`.
+- [Team acceptance](team-acceptance.md) records capabilities, evidence, design
+  decisions and manual fixture commands. Native Terminal operation remains
+  unverified under the recorded safety denial; live Flash teamwork remains
+  unmeasured under the unchanged shared allowance. Engineering delivery does not
+  establish either native-window acceptance or a model-quality improvement.

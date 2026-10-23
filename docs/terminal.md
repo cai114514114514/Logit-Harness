@@ -115,6 +115,72 @@ inspection stays out of model context. Runtime controls target their originating
 settlement controls wait for active operations. Skill bodies load only on invocation. Core control
 names remain reserved, and explicit `/skills run <ID>` disambiguates a conflicting name.
 
+## Working with a team
+
+An engineering goal uses one background session and one shared budget. Main assigns independent
+work when useful; ordinary conversation remains a single agent. Members have persistent identities
+and their own task context and messages. Opening another view does not create another agent or
+model request. The default allows two executing members; waiting members retain task ownership
+without occupying a model request slot.
+
+| Command | Scope and behavior |
+|---|---|
+| `/team` | Inspect the team and select a member |
+| `/agent <name-or-ID>` | View that member in the current terminal |
+| `/agent main` | Return to main |
+| `/agent <name-or-ID> --window` | Explicitly open a macOS Terminal window; on failure, show an attach command |
+| `/tell <name-or-ID> <text>` | Send literal text to a member with a durable delivery receipt |
+| `/team pause`, `/team resume`, `/team stop` | Control the entire team from any view |
+| `/team limit <count>` | Set executing-member concurrency; zero prevents new dispatches without cancelling existing work |
+| `/tasks` | Include task owners, dependencies and blocking reasons |
+
+From another terminal, use `loh attach <session> --agent <name-or-ID>`. If the session uses a
+nondefault state directory, also pass `--home <directory>`. The saved session determines the
+workspace; the attaching terminal's working directory does not change it. Automatic delegation
+never opens windows. Closing a member window or `/detach` only disconnects that client.
+
+Use `/team`, or Ctrl-T while retaining a draft, to open the team picker. Up/Down selects,
+Enter focuses the member, `o` requests a new window, and Escape returns. Switching views adds
+a labeled boundary. Earlier views remain in the terminal's
+native scrollback; new output and the history browser follow the selected view. Member views
+retain separate drafts, and main summarizes team milestones while member views retain detailed
+tool output. Status shows actual activity and waiting reasons rather than estimated completion.
+Main and member headers keep the same team ID visible. Archived member views retain their
+original team's identity even when the session has started another goal.
+
+In main, Ctrl-C and `/pause`, `/resume`, `/stop` control the whole team. In a member view they
+control only that member. A team resume preserves explicit member pauses; a member resume cannot
+override a team pause or stop. Stopping a member first settles its running operations, then releases
+its assignment. A later resume cannot reclaim a task already assigned elsewhere.
+
+History, copying and compaction follow the selected view. Goal, mode, budget and permission
+changes belong in main. Member instructions retain the expected assignment and version. A draft
+from an old assignment is rejected with its text preserved rather than delivered to a new task.
+Delivery/acceptance changes are recorded as requirement revisions; a member cannot expand its own
+write scope through a message or Skill. Skills on active assignments retain the assignment's
+existing capabilities after current operations settle; idle/archived members and explicit review
+workflows use read-only contexts.
+
+An accepted request means it is durably queued, not that its instruction has taken effect. The
+later receipt distinguishes pending, applied and failed. Ordinary connection retries keep the
+same request ID. If the daemon crashes midway through applying a directive, recovery preserves
+the original text and any known effects and reports uncertain application. Engineering intent
+that still needs reconciliation creates a scoped question; answer its exact ID from main with
+`/answer <question-id> <text>`. Do not infer success from receipt acceptance or blindly repeat
+possibly applied instructions.
+
+Current clients require a matching IPC protocol. A mismatch reports an actionable error and does
+not terminate the old daemon. An already connected matching client, or a preserved older binary,
+can still control that daemon. Reading saved history does not start model work.
+
+This local delivery keeps the pre-team executable at
+`artifacts/team-2026-10-23/previous/loh` for existing older sessions. New sessions
+use `/opt/homebrew/bin/loh`. The installation does not restart old daemons.
+Consecutive member Skills retain arrival order and wait for the admitted model
+response and its tools to settle. Their selected text remains in member history;
+an Applied receipt is not a workflow-completion verdict. A paused existing
+read-only reply stays suspended; a newly requested side question is distinct.
+
 `/config` takes effect with `/new` or a new `loh run`; existing conversations retain their initialized
 model/runtime defaults, including after restart. Use `/budget` for the current limit and `/setup`
 for credentials. MCP changes take effect after calls settle, retaining uncertain external outcomes.
@@ -185,3 +251,13 @@ python tests/pty/interaction.py --binary /opt/homebrew/bin/loh --output artifact
 Both scripts use temporary state/workspace directories and a localhost provider. They do not use
 the user's credentials, clipboard, sessions or paid model allowance. The renderer comes from
 `tests/pty/grid.py`; screenshots are captured character grids, not native-window acceptance.
+
+The team delivery adds `tests/pty/team.py`. Its installed-binary records are under
+`artifacts/team-2026-10-23/installed/team`, including event JSON, ANSI transcripts,
+request receipts and grids. `/team`, focus changes and attach/history operations
+are checked for zero additional provider requests while the fixture is idle.
+For manual native-window QA, run `python tests/pty/team.py --binary
+/opt/homebrew/bin/loh --serve` in an environment with the same Python dependencies.
+It prints three isolated attach commands and stays alive until Ctrl-C cleans up
+only that fixture. It is explicitly offline and never opens native windows itself.
+See [team acceptance](team-acceptance.md) for the remaining manual checks.

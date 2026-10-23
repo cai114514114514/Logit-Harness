@@ -4,7 +4,30 @@ Product: **Logit- Harness**. Command: **`loh`**. macOS ARM64, version 0.1.0.
 The installed executable is `/opt/homebrew/bin/loh`. Configure credentials with `/setup`, `loh setup`
 or `DEEPSEEK_API_KEY`. Build and use instructions are in [README](../README.md).
 
-## Current CLI polish — 2026-10-23
+## Current multi-window team build — 2026-10-23
+
+One persistent session now supports stable members, addressed messages and controls,
+revision-aware assignments, scoped terminal views and a transactional completion barrier.
+The [team acceptance record](team-acceptance.md) maps behavior to tests and documents the
+three implementation decisions, review repairs and remaining manual checks.
+
+- Product commit: `10874b745292fb8ad917669cd4839c27560e8d78`; source hash
+  `b782357310b6a205e64e60597d1d891243fed0fab4d6b7e4166c384606cd44d3`.
+- Final locked all-target regression: **343 passed, 0 failed, 0 ignored**, 59 groups;
+  strict locked Clippy, formatting and locked release build passed.
+- Atomically installed macOS ARM64 executable, verified local ad-hoc signature, SHA-256
+  `ada1090564c29364911e7acbdca2eedab65d41917c27fb9653afed0a9a312d38`.
+- Installed editor/layout/interaction/team PTY suites passed. The team fixture covers three
+  concurrent input clients, correct receipt targets, local/global pause, separate drafts,
+  history, resize, reconnect and provider-idle view operations. Actual grids were inspected.
+- Evidence: `artifacts/team-2026-10-23/delivery` and `installed`. Failed full regression and
+  its Plan→Implement pause-gate repair remain recorded separately; only the final passing
+  source is installed. The previous binary and existing daemon identities were preserved.
+- Native Terminal-window access was denied by Computer Use; actual window acceptance remains
+  pending. The shared ledger still has 0.00308728 RMB conservatively available, so this round
+  used zero paid calls and makes no claim about real Flash collaboration quality.
+
+## Previous CLI polish — 2026-10-23
 
 The editor, provider error handling, address checks and daemon cleanup were reviewed against the
 user's bug report. The [qualified findings and limitations](bug-review-resolution.md) remain part
