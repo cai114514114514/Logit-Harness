@@ -45,6 +45,8 @@ with tempfile.TemporaryDirectory(prefix='loh-team-offline-') as temporary:
         ident = sessions(home)[0][0]
         main.wait(lambda: all(m['waiting'] == 'main' for m in state()['team']['members'].values()))
         main.drain(2.5)
+        team_label = '团队 '+state()['goal']['id'][:8]
+        assert team_label in main.text(), 'main roster must identify its team'
         main.save(output, 'team-main')
         members = {m['name']: m['id'] for m in state()['team']['members'].values()}
         frozen = len(provider.requests)
@@ -53,6 +55,7 @@ with tempfile.TemporaryDirectory(prefix='loh-team-offline-') as temporary:
         clients.extend([ada, bob])
         ada.wait(lambda: 'Ada [' in ada.text())
         bob.wait(lambda: 'Bob [' in bob.text())
+        assert team_label in ada.text() and team_label in bob.text(), 'member headers must identify the same team as main'
         ada.save(output, 'team-ada')
         bob.save(output, 'team-bob')
         assert 'Ada.txt' in ''.join(ada.chunks)
@@ -199,6 +202,7 @@ with tempfile.TemporaryDirectory(prefix='loh-team-offline-') as temporary:
                 view_actions_add_no_requests=True, isolated_home=True,
                 member_output_attributed=True, local_pause=True, main_only_mutations=True,
                 view_history=True, cjk_multiline=True, per_view_drafts=True, new_keeps_team=True,
+                persistent_team_identity=True,
                 concurrent_inputs=3, concurrent_submit_spread_seconds=max(sent)-min(sent),
                 concurrent_receipts=received, global_pause_dominates_local_resume=True,
                 global_resume_preserves_local_pause=True,

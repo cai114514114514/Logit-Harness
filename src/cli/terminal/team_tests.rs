@@ -485,6 +485,52 @@ fn revisited_view_boundary_precedes_only_unseen_destination_rows() {
 }
 
 #[test]
+fn persistent_team_label_uses_view_goal_before_current_goal_and_session_fallback() {
+    let mut screen = Screen::default();
+    let mut session = crate::runtime::state::Session::new(std::env::temp_dir(), "task", 1000, 60);
+    session.id = "session-fallback".into();
+    session.goal.id = "current-goal".into();
+    let collaborator = crate::runtime::team::MemberView {
+        id: "member-a".into(),
+        name: "Ada".into(),
+        target: member(1).target,
+        actor: None,
+        attempts: vec![],
+        task: Some("current task".into()),
+        paused: false,
+        interrupted: false,
+        stopping: false,
+        waiting: None,
+    };
+    let mut session: crate::runtime::view::SessionView = session.into();
+    session.team.members.push(collaborator.clone());
+    screen.session = Some(session);
+    let main = screen.activity_lines().join("\n");
+    assert!(main.contains("main · 团队 current-"));
+    screen.view = member(1);
+    screen.view.goal = Some("current-goal".into());
+    screen.member = Some(collaborator);
+    let active = screen.activity_lines().join("\n");
+    assert!(
+        active.contains("团队 current-")
+            && active.contains("Ada [member-a]")
+            && active.contains("任务 task-a v1")
+    );
+    screen.view.goal = Some("original-goal".into());
+    screen.view.readonly = true;
+    let archived = screen.activity_lines().join("\n");
+    assert!(archived.contains("团队 original") && archived.contains("归档只读"));
+    assert!(
+        !archived.contains("团队 current-"),
+        "archived member was labelled as the later team"
+    );
+    screen.view.goal = Some(String::new());
+    assert!(screen.activity_lines()[0].contains("团队 current-"));
+    screen.session.as_mut().unwrap().goal.id.clear();
+    assert!(screen.activity_lines()[0].contains("团队 session-"));
+}
+
+#[test]
 fn addressed_main_input_correlates_by_turn_in_live_and_replay() {
     use crate::runtime::team::{MemberControl, Receipt, ReceiptStatus, Request};
     let mut events = vec![];

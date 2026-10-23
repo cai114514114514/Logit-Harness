@@ -3,10 +3,11 @@ use super::{Screen, transcript::Kind};
 pub(super) fn lines(screen: &Screen) -> Vec<String> {
     let mut lines = vec![];
     if let Some(session) = &screen.session {
+        let team = team_label(screen, session);
         if screen.view.is_main() {
             if !session.team.members.is_empty() {
                 lines.push(format!(
-                    "main · {} 位成员 · 并发上限 {} · /team",
+                    "main · {team} · {} 位成员 · 并发上限 {} · /team",
                     session.team.members.len(),
                     session.team.limit
                 ));
@@ -27,7 +28,7 @@ pub(super) fn lines(screen: &Screen) -> Vec<String> {
                 .map(|m| m.name.as_str())
                 .unwrap_or(screen.view.target.member_id());
             lines.push(format!(
-                "{} [{}] · {}{}",
+                "{team} · {} [{}] · {}{}",
                 name,
                 super::team::identity(screen.view.target.member_id()),
                 super::team::assignment(&screen.view.target),
@@ -155,6 +156,18 @@ pub(super) fn lines(screen: &Screen) -> Vec<String> {
         lines.push("输入消息开始对话 · / 查看命令".into());
     }
     lines
+}
+fn team_label(screen: &Screen, session: &crate::runtime::view::SessionView) -> String {
+    // Archived views keep their original goal even when this session owns a
+    // later team. An empty goal identity falls back to the saved session.
+    let id = screen
+        .view
+        .goal
+        .as_deref()
+        .filter(|id| !id.is_empty())
+        .or_else(|| (!session.goal.id.is_empty()).then_some(session.goal.id.as_str()))
+        .unwrap_or(&session.id);
+    format!("团队 {}", super::team::identity(id))
 }
 fn age(value: &str, now: chrono::DateTime<chrono::Utc>) -> String {
     chrono::DateTime::parse_from_rfc3339(value)
