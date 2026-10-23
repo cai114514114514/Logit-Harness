@@ -67,8 +67,8 @@ impl Provider for Parallel {
                 1 => response(
                     "set_plan",
                     json!({"steps":[
-                        {"id":"storage","description":"Build storage","requirements":["r2"]},
-                        {"id":"ui","description":"Build interface","requirements":["r3"]},
+                        {"id":"storage","description":"Build storage","requirements":["r2"],"files":["storage.txt"]},
+                        {"id":"ui","description":"Build interface","requirements":["r3"],"files":["ui.txt"]},
                         {"id":"complete","description":"Check whole deliverable","requirements":["r1"],"dependencies":["storage","ui"]}
                     ]}),
                 ),

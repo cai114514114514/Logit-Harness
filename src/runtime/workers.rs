@@ -1,6 +1,6 @@
 //! Workers own contexts and dependency leases; only the shared tool host commits proposals.
 use super::{
-    actor::{Actor, Pending, Phase, Role},
+    actor::{Pending, Phase, Role},
     graph::StepStatus,
     runner::Runner,
 };
@@ -39,42 +39,18 @@ impl Runner {
             self.scope_current(&pending.scope),
             "delegation came from an obsolete plan or requirement version"
         );
-        let active: Vec<_> = self
-            .session
-            .actors
-            .values()
-            .filter(|a| a.role == Role::Worker && !a.retired && a.phase != Phase::Done)
-            .collect();
-        anyhow::ensure!(
-            active.len() < self.settings.workers,
-            "worker limit reached; continue independent work or wait_workers"
-        );
-        anyhow::ensure!(
-            !active.iter().any(|a| a.step.as_deref() == Some(step)),
-            "step already has an active worker"
-        );
         let scope = self.session.graph.scope(step, &self.session.goal)?;
         anyhow::ensure!(
             !self.scope_blocked(&scope),
             "worker step is waiting for user input"
         );
-        let planned = &self.session.graph.steps[step];
-        anyhow::ensure!(
-            planned
-                .dependencies
-                .iter()
-                .all(|id| self.session.graph.steps[id].status == StepStatus::Verified),
-            "step dependencies need finish_step evidence first"
-        );
-        let id = format!("worker-{}", uuid::Uuid::new_v4());
-        let mut actor = Actor::new(id.clone(), Role::Worker, task.into(), scope);
-        actor.turn = self.session.actors[caller].turn.clone();
-        actor.step = Some(step.into());
-        self.session.actors.insert(id.clone(), actor);
-        self.session.graph.steps.get_mut(step).unwrap().status = StepStatus::Running;
+        let assignment = self
+            .session
+            .assign_member(args["member"].as_str(), step, task)?;
+        let id = assignment.actor.clone();
         let main = self.session.actors.get_mut(caller).unwrap();
         main.context
-            .tool_result(&pending.call.id, &json!({"worker":id,"step":step}));
+            .tool_result(&pending.call.id, &json!({"worker":id,"step":step,"member":assignment.member,"assignment":assignment.id,"version":assignment.version}));
         main.phase = Phase::Ready;
         self.emit(EventData::Worker {
             id,
@@ -88,6 +64,42 @@ impl Runner {
             !self.session.actors[actor].retired && self.scope_current(&pending.scope),
             "worker proposal is obsolete"
         );
+        let member = self
+            .session
+            .team
+            .member_for_actor(actor)
+            .ok_or_else(|| anyhow::anyhow!("proposal has no member owner"))?;
+        let assignment = member
+            .assignment
+            .as_ref()
+            .and_then(|id| self.session.team.assignments.get(id))
+            .ok_or_else(|| anyhow::anyhow!("proposal assignment has settled"))?;
+        anyhow::ensure!(
+            assignment.actor == actor && !member.paused && !member.stopping,
+            "proposal is not from the current executing owner"
+        );
+        let edits = pending.call.arguments["edits"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("proposal needs edits"))?;
+        for edit in edits {
+            let path = edit["path"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("edit path missing"))?;
+            let candidate = std::path::Path::new(path);
+            anyhow::ensure!(
+                !candidate.is_absolute()
+                    && candidate
+                        .components()
+                        .all(|part| matches!(part, std::path::Component::Normal(_))),
+                "invalid proposal path"
+            );
+            anyhow::ensure!(
+                assignment.writable.iter().any(|allowed| {
+                    path == allowed || (allowed.ends_with('/') && path.starts_with(allowed))
+                }),
+                "path {path} is outside assignment; request_scope from main before writing"
+            );
+        }
         let mut proposal = pending.clone();
         proposal.call.name = "apply_patch".into();
         // This is the only elevation a worker receives. The host still validates
@@ -169,6 +181,8 @@ impl Runner {
                 );
             }
             let task = actor.task.clone();
+            self.session
+                .finish_assignment(&id, super::team::AssignmentStatus::Invalidated);
             self.emit(EventData::Worker {
                 id,
                 status: "invalidated".into(),
@@ -184,6 +198,8 @@ impl Runner {
             return Ok(());
         }
         let task = actor.task.clone();
+        self.session
+            .finish_assignment(id, super::team::AssignmentStatus::Finished);
         self.main_feedback(&format!("Worker {id} finished its scoped attempt: {text}\nInspect its changes and evidence, then continue the complete objective."));
         self.emit(EventData::Worker {
             id: id.into(),

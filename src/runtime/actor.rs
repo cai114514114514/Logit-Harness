@@ -35,6 +35,10 @@ pub struct Pending {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Actor {
+    /// Immutable submission target: a late side reply belongs to this assignment,
+    /// even when its stable member has already moved on to another task.
+    #[serde(default)]
+    pub target: Option<super::team::Target>,
     #[serde(default = "identity")]
     pub turn: String,
     #[serde(default)]
@@ -83,6 +87,7 @@ impl Actor {
         let mut context = Context::default();
         context.user(&task);
         Self {
+            target: None,
             turn: identity(),
             response: None,
             compact: false,

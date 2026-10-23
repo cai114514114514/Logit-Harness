@@ -24,6 +24,7 @@ pub mod recovery;
 pub mod runner;
 pub mod state;
 mod steering;
+pub mod team;
 mod verify;
 pub mod view;
 mod workers;

@@ -10,6 +10,8 @@ use std::{collections::BTreeMap, path::PathBuf};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SessionView {
     #[serde(default)]
+    pub team: super::team::TeamView,
+    #[serde(default)]
     pub title: String,
     #[serde(default)]
     pub mode: super::conversation::Mode,
@@ -35,6 +37,17 @@ pub struct SessionView {
 }
 impl From<Session> for SessionView {
     fn from(session: Session) -> Self {
+        let mut team = session.team.view();
+        team.targets = session
+            .actors
+            .values()
+            .filter_map(|actor| {
+                actor
+                    .target
+                    .clone()
+                    .map(|target| (actor.id.clone(), target))
+            })
+            .collect();
         let mut activities = session
             .actions
             .values()
@@ -71,6 +84,7 @@ impl From<Session> for SessionView {
             })
             .collect();
         Self {
+            team,
             activities,
             approval_actions,
             verifying: session.verification_pending,

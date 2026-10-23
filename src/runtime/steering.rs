@@ -221,6 +221,14 @@ impl Runner {
     }
 
     pub(super) fn finish_question(&mut self, actor_id: &str) -> anyhow::Result<()> {
+        if self.session.actors[actor_id]
+            .parent
+            .as_ref()
+            .is_some_and(|id| self.session.team.members.contains_key(id))
+        {
+            return Ok(());
+        }
+
         let id = actor_id
             .strip_prefix("question-")
             .ok_or_else(|| anyhow::anyhow!("question identity missing"))?;

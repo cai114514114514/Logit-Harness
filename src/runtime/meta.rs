@@ -14,6 +14,9 @@ impl Runner {
         actor_id: &str,
         pending: &Pending,
     ) -> anyhow::Result<bool> {
+        if self.team_call(actor_id, pending)? {
+            return Ok(true);
+        }
         let role = self.session.actors[actor_id].role.clone();
         match (role, pending.call.name.as_str()) {
             (Role::Main, "record_note") => {
@@ -81,7 +84,7 @@ impl Runner {
             (Role::Verifier, "report_verification") => {
                 self.verify_report(actor_id, &pending.call.arguments)?;
             }
-            (Role::Main, "ask_user") => self.ask(actor_id, pending).await?,
+            (Role::Main | Role::Worker, "ask_user") => self.ask(actor_id, pending).await?,
             (Role::Main, "focus_step") => self.focus_step(actor_id, pending)?,
             (Role::Main, "wait_input") => {
                 anyhow::ensure!(

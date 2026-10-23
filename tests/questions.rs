@@ -79,7 +79,7 @@ impl Provider for Script {
                 ),
                 1 => call(
                     "set_plan",
-                    json!({"steps":[{"id":"store","description":"storage","requirements":["r2"]},{"id":"ui","description":"interface","requirements":["r3"]},{"id":"all","description":"whole task","requirements":["r1"],"dependencies":["store","ui"]}]}),
+                    json!({"steps":[{"id":"store","description":"storage","requirements":["r2"]},{"id":"ui","description":"interface","requirements":["r3"],"files":["ui.txt"]},{"id":"all","description":"whole task","requirements":["r1"],"dependencies":["store","ui"]}]}),
                 ),
                 2 => call(
                     "ask_user",

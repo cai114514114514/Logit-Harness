@@ -17,6 +17,7 @@ impl Runner {
             self.settle_boundary().await?;
         }
         match control {
+            Control::Directed { request } => self.directed_control(request).await?,
             Control::Rename { title } => {
                 if title.trim().is_empty() || title.len() > 4096 {
                     self.emit(EventData::Diagnostic {

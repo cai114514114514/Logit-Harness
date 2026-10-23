@@ -155,16 +155,10 @@ impl Runner {
                         let stale = job.cancel.is_cancelled()
                             || job.goal != self.session.goal.id
                             || self.session.actors[&job.actor].turn != job.turn
-                            || self.session.actors[&job.actor].retired
-                            || !self.scope_current(&job.scope)
-                            || job.scope.requirements.iter().any(|(id, rev)| {
-                                !self
-                                    .session
-                                    .goal
-                                    .requirements
-                                    .get(id)
-                                    .is_some_and(|r| r.active && r.revision == *rev)
-                            });
+                            // Summarizing an obsolete attempt is read-only history
+                            // maintenance; its summary cannot revive write authority.
+                            || (!compact && (self.session.actors[&job.actor].retired
+                                || !self.scope_current(&job.scope)));
                         let actor = self.session.actors.get_mut(&job.actor).unwrap();
                         if stale {
                             actor.phase = if actor.retired {

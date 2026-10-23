@@ -56,6 +56,13 @@ impl Runner {
         let ids: BTreeSet<String> =
             serde_json::from_value(pending.call.arguments["requirements"].clone())?;
         let versions = self.session.goal.active_versions();
+        if self.session.actors[actor_id].role == Role::Worker {
+            anyhow::ensure!(
+                ids.iter()
+                    .all(|id| pending.scope.requirements.contains_key(id)),
+                "member question exceeds assignment requirements"
+            );
+        }
         anyhow::ensure!(
             !ids.is_empty() && ids.iter().all(|id| versions.contains_key(id)),
             "question needs active requirement IDs"
@@ -87,7 +94,11 @@ impl Runner {
         };
         self.session.final_report = None;
         self.emit(EventData::Message {
-            actor: "question".into(),
+            actor: if actor_id == "main" {
+                "question".into()
+            } else {
+                actor_id.into()
+            },
             text,
         })
     }

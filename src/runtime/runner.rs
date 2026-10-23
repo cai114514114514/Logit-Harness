@@ -92,7 +92,7 @@ pub struct Runner {
 }
 impl Runner {
     pub fn new(
-        session: Session,
+        mut session: Session,
         store: Arc<Store>,
         provider: Arc<dyn Provider>,
         tools: Arc<ToolHost>,
@@ -102,6 +102,13 @@ impl Runner {
         mpsc::Sender<Control>,
         broadcast::Receiver<SessionEvent>,
     ) {
+        if session.team.members.is_empty()
+            && session.team.receipts.is_empty()
+            && session.team.limit == 2
+        {
+            session.team.limit = settings.workers;
+        }
+        session.normalize_team();
         let (control, receiver) = mpsc::channel(64);
         let (events, subscriber) = broadcast::channel(1024);
         let (send, wire) = mpsc::unbounded_channel();
@@ -181,6 +188,7 @@ impl Runner {
             while let Ok(control) = self.control.try_recv() {
                 self.handle_control(control).await?;
             }
+            self.settle_members()?;
             if self.jobs.is_empty() {
                 self.settle_mcp().await?;
                 if let Some(target) = self.session.transition.take() {

@@ -42,6 +42,8 @@ pub struct Question {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Session {
     #[serde(default)]
+    pub team: super::team::Team,
+    #[serde(default)]
     pub defaults: Option<crate::config::defaults::Snapshot>,
     #[serde(default)]
     pub mcp_disabled: BTreeSet<String>,
@@ -150,6 +152,7 @@ impl Session {
             text: objective.into(),
         }];
         Self {
+            team: super::team::Team::default(),
             defaults: None,
             mcp_disabled: BTreeSet::new(),
             mcp_pending: vec![],
@@ -203,6 +206,9 @@ impl Session {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Control {
+    Directed {
+        request: super::team::Request,
+    },
     Rename {
         title: String,
     },

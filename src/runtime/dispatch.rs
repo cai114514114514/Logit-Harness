@@ -17,6 +17,7 @@ impl Runner {
         if !self.session.mcp_pending.is_empty() {
             return Ok(false);
         }
+        self.deliver_mail()?;
         let mut progressed = false;
         let owned = self.execution_owner().await?;
         self.start_steering();
@@ -45,11 +46,32 @@ impl Runner {
             if self.session.transition.is_some() {
                 break;
             }
-            if self.session.actors[&id].retired || self.session.actors[&id].phase == Phase::Blocked
+            if (self.session.actors[&id].retired
+                || self.session.actors[&id].phase == Phase::Blocked)
+                && !self.session.actors[&id].compact
             {
                 continue;
             }
             let role = self.session.actors[&id].role.clone();
+            if role == Role::Worker
+                && let Some(member) = self.session.team.member_for_actor(&id)
+            {
+                if member.stopping
+                    || ((member.paused || member.waiting.is_some())
+                        && !self.session.actors[&id].compact)
+                {
+                    continue;
+                }
+                let executing = self
+                    .jobs
+                    .values()
+                    .filter(|job| self.session.actors[&job.actor].role == Role::Worker)
+                    .count();
+                if executing >= self.session.team.limit && !self.session.actors[&id].compact {
+                    continue;
+                }
+            }
+
             if !owned && !matches!(role, Role::Conversation | Role::Question | Role::Steering) {
                 continue;
             }
@@ -77,7 +99,10 @@ impl Runner {
                 self.session.actors.get_mut(&id).unwrap().phase = Phase::Blocked;
                 continue;
             }
-            if role == Role::Worker && self.scope_blocked(&self.session.actors[&id].scope) {
+            if role == Role::Worker
+                && self.scope_blocked(&self.session.actors[&id].scope)
+                && !self.session.actors[&id].compact
+            {
                 continue;
             }
             if self.frozen() && role != Role::Steering {
@@ -152,13 +177,20 @@ impl Runner {
                     .count();
                 // Steering gets one reserved request lane. Long work requests must
                 // not prevent us from interpreting the user's correction.
-                let capacity = self.settings.workers + 1 + usize::from(role == Role::Steering);
+                let capacity = self
+                    .session
+                    .team
+                    .limit
+                    .saturating_add(1 + usize::from(role == Role::Steering));
                 if active < capacity {
                     let before = self.jobs.len();
                     self.start_model(&id)?;
                     progressed |= self.jobs.len() != before;
                 }
             }
+        }
+        if !progressed && self.jobs.is_empty() {
+            progressed |= self.diagnose_waits()?;
         }
         if !progressed
             && self.jobs.is_empty()
@@ -295,6 +327,15 @@ impl Runner {
                 return Ok(());
             }
         };
+        if let Some(member) = self
+            .session
+            .team
+            .members
+            .values_mut()
+            .find(|m| m.actor.as_deref() == Some(actor_id))
+        {
+            member.mail_seen = self.session.team.mail.len();
+        }
         let actor = self.session.actors.get_mut(actor_id).unwrap();
         let prior = actor.phase.clone();
         actor.phase = Phase::Busy;
