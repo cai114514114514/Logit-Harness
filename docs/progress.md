@@ -691,3 +691,8 @@ Spec: docs/spec.md
   `artifacts/polish-2026-10-23`. Actual PTY grids establish input/scrolling behavior, not native-window
   appearance or an improvement in real-provider task quality. The previous live-model limitation
   and frozen research version remain separate.
+- Final strict Clippy, formatting and locked release build passed. Product source `9bc0cba`, hash
+  `cbf62e3f64b1a74f60d3fed4265c9d792a6e9329e04ba746fd932d646b67c5a2`, was signed and atomically
+  installed. Installed editor/layout/interaction checks passed and their colored grids were
+  inspected. Binary SHA-256: `f26534930f6a379bb7e9ac78d6848519ac15efb3cf04e3d5858db3994c7dfd30`.
+  Existing user daemons were not interrupted; new conversations use the updated runtime.

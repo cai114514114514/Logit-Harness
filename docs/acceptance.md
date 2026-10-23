@@ -4,7 +4,31 @@ Product: **Logit- Harness**. Command: **`loh`**. macOS ARM64, version 0.1.0.
 The installed executable is `/opt/homebrew/bin/loh`. Configure credentials with `/setup`, `loh setup`
 or `DEEPSEEK_API_KEY`. Build and use instructions are in [README](../README.md).
 
-## Current interaction build
+## Current CLI polish — 2026-10-23
+
+The editor, provider error handling, address checks and daemon cleanup were reviewed against the
+user's bug report. The [qualified findings and limitations](bug-review-resolution.md) remain part
+of this acceptance, including intentional loopback development access and unchanged historical
+uncertain charges.
+
+- Product commit: `9bc0cba`; source hash
+  `cbf62e3f64b1a74f60d3fed4265c9d792a6e9329e04ba746fd932d646b67c5a2`.
+- Full locked all-target regression: **266 passed, 0 failed**, 53 result groups; formatting,
+  strict Clippy and release build passed. Independent review has no remaining confirmed P1/P2.
+- Installed macOS ARM64 executable has a verified ad-hoc signature and SHA-256
+  `f26534930f6a379bb7e9ac78d6848519ac15efb3cf04e3d5858db3994c7dfd30`.
+- Raw engineering, review and installation evidence: `artifacts/polish-2026-10-23`.
+  The original process-fixture readiness failure and the later atomic-publication correction
+  are both retained; the failed run is not counted as a passing full suite.
+- Installed editor, layout and integrated-interaction PTY checks passed with matching source
+  hashes. They cover the 34-cell wide-character boundary, Unicode line/word edits, menus, native
+  scrollback, resize, background continuation, cancellation and 401-event history. The editor
+  made no model requests; the other two fixtures used 18 localhost requests and no paid calls.
+  Captured character grids were visually inspected; native-window appearance remains unclaimed.
+- This round makes no new paid-model quality claim and does not reopen the exhausted experimental
+  allowance. The byte-unit tool clarification has engineering coverage but no paid retest.
+
+## Previous interaction build — 2026-10-22
 
 The conversation CLI was rebuilt with a single startup blue L, bottom-docked input, mode-specific
 prompts, measured activity and compact tools with explicit source-truncation notices. Completed
