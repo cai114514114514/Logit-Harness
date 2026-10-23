@@ -816,3 +816,26 @@ Spec: docs/spec.md
   decisions. Evidence is `artifacts/terminal-redesign-2026-10-23`. This implementation made no
   paid calls, preserved both budget ledgers and frozen research, and does not establish real
   Flash quality or native Apple Terminal acceptance.
+
+## Unlimited task tokens and runtime — 2026-10-24
+
+- User explicitly removed per-task token/time caps and retained monetary caps. New conversations
+  now default to `tokens = "unlimited"` and `seconds = "unlimited"`. `/budget unlimited` changes
+  both current limits; finite numbers remain available. Zero still denies execution.
+- `domain/limit.rs` centralizes the unlimited marker and human-readable config/display. Session
+  and IPC numbers remain unchanged in shape; admission explicitly skips an unlimited cap, rather
+  than relying on a merely large finite allowance. Usage, unknown tokens, reservations and elapsed
+  time remain durable. Money enforcement, pricing and frozen evaluation protocols were not changed.
+- The latest exhausted local session `a721f30c0b53471b` received only a durable Budget control.
+  Both limits changed; used/reported/uncertain/reserved tokens, elapsed time and campaign attachment
+  were verified unchanged. No Resume was sent and no daemon was restarted.
+- Six new regressions cover defaults/config, saturation, commands/preservation, time restoration,
+  the independent monetary gate and local `/status` rendering. Full locked regression: **375 passed**,
+  plus formatting, strict Clippy and release build. Focused read-only review found one display issue;
+  its regression failed before the fix. No findings were deferred.
+- Source commit `9e5f09986b6f229c25b78b483ed40908bfece2a3` was signed and atomically installed. Source hash:
+  `af8e4ada921206f774ddd0ce2271a6bb9077e6ebeb46aa0e1f3fe637200d58be`. Binary SHA-256:
+  `36e3dd0b3b95d3f5356a3f5c83773534e81c81afd46f7a9703496deb10137e78`. All pre-existing process identities remained present across install.
+  Installed macOS PTY budget/config checks passed with **zero provider requests**; evidence is
+  `artifacts/unlimited-2026-10-24`. Protected files, frozen research and monetary ledgers are unchanged.
+- Updated distributable: `dist/unlimited-2026-10-24/loh-macos-arm64-0.1.0.tar.gz`.

@@ -60,8 +60,11 @@ Unknown MCP effects are not automatically authorized. Retrieved content is data,
 
 Product name: Logit- Harness. Command: `loh`. One Cargo project with responsibility-focused modules. Work directly in the
 original tree; no sed, worktrees, V2/next names, or overwriting unrelated user edits.
-Official `deepseek-flash`, thinking high, same model across roles. Task limit: 6 hours and 5 million
-combined input/output tokens, shared/reserved across concurrent calls. Search has a separate limit.
+Official `deepseek-flash`, thinking high, same model across roles. On 2026-10-24 the user explicitly
+removed the default per-task token/time caps while retaining monetary limits. New conversations
+default to unlimited cumulative tokens and running time; `/budget unlimited` updates an existing
+session. Explicit finite limits remain available and share reservations across concurrent calls.
+Frozen evaluation protocols retain their recorded limits. Search has a separate limit.
 Cost is estimated only from an explicit price schedule. Credentials prefer DEEPSEEK_API_KEY;
 the subsequently requested `/setup` also saves endpoint-bound keys in a private credentials file.
 Ordinary config remains nonsecret. Budget exhaustion preserves incomplete, resumable state.

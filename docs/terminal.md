@@ -101,7 +101,8 @@ history size. Clipboard operations use macOS `pbcopy` and report failures.
 | `/sessions` | Select a saved task in this directory from welcome or a live conversation; switching clients does not stop the old task |
 | `/diff` | Show the current Git worktree, including pre-existing user changes |
 | `/budget` | Show consumed, reserved and uncertain token use, and elapsed time |
-| `/budget <tokens> [seconds]` | Set absolute task limits; never changes the shared campaign money cap |
+| `/budget unlimited` | Remove both task token/time caps; keep usage accounting and the shared campaign money cap |
+| `/budget <tokens\|unlimited> [seconds\|unlimited]` | Set either cap explicitly; a numeric token argument without seconds leaves the current time cap unchanged |
 | `/pause` or Ctrl-C | Request cancellation and pause after active operations settle |
 | `/resume` | Resume saved execution |
 | `/answer <question-id> <text>` | Answer one pending question explicitly |
