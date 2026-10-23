@@ -243,7 +243,16 @@ fn recovery_caps_wrapped_rows_and_display_cannot_emit_terminal_controls() {
         .collect::<String>();
     assert!(!rendered.contains('\u{1b}'));
     assert!(!rendered.contains('\u{7}'));
-    assert!(rendered.contains("# **literal**"));
+    let detail = p
+        .entries()
+        .last()
+        .unwrap()
+        .lines(80, true)
+        .iter()
+        .map(ToString::to_string)
+        .collect::<String>();
+    assert!(!detail.contains('\u{1b}') && !detail.contains('\u{7}'));
+    assert!(detail.contains("# **literal**"));
 }
 
 #[test]

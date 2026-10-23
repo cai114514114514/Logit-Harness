@@ -9,6 +9,20 @@ fn data(result: &Value) -> &Value {
         .unwrap_or(result)
 }
 
+pub(super) fn suffix(result: &Value) -> String {
+    let data = data(result);
+    if let Some(code) = data["exit_code"]
+        .as_i64()
+        .or_else(|| data["process"]["exit_code"].as_i64())
+    {
+        return format!(" · 退出 {code}");
+    }
+    if let Some(matches) = data["matches"].as_array() {
+        return format!(" · {} 个结果", matches.len());
+    }
+    String::new()
+}
+
 pub(super) fn truncated(result: &Value) -> bool {
     let data = data(result);
     data["truncated"] == true || data["process"]["truncated"] == true

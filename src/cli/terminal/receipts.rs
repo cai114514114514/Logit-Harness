@@ -1,6 +1,14 @@
 //! A queued acknowledgement is not application. Preserve literal input once,
 //! then append only meaningful receipt transitions to immutable scrollback.
 use crate::runtime::team::{MemberControl, Receipt, ReceiptStatus};
+use crate::runtime::view::ViewTarget;
+use ratatui::text::{Line, Span};
+
+pub(super) struct Delivery {
+    origin: ViewTarget,
+    status: ReceiptStatus,
+    request: crate::runtime::team::Request,
+}
 pub(in crate::cli::terminal) fn input(action: &MemberControl) -> String {
     match action {
         MemberControl::Message { text } | MemberControl::Side { text } => text.clone(),
@@ -48,6 +56,17 @@ impl Transcript {
         origin: &crate::runtime::view::ViewTarget,
         request: &crate::runtime::team::Request,
     ) {
+        if self.deliveries.contains_key(&request.key()) {
+            return;
+        }
+        self.deliveries.insert(
+            request.key(),
+            Delivery {
+                origin: origin.clone(),
+                status: ReceiptStatus::Pending,
+                request: request.clone(),
+            },
+        );
         self.note_in(
             origin,
             &format!(
@@ -57,6 +76,7 @@ impl Transcript {
             ),
         );
         self.entries.last_mut().unwrap().result = Some(serde_json::json!({"accepted": request}));
+        self.entries.last_mut().unwrap().quiet = true;
     }
     pub(super) fn mail(&mut self, mail: &crate::runtime::team::Mail, stamp: &str) {
         if !self.entries.iter().any(|e| e.id == mail.id) {
@@ -87,9 +107,28 @@ impl Transcript {
         } else {
             "待投递".into()
         };
-        self.update_notice(id, text, stamp);
+        self.update_notice(id.clone(), text, stamp);
+        if let Some(entry) = self.entries.iter_mut().find(|e| e.id == id) {
+            entry.quiet = mail.error.is_none();
+        }
     }
     pub(super) fn receipt(&mut self, receipt: &crate::runtime::team::Receipt, stamp: &str) {
+        if receipt.status == ReceiptStatus::Pending
+            && self
+                .deliveries
+                .get(&receipt.request.key())
+                .is_some_and(|d| d.status != ReceiptStatus::Pending)
+        {
+            return;
+        }
+        self.deliveries.insert(
+            receipt.request.key(),
+            Delivery {
+                origin: self.origin.clone(),
+                status: receipt.status.clone(),
+                request: receipt.request.clone(),
+            },
+        );
         let id = receipt.request.mail_id();
         if !self.entries.iter().any(|e| e.id == id) {
             let i = self.add(id, Kind::User, "user", "你".into(), stamp);
@@ -102,11 +141,43 @@ impl Transcript {
             described(receipt, &self.name(receipt.request.target.member_id())),
             stamp,
         );
-        self.entries
+        let entry = self
+            .entries
             .iter_mut()
             .find(|entry| entry.id == id)
-            .unwrap()
-            .result = Some(serde_json::json!({"receipt": receipt}));
+            .unwrap();
+        entry.result = Some(serde_json::json!({"receipt": receipt}));
+        entry.quiet = receipt.status != ReceiptStatus::Failed;
+    }
+
+    pub fn pending_lines(&self, width: usize) -> Vec<Line<'static>> {
+        self.deliveries
+            .values()
+            .filter(|delivery| {
+                delivery.status == ReceiptStatus::Pending
+                    && self.view.as_ref().is_none_or(|view| {
+                        super::super::ownership::same_view(view, &delivery.origin)
+                    })
+            })
+            .flat_map(|delivery| {
+                let stale = self
+                    .view
+                    .as_ref()
+                    .is_some_and(|view| view.target != delivery.origin.target);
+                super::super::text::wrap(
+                    vec![Span::raw(format!(
+                        "{} · 已接收，等待处理{} · {}",
+                        self.name(delivery.request.target.member_id()),
+                        if stale { "（旧任务）" } else { "" },
+                        super::super::text::ellipsize(
+                            &input(&delivery.request.action).replace('\n', " "),
+                            32
+                        )
+                    ))],
+                    width,
+                )
+            })
+            .collect()
     }
     fn update_notice(&mut self, id: String, text: String, stamp: &str) {
         if let Some(i) = self.entries.iter().position(|e| e.id == id) {

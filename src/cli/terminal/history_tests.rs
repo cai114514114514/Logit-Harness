@@ -157,8 +157,13 @@ fn compact_results_keep_source_limits_separate_from_display_folding() {
             "source limit hidden by compact summary: {compact}"
         );
         assert!(
-            compact.contains("折叠"),
-            "fixture must exercise display folding"
+            !compact.contains("second"),
+            "compact view must omit raw body"
+        );
+        assert!(
+            entry
+                .full_text()
+                .contains(&serde_json::to_string_pretty(&result).unwrap())
         );
         assert!(
             rows.len() < 10,
@@ -182,7 +187,8 @@ fn compact_results_keep_source_limits_separate_from_display_folding() {
         .iter()
         .map(ToString::to_string)
         .collect::<String>();
-    assert!(compact.contains("折叠"));
+    assert!(!compact.contains("second"));
+    assert!(transcript.entries()[0].full_text().contains("second"));
     assert!(
         !compact.contains("已截断"),
         "UI folding must not imply lost source output"

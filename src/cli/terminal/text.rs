@@ -9,6 +9,27 @@ use unicode_width::UnicodeWidthStr;
 pub const ACCENT: Color = Color::Rgb(91, 156, 255);
 pub const MUTED: Color = Color::DarkGray;
 
+/// Truncate at a grapheme boundary and count terminal cells, not UTF-8 bytes.
+pub(super) fn ellipsize(text: &str, width: usize) -> String {
+    if text.width() <= width {
+        return text.into();
+    }
+    if width == 0 {
+        return String::new();
+    }
+    let mut used = 0;
+    let mut result = String::new();
+    for grapheme in text.graphemes(true) {
+        if used + grapheme.width() > width - 1 {
+            break;
+        }
+        used += grapheme.width();
+        result.push_str(grapheme);
+    }
+    result.push('…');
+    result
+}
+
 /// Small, predictable terminal Markdown: headings, fenced code, inline code and
 /// emphasis. No terminal escape from model/tool output is ever interpreted.
 pub fn markdown(text: &str, width: usize, base: Style) -> Vec<Line<'static>> {

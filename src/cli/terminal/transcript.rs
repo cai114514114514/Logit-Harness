@@ -1,12 +1,13 @@
 //! One event projection for live output, reconnect and durable history.
-use super::{state::clean, text};
+use super::text;
+#[path = "entry.rs"]
+mod entry;
 #[path = "receipts.rs"]
 pub(super) mod receipts;
+#[path = "summary.rs"]
+mod summary;
 use crate::domain::{EventData, SessionEvent, Status};
-use ratatui::{
-    style::{Color, Style},
-    text::{Line, Span},
-};
+use ratatui::text::{Line, Span};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -27,6 +28,7 @@ pub struct Entry {
     pub updated: String,
     pub kind: Kind,
     pub title: String,
+    pub tool: Option<String>,
     pub body: String,
     /// Full persisted deltas stay in `body`; the bounded final result must never
     /// replace them. Keep structured outcome/error metadata independently.
@@ -60,6 +62,7 @@ pub struct Transcript {
     /// A view marker belongs before the next presentation batch, not at the
     /// current event sequence after older, unseen destination entries.
     boundary: Option<String>,
+    deliveries: BTreeMap<String, receipts::Delivery>,
 }
 impl Transcript {
     pub(crate) fn bind(&mut self, state: &crate::runtime::view::SessionView) {
@@ -164,6 +167,7 @@ impl Transcript {
             id,
             kind,
             title,
+            tool: None,
             source: identity.map_or(source, |i| &i.actor).into(),
             turn: identity.map(|i| i.turn.clone()),
             response: identity.map(|i| i.response.clone()),
@@ -314,13 +318,14 @@ impl Transcript {
                 if self.entries.iter().any(|e| e.id == *id) {
                     return;
                 }
-                self.add(
+                let i = self.add(
                     id.clone(),
                     Kind::Tool,
                     id,
                     super::tool_text::title(tool, arguments),
                     stamp,
                 );
+                self.entries[i].tool = Some(tool.clone());
             }
             EventData::ActionFinished {
                 id,
@@ -520,8 +525,14 @@ impl Transcript {
             })
             .collect::<Vec<_>>();
         indices.sort_by_key(|i| self.entries[*i].settled);
+        lines.extend(summary::batch(
+            &indices
+                .iter()
+                .map(|i| &self.entries[*i])
+                .collect::<Vec<_>>(),
+            width,
+        ));
         for i in indices {
-            lines.extend(self.entries[i].lines(width, false));
             self.entries[i].printed.insert(key.clone());
         }
         lines
@@ -547,10 +558,10 @@ impl Transcript {
             e.printed.insert(key.clone());
         }
         let first = entries.len().saturating_sub(20);
-        let mut lines = entries[first..]
-            .iter()
-            .flat_map(|e| e.lines(width, false))
-            .collect::<Vec<_>>();
+        let mut lines = summary::batch(
+            &entries[first..].iter().map(|e| &**e).collect::<Vec<_>>(),
+            width,
+        );
         let marker = text::wrap(
             vec![Span::raw(
                 "── 恢复最近记录（最多20块/200行）；/history 查看完整历史 ──",
@@ -564,150 +575,6 @@ impl Transcript {
             lines.drain(..lines.len() - available);
         }
         prefix.into_iter().chain(lines).collect()
-    }
-}
-impl Entry {
-    /// Search, expansion and both copy routes share the same complete record.
-    /// JSON retains process flags and bounded-result provenance, even for quiet
-    /// tools; the leading stream is preserved byte-for-byte without escaping.
-    pub fn full_text(&self) -> String {
-        match &self.result {
-            Some(result) => {
-                let mut metadata = serde_json::to_string_pretty(result).unwrap_or_default();
-                if super::tool_text::truncated(result) {
-                    metadata.push_str("\n[工具提供的结果内容已截断；以上持久化流如有则完整保留]");
-                }
-                if !self.body.is_empty() && self.body != metadata {
-                    format!("{}\n\n[最终结果]\n{metadata}", self.body)
-                } else {
-                    metadata
-                }
-            }
-            None => self.body.clone(),
-        }
-    }
-
-    fn display_text(&self, expanded: bool) -> String {
-        if expanded {
-            return self.full_text();
-        }
-        if self.kind == Kind::Note {
-            return super::present::notice(&self.body);
-        }
-        if let Some(result) = &self.result {
-            let final_text = super::tool_text::result(result);
-            if !final_text.is_empty() {
-                // Keep the existing compact final-result/failure-tail view.
-                // Full streams remain available through expansion and copy.
-                return final_text;
-            }
-        }
-        self.body.clone()
-    }
-
-    pub fn lines(&self, width: usize, expanded: bool) -> Vec<Line<'static>> {
-        if self.quiet && !expanded {
-            return vec![];
-        }
-        if self.kind == Kind::Assistant && self.body.is_empty() {
-            return vec![];
-        }
-        let (marker, color) = match self.kind {
-            Kind::User => ("❯", text::ACCENT),
-            Kind::Assistant => ("●", Color::Reset),
-            Kind::Note => ("·", text::MUTED),
-            Kind::Tool if self.running => ("◌", text::ACCENT),
-            Kind::Tool if self.success == Some(true) => ("✓", Color::Green),
-            Kind::Tool if self.success == Some(false) => ("✕", Color::Red),
-            Kind::Tool => ("?", text::MUTED),
-        };
-        let time = chrono::DateTime::parse_from_rfc3339(&self.started)
-            .map(|time| {
-                time.with_timezone(&chrono::Local)
-                    .format("%H:%M:%S")
-                    .to_string()
-            })
-            .unwrap_or_else(|_| self.started.clone());
-        let heading = if expanded {
-            format!(
-                "{marker} {} · {} · {time}",
-                clean(&self.title),
-                clean(&self.source)
-            )
-        } else if self.kind == Kind::Note {
-            // The notice itself supplies its subject; do not repeat 系统 twice.
-            String::new()
-        } else {
-            format!("{marker} {}", clean(&self.title))
-        };
-        let heading_width = if !expanded && self.kind == Kind::Tool {
-            width.saturating_sub(2)
-        } else {
-            width
-        };
-        let mut lines = text::wrap(
-            vec![Span::styled(heading, Style::default().fg(color))],
-            heading_width,
-        );
-        if !expanded && self.kind == Kind::Tool && lines.len() > 1 {
-            lines.truncate(1);
-            lines[0]
-                .spans
-                .push(Span::styled(" …", Style::default().fg(color)));
-        }
-        if !expanded && self.kind == Kind::Note {
-            lines.clear();
-        }
-        let content = self.display_text(expanded);
-        let body = if self.kind == Kind::Assistant {
-            text::markdown(&clean(&content), width.saturating_sub(2), Style::default())
-        } else {
-            clean(&content)
-                .split('\n')
-                .flat_map(|line| {
-                    text::wrap(vec![Span::raw(line.to_owned())], width.saturating_sub(2))
-                })
-                .collect()
-        };
-        let limit = if expanded || self.kind == Kind::Note {
-            body.len()
-        } else if self.kind == Kind::Tool {
-            if self.success == Some(false) { 8 } else { 1 }
-        } else {
-            body.len().min(100)
-        };
-        let start = if self.kind == Kind::Tool && self.success == Some(false) {
-            body.len().saturating_sub(limit)
-        } else {
-            0
-        };
-        if start > 0 {
-            lines.push(Line::raw(format!("  … 前 {start} 行已折叠 · /history")));
-        }
-        for mut line in body.iter().skip(start).take(limit).cloned() {
-            line.spans.insert(0, Span::raw("  "));
-            lines.push(line);
-        }
-        if start == 0 && body.len() > limit {
-            lines.push(Line::raw(format!(
-                "  … 另 {} 行已折叠 · /history",
-                body.len() - limit
-            )));
-        }
-        if !expanded
-            && self.kind == Kind::Tool
-            && let Some(notice) = self.result.as_ref().and_then(super::tool_text::limitation)
-        {
-            lines.push(Line::styled(
-                format!("  {notice} · /history"),
-                Style::default().fg(text::MUTED),
-            ));
-        }
-        lines.push(Line::default());
-        lines
-            .into_iter()
-            .flat_map(|line| text::wrap(line.spans, width))
-            .collect()
     }
 }
 pub(super) fn actor_label(actor: &str) -> String {

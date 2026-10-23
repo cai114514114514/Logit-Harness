@@ -20,6 +20,112 @@ fn member(version: u64) -> ViewTarget {
         readonly: false,
     }
 }
+
+#[test]
+fn terminal_receipts_are_quiet_after_applied_even_when_ack_is_late() {
+    use crate::runtime::team::{MemberControl, Receipt, ReceiptStatus, Request};
+    let request = Request {
+        id: "ui-request".into(),
+        client_id: "ui-client".into(),
+        target: member(1).target,
+        action: MemberControl::Message {
+            text: "unique instruction".into(),
+        },
+    };
+    let mut p = Transcript::default();
+    p.focus(member(1));
+    p.accepted(&member(1), &request);
+    assert!(
+        p.pending_lines(100)
+            .iter()
+            .any(|r| r.to_string().contains("等待处理"))
+    );
+    assert!(
+        !p.drain_settled(100)
+            .iter()
+            .any(|r| r.to_string().contains("已接收"))
+    );
+    let pending = Receipt {
+        request: request.clone(),
+        status: ReceiptStatus::Pending,
+        applying: false,
+        error: None,
+        pending_input: None,
+    };
+    p.receive(&event(
+        1,
+        EventData::RequestReceipt {
+            goal: "goal".into(),
+            receipt: pending.clone(),
+        },
+    ));
+    let input = p
+        .drain_settled(100)
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_eq!(input.matches("unique instruction").count(), 1);
+    p.receive(&event(
+        2,
+        EventData::RequestReceipt {
+            goal: "goal".into(),
+            receipt: Receipt {
+                status: ReceiptStatus::Applied,
+                ..pending.clone()
+            },
+        },
+    ));
+    p.accepted(&member(1), &request);
+    assert!(p.drain_settled(100).is_empty());
+    assert!(p.pending_lines(100).is_empty());
+    let full = p
+        .lines(100, true)
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(full.contains("已应用") && full.contains("ui-request"));
+}
+
+#[test]
+fn pending_delivery_survives_long_history_and_stays_in_its_view() {
+    use crate::runtime::team::{MemberControl, Request};
+    let mut p = Transcript::default();
+    p.focus(member(1));
+    p.accepted(
+        &member(1),
+        &Request {
+            id: "pending".into(),
+            client_id: "client".into(),
+            target: member(1).target,
+            action: MemberControl::Message {
+                text: "waiting instruction".into(),
+            },
+        },
+    );
+    for i in 1..=400 {
+        p.receive(&event(
+            i,
+            EventData::Diagnostic {
+                message: format!("notice {i}"),
+            },
+        ));
+    }
+    assert!(
+        p.pending_lines(80)
+            .iter()
+            .any(|line| line.to_string().contains("waiting instruction"))
+    );
+    p.focus(ViewTarget::main());
+    assert!(p.pending_lines(80).is_empty());
+    p.focus(member(2));
+    assert!(
+        p.pending_lines(80)
+            .iter()
+            .any(|line| line.to_string().contains("旧任务"))
+    );
+}
 fn event(sequence: u64, data: EventData) -> SessionEvent {
     SessionEvent {
         sequence,
