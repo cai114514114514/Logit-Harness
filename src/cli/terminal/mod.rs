@@ -1,20 +1,24 @@
 //! Terminal lifetime never owns the runner. All control goes through the durable socket inbox.
 mod activity;
 mod brand;
+mod chrome;
 mod client;
 mod clipboard;
+mod composer;
 mod delivery;
 mod edit;
 mod history;
 mod input;
 mod jobs;
 mod launch;
+mod menu;
 mod output;
 mod ownership;
 mod present;
 mod render;
 mod setup;
 mod state;
+mod status;
 mod submission;
 mod surface;
 mod team;

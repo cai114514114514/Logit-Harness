@@ -96,22 +96,7 @@ impl Screen {
             }
         }
     }
-    pub(super) fn team_labels(&self) -> Vec<String> {
-        std::iter::once("main · 总览与全局控制".into())
-            .chain(self.members.iter().map(|m| {
-                format!(
-                    "{} [{}] · {} · {} · {} · {}",
-                    m.name,
-                    identity(&m.id),
-                    member_status(m),
-                    self.member_usage(&m.id),
-                    super::activity::progress(self, &m.id),
-                    m.task.as_deref().unwrap_or("无任务")
-                )
-            }))
-            .collect()
-    }
-    fn member_usage(&self, member: &str) -> String {
+    pub(super) fn member_usage(&self, member: &str) -> String {
         let Some(usage) = self.transcript.usage.get(member) else {
             return "用量未报告".into();
         };

@@ -611,29 +611,110 @@ fn persistent_team_label_uses_view_goal_before_current_goal_and_session_fallback
     let mut session: crate::runtime::view::SessionView = session.into();
     session.team.members.push(collaborator.clone());
     screen.session = Some(session);
-    let main = screen.activity_lines().join("\n");
-    assert!(main.contains("main · 团队 current-"));
+    let chrome = |s: &Screen| {
+        super::chrome::lines(s, 100)
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let main = chrome(&screen);
+    assert!(main.contains("task") && main.contains("主控"));
     screen.view = member(1);
     screen.view.goal = Some("current-goal".into());
     screen.member = Some(collaborator);
-    let active = screen.activity_lines().join("\n");
+    let active = chrome(&screen);
     assert!(
-        active.contains("团队 current-")
-            && active.contains("Ada [member-a]")
-            && active.contains("任务 task-a v1")
+        active.contains("task")
+            && active.contains("Ada")
+            && active.contains("current task")
+            && active.contains("仅控制此成员")
     );
     screen.view.goal = Some("original-goal".into());
     screen.view.readonly = true;
-    let archived = screen.activity_lines().join("\n");
+    let archived = chrome(&screen);
     assert!(archived.contains("团队 original") && archived.contains("归档只读"));
     assert!(
         !archived.contains("团队 current-"),
         "archived member was labelled as the later team"
     );
     screen.view.goal = Some(String::new());
-    assert!(screen.activity_lines()[0].contains("团队 current-"));
+    assert!(chrome(&screen).contains("current task"));
     screen.session.as_mut().unwrap().goal.id.clear();
-    assert!(screen.activity_lines()[0].contains("团队 session-"));
+    assert!(chrome(&screen).contains("团队 session-"));
+}
+
+#[test]
+fn urgent_status_survives_small_window_without_partial_commands() {
+    use crate::runtime::{
+        state::Session,
+        team::{MemberControl, Request},
+    };
+    let mut screen = Screen::default();
+    let mut session: crate::runtime::view::SessionView =
+        Session::new(std::env::temp_dir(), "test", 1000, 60).into();
+    session
+        .approval_actions
+        .push("shell · /approve 12345678-1234-1234-1234-123456789012".into());
+    screen.session = Some(session);
+    screen.drafts.origin = Some(ViewTarget {
+        goal: Some("old".into()),
+        ..ViewTarget::default()
+    });
+    screen.input.insert("旧草稿");
+    screen.activity = "执行工具 · cargo test".into();
+    screen.transcript.accepted(
+        &screen.view,
+        &Request {
+            id: "pending".into(),
+            client_id: "client".into(),
+            target: crate::runtime::team::Target::Main,
+            action: MemberControl::Message {
+                text: "new requirements".into(),
+            },
+        },
+    );
+    let rows = super::status::lines(&screen, 36, 3);
+    let text = rows
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(text.contains("草稿属于旧任务"), "{text}");
+    assert!(
+        text.contains("/status"),
+        "hidden urgent state needs a full route: {text}"
+    );
+    assert!(
+        !text.contains("/approve"),
+        "never show a partly clipped approval command: {text}"
+    );
+    assert!(rows.iter().all(|row| row.width() <= 36));
+    assert_eq!(screen.input.text(), "旧草稿");
+}
+
+#[test]
+fn one_status_row_keeps_a_safe_route_instead_of_half_an_approval() {
+    let mut screen = Screen::default();
+    let mut session: crate::runtime::view::SessionView =
+        crate::runtime::state::Session::new(std::env::temp_dir(), "test", 1000, 60).into();
+    session
+        .approval_actions
+        .push("shell · /approve 12345678-1234-1234-1234-123456789012".into());
+    screen.session = Some(session);
+    let rows = super::status::lines(&screen, 36, 1);
+    let text = rows
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        text.contains("等待授权") && text.contains("/status"),
+        "{text}"
+    );
+    assert!(!text.contains("/approve"), "partial approval: {text}");
+    assert_eq!(rows.len(), 1);
+    assert!(rows[0].width() <= 36);
 }
 
 #[test]
@@ -778,4 +859,49 @@ fn saved_legacy_worker_history_and_usage_belong_to_its_member() {
     );
     assert_eq!(transcript.usage["old-worker"].input, 7);
     assert_eq!(transcript.usage["old-worker"].output, 3);
+}
+
+#[test]
+fn footer_uses_reported_view_usage_and_keeps_kv_at_every_width() {
+    use crate::domain::Usage;
+    let mut screen = Screen::default();
+    screen.view = member(1);
+    screen.session =
+        Some(crate::runtime::state::Session::new(std::env::temp_dir(), "test", 1000, 60).into());
+    screen.model = "deepseek-flash".into();
+    screen.session.as_mut().unwrap().budget.reported = Usage {
+        input: 1000,
+        output: 100,
+        cached: 700,
+    };
+    screen.transcript.usage.insert(
+        "member-a".into(),
+        Usage {
+            input: 100,
+            output: 10,
+            cached: 50,
+        },
+    );
+    for w in [106, 76, 56, 36] {
+        let output = super::composer::footer(&screen, w).to_string();
+        assert!(
+            output.contains("KV 50%"),
+            "member usage lost at {w}: {output}"
+        );
+        if w == 106 {
+            assert!(output.contains("110 tokens"), "{output}");
+        }
+    }
+    screen.view = ViewTarget::default();
+    let output = super::composer::footer(&screen, 106).to_string();
+    assert!(
+        output.contains("KV 70%") && output.contains("1.1k tokens"),
+        "{output}"
+    );
+    screen.session.as_mut().unwrap().budget.reported = Usage::default();
+    assert!(
+        super::composer::footer(&screen, 76)
+            .to_string()
+            .contains("KV —")
+    );
 }
