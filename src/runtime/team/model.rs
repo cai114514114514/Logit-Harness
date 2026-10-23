@@ -3,6 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Team {
+    /// Keys into receipts, in server acceptance order; never client-ID order.
+    #[serde(default)]
+    pub skill_queue: Vec<String>,
     pub limit: usize,
     pub members: BTreeMap<String, Member>,
     pub assignments: BTreeMap<String, Assignment>,
@@ -15,6 +18,7 @@ pub struct Team {
 impl Default for Team {
     fn default() -> Self {
         Self {
+            skill_queue: vec![],
             limit: 2,
             members: BTreeMap::new(),
             assignments: BTreeMap::new(),

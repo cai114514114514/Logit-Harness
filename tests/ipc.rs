@@ -61,6 +61,7 @@ async fn socket_routes_controls_and_replays_after_a_cursor() {
             &session.id,
             &session,
             EventData::User {
+                turn: None,
                 message: "first".into(),
             },
         )
@@ -70,6 +71,7 @@ async fn socket_routes_controls_and_replays_after_a_cursor() {
             &session.id,
             &session,
             EventData::User {
+                turn: None,
                 message: "second".into(),
             },
         )

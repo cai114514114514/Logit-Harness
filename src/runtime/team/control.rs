@@ -27,6 +27,9 @@ impl Runner {
                 pending_input: None,
             },
         );
+        if request.target != Target::Main && matches!(request.action, MemberControl::Skill { .. }) {
+            self.session.team.skill_queue.push(key.clone());
+        }
         self.publish_metadata()?;
         let inbox_before = self.session.inbox.len();
         let result = self.apply_member_control(&request).await;
@@ -174,6 +177,11 @@ impl Runner {
             MemberControl::Pause | MemberControl::Stop => {
                 member.paused = true;
                 member.stopping |= request.action == MemberControl::Stop;
+                for actor in self.session.actors.values_mut().filter(|a| {
+                    member.attempts.contains(&a.id) && a.phase != super::super::actor::Phase::Done
+                }) {
+                    actor.local_pause = true;
+                }
                 for job in self
                     .jobs
                     .values()
@@ -185,6 +193,17 @@ impl Runner {
             MemberControl::Resume => {
                 anyhow::ensure!(!member.stopping, "member stop is still settling");
                 member.paused = false;
+                for actor in self
+                    .session
+                    .actors
+                    .values_mut()
+                    .filter(|a| member.attempts.contains(&a.id))
+                {
+                    if actor.local_pause && self.session.status == crate::domain::Status::Paused {
+                        actor.global_pause = true;
+                    }
+                    actor.local_pause = false;
+                }
                 // Global status remains authoritative; an idle member is never revived.
             }
             MemberControl::Compact => member.compact_pending = true,

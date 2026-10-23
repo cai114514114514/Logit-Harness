@@ -483,3 +483,147 @@ fn revisited_view_boundary_precedes_only_unseen_destination_rows() {
         "view presentation changed complete history or its origin"
     );
 }
+
+#[test]
+fn addressed_main_input_correlates_by_turn_in_live_and_replay() {
+    use crate::runtime::team::{MemberControl, Receipt, ReceiptStatus, Request};
+    let mut events = vec![];
+    for id in ["first", "second", "first"] {
+        let request = Request {
+            id: id.into(),
+            client_id: "client".into(),
+            target: Target::Main,
+            action: MemberControl::Message {
+                text: "identical literal input".into(),
+            },
+        };
+        events.push(event(
+            events.len() as u64 + 1,
+            EventData::RequestReceipt {
+                goal: "goal".into(),
+                receipt: Receipt {
+                    applying: false,
+                    request: request.clone(),
+                    status: ReceiptStatus::Pending,
+                    error: None,
+                    pending_input: None,
+                },
+            },
+        ));
+        events.push(event(events.len() as u64 + 1, serde_json::from_value(serde_json::json!({"type":"user","message":"identical literal input","turn":request.key()})).unwrap()));
+    }
+    for live in [true, false] {
+        let mut transcript = Transcript::default();
+        for event in &events {
+            transcript.receive(event);
+            if live {
+                transcript.drain_settled(100);
+            }
+        }
+        let users = transcript
+            .entries()
+            .iter()
+            .filter(|e| e.kind == super::transcript::Kind::User)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            users.len(),
+            2,
+            "same-ID retry must coalesce; distinct identical text must remain"
+        );
+        assert!(users.iter().all(|e| e.body == "identical literal input"));
+    }
+}
+
+#[test]
+fn saved_legacy_worker_history_and_usage_belong_to_its_member() {
+    use crate::{
+        config::Paths,
+        runtime::{state::Session, view::SessionView},
+        store::Store,
+    };
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::new(root.path().into());
+    std::fs::create_dir_all(paths.database().parent().unwrap()).unwrap();
+    let store = Store::open(&paths.database()).unwrap();
+    let mut session = Session::new(root.path().into(), "legacy", 10000, 60);
+    let mut worker = serde_json::to_value(&session.actors["main"]).unwrap();
+    worker["id"] = serde_json::json!("old-worker");
+    worker["role"] = serde_json::json!("worker");
+    worker["task"] = serde_json::json!("old task");
+    session
+        .actors
+        .insert("old-worker".into(), serde_json::from_value(worker).unwrap());
+    let mut old = serde_json::to_value(&session).unwrap();
+    old.as_object_mut().unwrap().remove("team");
+    for actor in old["actors"].as_object_mut().unwrap().values_mut() {
+        actor.as_object_mut().unwrap().remove("target");
+    }
+    store
+        .commit(
+            &session.id,
+            &old,
+            EventData::Message {
+                actor: "old-worker".into(),
+                text: "old member output".into(),
+            },
+        )
+        .unwrap();
+    store
+        .commit(
+            &session.id,
+            &old,
+            EventData::Usage {
+                actor: "old-worker".into(),
+                input: 7,
+                output: 3,
+                cached: 0,
+            },
+        )
+        .unwrap();
+    let before = store.events(&session.id, 0).unwrap();
+    let saved: Session = store.load(&session.id).unwrap();
+    let view = SessionView::from(saved);
+    assert_eq!(view.bindings["old-worker"].target.member_id(), "old-worker");
+    let origin = ViewTarget {
+        target: view.bindings["old-worker"].target.clone(),
+        goal: Some(session.goal.id.clone()),
+        readonly: false,
+    };
+    let service =
+        crate::commands::Service::new(&paths, root.path(), Some(&session.id)).in_view(origin);
+    let crate::commands::Outcome::Local { text, .. } = service
+        .execute(crate::commands::parse("/context").unwrap())
+        .unwrap()
+    else {
+        panic!("context output")
+    };
+    let context: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(context["actors"].as_array().unwrap().len(), 1);
+    assert_eq!(context["actors"][0]["id"], "old-worker");
+    let mut transcript = super::history::load(&paths, &session.id).unwrap();
+    transcript.focus(ViewTarget {
+        target: view.bindings["old-worker"].target.clone(),
+        goal: Some(session.goal.id.clone()),
+        readonly: false,
+    });
+    assert!(
+        transcript
+            .visible_entries()
+            .any(|entry| entry.body == "old member output")
+    );
+    assert_eq!(
+        transcript
+            .ownership
+            .event(&before[1].data)
+            .target
+            .member_id(),
+        "old-worker"
+    );
+    assert_eq!(
+        serde_json::to_value(before).unwrap(),
+        serde_json::to_value(store.events(&session.id, 0).unwrap()).unwrap(),
+        "projection must not rewrite durable events"
+    );
+    assert_eq!(transcript.usage["old-worker"].input, 7);
+    assert_eq!(transcript.usage["old-worker"].output, 3);
+}

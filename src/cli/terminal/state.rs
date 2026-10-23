@@ -185,7 +185,7 @@ impl Screen {
                 if let EventData::Created {
                     objective: text, ..
                 }
-                | EventData::User { message: text } = &event.data
+                | EventData::User { message: text, .. } = &event.data
                     && self.view.is_main()
                 {
                     self.input.remember(text);

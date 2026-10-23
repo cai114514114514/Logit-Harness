@@ -159,7 +159,8 @@ impl Context {
         jobs.spawn(async move {
             let context = self.clone();
             let loaded = tokio::task::spawn_blocking(move || {
-                let session: Session = Store::open(&self.paths.database())?.load(&id)?;
+                let mut session: Session = Store::open(&self.paths.database())?.load(&id)?;
+                session.normalize_team();
                 let transcript = super::history::load_view(&self.paths, &id, self.view.clone())?;
                 let recent = super::launch::recent(&self.paths, &session.workspace)?;
                 Ok(Reply::Open {

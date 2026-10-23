@@ -182,6 +182,7 @@ fn state_and_events_survive_reopen_with_monotonic_cursor() {
             "s1",
             &serde_json::json!({"revision":1}),
             EventData::User {
+                turn: None,
                 message: "build".into(),
             },
         )
@@ -191,6 +192,7 @@ fn state_and_events_survive_reopen_with_monotonic_cursor() {
             "s1",
             &serde_json::json!({"revision":2}),
             EventData::User {
+                turn: None,
                 message: "correct".into(),
             },
         )

@@ -193,7 +193,8 @@ impl Browser {
 pub fn load(paths: &Paths, id: &str) -> anyhow::Result<Transcript> {
     let store = Store::open(&paths.database())?;
     let mut projection = Transcript::default();
-    if let Ok(session) = store.load::<crate::runtime::state::Session>(id) {
+    if let Ok(mut session) = store.load::<crate::runtime::state::Session>(id) {
+        session.normalize_team();
         projection.ownership.bindings = session.actor_bindings();
         for archive in &session.archives {
             projection.team(&archive.team.view());

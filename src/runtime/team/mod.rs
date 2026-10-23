@@ -2,6 +2,7 @@
 mod control;
 mod corrections;
 mod mailbox;
+mod migration;
 mod model;
 mod recovery;
 mod scheduling;

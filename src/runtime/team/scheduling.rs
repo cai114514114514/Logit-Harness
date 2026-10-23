@@ -189,62 +189,14 @@ impl Session {
                 .into_values()
                 .map(|receipt| (receipt.request.key(), receipt))
                 .collect();
+            super::migration::normalize(&mut archive.team, &mut archive.actors, &archive.graph);
         }
         for member in self.team.members.values_mut() {
             member.interrupted = self.team.mail.iter().any(|m| {
                 m.user && m.target.member_id() == member.id && !m.delivered && m.error.is_none()
             });
         }
-        let legacy: Vec<_> = self
-            .actors
-            .values()
-            .filter(|a| a.role == Role::Worker && self.team.member_for_actor(&a.id).is_none())
-            .cloned()
-            .collect();
-        for actor in legacy {
-            let id = actor.id.clone();
-            let active = !actor.retired && actor.phase != Phase::Done;
-            let assignment_id = format!("legacy-{id}");
-            let step = actor.step.clone().unwrap_or_default();
-            self.team.assignments.insert(
-                assignment_id.clone(),
-                Assignment {
-                    id: assignment_id.clone(),
-                    version: actor.scope.steps.get(&step).copied().unwrap_or(1),
-                    member: id.clone(),
-                    actor: id.clone(),
-                    task: actor.task.clone(),
-                    writable: self
-                        .graph
-                        .steps
-                        .get(&step)
-                        .map(|s| s.files.clone())
-                        .unwrap_or_default(),
-                    step,
-                    status: if active {
-                        AssignmentStatus::Active
-                    } else {
-                        AssignmentStatus::Finished
-                    },
-                },
-            );
-            self.team.members.insert(
-                id.clone(),
-                Member {
-                    id: id.clone(),
-                    name: id.clone(),
-                    assignment: active.then_some(assignment_id),
-                    actor: Some(id.clone()),
-                    attempts: vec![id],
-                    paused: false,
-                    interrupted: false,
-                    stopping: false,
-                    waiting: None,
-                    mail_seen: 0,
-                    compact_pending: false,
-                },
-            );
-        }
+        super::migration::normalize(&mut self.team, &mut self.actors, &self.graph);
     }
 }
 

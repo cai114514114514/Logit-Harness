@@ -86,6 +86,87 @@ fn legacy_sessions_get_empty_team_without_losing_main_target() {
     );
 }
 
+#[test]
+fn legacy_workers_keep_immutable_assignment_ownership_after_reload_and_finish() {
+    let mut original = session();
+    let active = original
+        .assign_member(Some("Ada"), "a", "legacy active")
+        .unwrap();
+    let finished = original
+        .assign_member(Some("Bob"), "b", "legacy done")
+        .unwrap();
+    original.finish_assignment(&finished.actor, AssignmentStatus::Finished);
+    let mut value = serde_json::to_value(original).unwrap();
+    value.as_object_mut().unwrap().remove("team");
+    for actor in value["actors"].as_object_mut().unwrap().values_mut() {
+        actor.as_object_mut().unwrap().remove("target");
+    }
+    let mut restored: Session = serde_json::from_value(value).unwrap();
+    restored.normalize_team();
+    for actor in [&active.actor, &finished.actor] {
+        assert_eq!(restored.actor_bindings()[actor].target.member_id(), actor);
+        assert!(
+            matches!(&restored.actors[actor].target, Some(Target::Member { assignment: Some(reference), .. }) if reference.id == format!("legacy-{actor}"))
+        );
+    }
+    assert!(restored.team.members[&finished.actor].assignment.is_none());
+    assert!(restored.actors[&finished.actor].retired);
+    let target = restored.actors[&active.actor].target.clone();
+    restored.finish_assignment(&active.actor, AssignmentStatus::Finished);
+    let mut reloaded: Session =
+        serde_json::from_value(serde_json::to_value(restored).unwrap()).unwrap();
+    reloaded.normalize_team();
+    assert_eq!(reloaded.actors[&active.actor].target, target);
+    assert!(reloaded.actors[&active.actor].retired);
+}
+
+#[test]
+fn legacy_archive_projects_finished_worker_without_reviving_it() {
+    use loh::runtime::conversation::Archive;
+    let mut old = session();
+    let assignment = old
+        .assign_member(Some("Ada"), "a", "archived task")
+        .unwrap();
+    old.finish_assignment(&assignment.actor, AssignmentStatus::Finished);
+    let goal = old.goal.id.clone();
+    let archive = Archive {
+        team: old.team,
+        goal: old.goal,
+        status: loh::domain::Status::Completed,
+        graph: old.graph,
+        actors: old.actors,
+        evidence: vec![],
+        actions: Default::default(),
+        report: None,
+    };
+    let mut current = session();
+    current.archives.push(archive);
+    let mut saved = serde_json::to_value(current).unwrap();
+    saved["archives"][0].as_object_mut().unwrap().remove("team");
+    for actor in saved["archives"][0]["actors"]
+        .as_object_mut()
+        .unwrap()
+        .values_mut()
+    {
+        actor.as_object_mut().unwrap().remove("target");
+    }
+    let mut restored: Session = serde_json::from_value(saved).unwrap();
+    restored.normalize_team();
+    let origin = restored.resolve_view(&assignment.actor).unwrap();
+    assert!(origin.readonly);
+    assert_eq!(origin.goal, Some(goal));
+    assert!(restored.archives[0].actors[&assignment.actor].retired);
+    assert!(
+        restored.archives[0].team.members[&assignment.actor]
+            .assignment
+            .is_none()
+    );
+    assert!(
+        matches!(&restored.actor_bindings()[&assignment.actor].target, Target::Member { assignment: Some(reference), .. } if reference.id == format!("legacy-{}", assignment.actor))
+    );
+    assert!(restored.team.members.is_empty());
+}
+
 use loh::{
     domain::{EventData, Status, Usage},
     model::{ModelEvent, Provider, Request as ModelRequest, Response},

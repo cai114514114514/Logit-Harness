@@ -37,7 +37,8 @@ pub fn prepare(
         executable.is_absolute() && paths.home.is_absolute(),
         "window launch requires explicit absolute executable and home paths"
     );
-    let state: Session = Store::open(&paths.database())?.load(session)?;
+    let mut state: Session = Store::open(&paths.database())?.load(session)?;
+    state.normalize_team();
     state.target_view(target)?;
     let utf8 = |path: &Path| {
         path.to_str()

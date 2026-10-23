@@ -167,7 +167,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             json,
         } => {
             let id = resolve(&paths, &id)?;
-            let state: Session = Store::open(&paths.database())?.load(&id)?;
+            let mut state: Session = Store::open(&paths.database())?.load(&id)?;
+            state.normalize_team();
             let target = state.resolve_view(&agent)?;
             super::stream::attach_view(&paths, &id, after, json, target).await?;
         }

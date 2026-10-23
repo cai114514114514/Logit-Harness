@@ -103,6 +103,7 @@ impl Runner {
             Control::Answer { id, text } => {
                 self.emit(EventData::User {
                     message: text.clone(),
+                    turn: None,
                 })?;
                 if let Err(error) = self.answer_question(&id, &text).await {
                     self.emit(EventData::Diagnostic {
@@ -125,6 +126,9 @@ impl Runner {
                 )?;
             }
             Control::Resume => {
+                for actor in self.session.actors.values_mut() {
+                    actor.global_pause = false;
+                }
                 if self.session.mode != super::conversation::Mode::Engineering {
                     return self.resume_readonly();
                 }
@@ -215,10 +219,11 @@ impl Runner {
             return self.halt(Status::Paused, "user requested pause");
         }
         if self.session.mode != super::conversation::Mode::Engineering {
+            let turn = turn.unwrap_or_else(|| self.record_turn(&text));
             self.emit(EventData::User {
                 message: text.clone(),
+                turn: Some(turn.clone()),
             })?;
-            let turn = turn.unwrap_or_else(|| self.record_turn(&text));
             return self.conversation_turn(text, turn);
         }
         let turn = turn.unwrap_or_else(|| self.record_turn(&text));
@@ -268,7 +273,7 @@ impl Runner {
     pub(super) fn work_turn(&mut self, text: String, id: String) -> anyhow::Result<()> {
         let prompt_only = self.session.condition == super::condition::Condition::Prompt;
         self.session.inbox.push(UserMessage {
-            id,
+            id: id.clone(),
             text: text.clone(),
             applied: prompt_only,
             prior: self.session.status.clone(),
@@ -277,7 +282,10 @@ impl Runner {
         if prompt_only {
             self.append_prompt_correction(&text);
         }
-        self.emit(EventData::User { message: text })?;
+        self.emit(EventData::User {
+            message: text,
+            turn: Some(id),
+        })?;
         if matches!(self.session.status, Status::Completed | Status::Waiting) {
             self.status(Status::Running, "received new user input")?;
         }

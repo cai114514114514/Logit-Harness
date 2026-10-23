@@ -40,7 +40,8 @@ pub struct SessionView {
     pub elapsed: u64,
 }
 impl From<Session> for SessionView {
-    fn from(session: Session) -> Self {
+    fn from(mut session: Session) -> Self {
+        session.normalize_team();
         let bindings = session.actor_bindings();
         let mut team = session.team.view();
         team.targets = session

@@ -269,7 +269,9 @@ impl<'a> Service<'a> {
         let id = self.id()?;
         crate::config::validate_id(id)?;
         anyhow::ensure!(self.paths.database().exists(), "会话数据库不存在");
-        Store::open(&self.paths.database())?.load(id)
+        let mut session: Session = Store::open(&self.paths.database())?.load(id)?;
+        session.normalize_team();
+        Ok(session)
     }
     fn optional_session(&self) -> anyhow::Result<Option<Session>> {
         self.session.map(|_| self.load()).transpose()

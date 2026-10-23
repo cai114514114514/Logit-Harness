@@ -352,16 +352,20 @@ impl Transcript {
                 }
                 self.done(i);
             }
-            EventData::Created { objective, .. } | EventData::User { message: objective }
-                if !objective.is_empty() =>
-            {
-                let i = self.add(
-                    format!("user:{}", event.sequence),
-                    Kind::User,
-                    "user",
-                    "你".into(),
-                    stamp,
-                );
+            EventData::Created { objective, .. }
+            | EventData::User {
+                message: objective, ..
+            } if !objective.is_empty() => {
+                let id = match &event.data {
+                    EventData::User {
+                        turn: Some(turn), ..
+                    } => format!("user:{turn}"),
+                    _ => format!("user:{}", event.sequence),
+                };
+                if self.entries.iter().any(|entry| entry.id == id) {
+                    return;
+                }
+                let i = self.add(id, Kind::User, "user", "你".into(), stamp);
                 self.entries[i].body = objective.clone();
                 self.done(i);
             }

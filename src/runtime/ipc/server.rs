@@ -186,7 +186,9 @@ async fn serve(stream: UnixStream, endpoint: Endpoint) -> anyhow::Result<()> {
             send(reader.get_mut(), &ServerMessage::Receipt { receipt }).await?;
         }
         ClientMessage::TargetStatus { target } => {
-            let (state, sequence): (Session, u64) = endpoint.store.snapshot(&endpoint.session)?;
+            let (mut state, sequence): (Session, u64) =
+                endpoint.store.snapshot(&endpoint.session)?;
+            state.normalize_team();
             match state.target_view(&target) {
                 Ok(state) => {
                     send(
@@ -270,7 +272,8 @@ async fn subscribe_view(
     target: Option<ViewTarget>,
 ) -> anyhow::Result<()> {
     let mut receiver = endpoint.events.subscribe();
-    let (state, sequence): (Session, u64) = endpoint.store.snapshot(&endpoint.session)?;
+    let (mut state, sequence): (Session, u64) = endpoint.store.snapshot(&endpoint.session)?;
+    state.normalize_team();
     let message = if let Some(target) = target {
         match state.target_view(&target) {
             Ok(state) => ServerMessage::TargetView {

@@ -69,6 +69,9 @@ pub enum EventData {
     },
     User {
         message: String,
+        /// Correlates addressed input with its receipt without comparing text.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        turn: Option<String>,
     },
     Message {
         actor: String,

@@ -48,6 +48,7 @@ async fn addressed_ipc_retry_keys_are_tuples_and_ack_is_only_persistence() {
             &session.id,
             &session,
             EventData::User {
+                turn: None,
                 message: "fixture".into(),
             },
         )
@@ -138,6 +139,7 @@ fn member_commands_capture_assignment_and_use_saved_workspace() {
             &session.id,
             &session,
             EventData::User {
+                turn: None,
                 message: "fixture".into(),
             },
         )
@@ -223,6 +225,7 @@ async fn three_target_subscribers_replay_with_independent_cursors_and_public_vie
             &session.id,
             &session,
             EventData::User {
+                turn: None,
                 message: "second".into(),
             },
         )
@@ -262,6 +265,7 @@ async fn three_target_subscribers_replay_with_independent_cursors_and_public_vie
         .append(
             &session.id,
             EventData::User {
+                turn: None,
                 message: "third".into(),
             },
         )
@@ -375,6 +379,7 @@ fn launcher_quotes_trusted_paths_and_returns_attach_on_failure() {
             &session.id,
             &session,
             EventData::User {
+                turn: None,
                 message: "fixture".into(),
             },
         )

@@ -62,6 +62,11 @@ impl Runner {
                 continue;
             }
             let role = self.session.actors[&id].role.clone();
+            if (self.session.actors[&id].local_pause || self.session.actors[&id].global_pause)
+                && !self.session.actors[&id].compact
+            {
+                continue;
+            }
             if role == Role::Worker
                 && let Some(member) = self.session.team.member_for_actor(&id)
             {

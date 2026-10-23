@@ -236,6 +236,7 @@ impl Runner {
                             return Ok(());
                         }
                         let calls = response.calls()?;
+                        actor.workflow_pending = false;
                         let text = response.text();
                         actor.context.append(&response.output);
                         if !text.is_empty() {

@@ -307,6 +307,14 @@ impl Runner {
         Ok(())
     }
     pub(super) fn halt(&mut self, target: Status, reason: &str) -> anyhow::Result<()> {
+        for actor in self
+            .session
+            .actors
+            .values_mut()
+            .filter(|actor| actor.phase != super::actor::Phase::Done)
+        {
+            actor.global_pause = true;
+        }
         for job in self.jobs.values() {
             job.cancel.cancel();
         }

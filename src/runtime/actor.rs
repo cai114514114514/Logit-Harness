@@ -35,6 +35,16 @@ pub struct Pending {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Actor {
+    /// Interruptions belong to existing attempts. Fresh explicit side questions
+    /// start without these gates even while engineering remains paused.
+    #[serde(default)]
+    pub local_pause: bool,
+    #[serde(default)]
+    pub global_pause: bool,
+    /// A selected member workflow must get an executable response before a
+    /// later invocation may replace its turn. Cancellation/recovery retain it.
+    #[serde(default)]
+    pub workflow_pending: bool,
     /// Immutable submission target: a late side reply belongs to this assignment,
     /// even when its stable member has already moved on to another task.
     #[serde(default)]
@@ -87,6 +97,9 @@ impl Actor {
         let mut context = Context::default();
         context.user(&task);
         Self {
+            local_pause: false,
+            global_pause: false,
+            workflow_pending: false,
             target: None,
             turn: identity(),
             response: None,

@@ -229,7 +229,10 @@ impl Runner {
         );
         actor.turn = id.clone();
         self.session.actors.insert(actor.id.clone(), actor);
-        self.emit(EventData::User { message: text })
+        self.emit(EventData::User {
+            message: text,
+            turn: Some(id),
+        })
     }
 
     pub(super) fn queue_goal(&mut self, text: String, turn: String) -> anyhow::Result<()> {

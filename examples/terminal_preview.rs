@@ -33,7 +33,7 @@ fn main() -> anyhow::Result<()> {
         EventData::Message { actor: "main".into(), text: "我会先检查 **存储接口** 和现有测试，再实现 SQLite 迁移。命令行参数和返回格式会保留。".into() },
         EventData::ActionStarted { id: "read".into(), tool: "read_file".into(), arguments: json!({"path":"src/storage.rs"}) },
         EventData::ActionFinished { id: "read".into(), success: true, result: json!({"result":{"data":{"content":"pub trait Store {\n    fn get(&self, key: &str) -> Result<Option<String>>;\n    fn set(&mut self, key: &str, value: &str) -> Result<()>;\n}"}}}) },
-        EventData::User { message: "已有 JSON 数据要自动迁移，重复启动不能重复导入。".into() },
+        EventData::User { message: "已有 JSON 数据要自动迁移，重复启动不能重复导入。".into(), turn: None },
         EventData::Revised { revision: 2, changed: vec!["存储迁移".into()] },
         EventData::ActionStarted { id: "test".into(), tool: "check".into(), arguments: json!({"command":"cargo test storage::tests"}) },
         EventData::ActionFinished { id: "test".into(), success: false, result: json!({"result":{"data":{"process":{"output":"running 4 tests\ntest preserves_cli ... ok\ntest migrates_existing_data ... ok\ntest migration_is_idempotent ... FAILED\nassertion failed: expected 3 rows, found 6"}}}}) },

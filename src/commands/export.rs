@@ -61,7 +61,7 @@ pub(super) fn markdown(session: &Session, sequence: u64, events: &[SessionEvent]
             EventData::Created {
                 objective: text, ..
             }
-            | EventData::User { message: text }
+            | EventData::User { message: text, .. }
                 if !text.is_empty() =>
             {
                 heading(&mut output, "用户", "user", event, None);
