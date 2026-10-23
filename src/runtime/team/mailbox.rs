@@ -43,6 +43,7 @@ impl Team {
             delivered: false,
             error: None,
         });
+        self.refresh_wait_notice();
         Ok(())
     }
 
@@ -61,7 +62,17 @@ impl Team {
             .get_mut(member)
             .ok_or_else(|| anyhow::anyhow!("unknown waiting member"))?;
         member.waiting = (!pending).then(|| from.to_owned());
+        self.refresh_wait_notice();
         Ok(())
+    }
+
+    /// Diagnosis runs only when execution is idle. Forget a resolved/changed
+    /// problem at the mutation itself, including while model work is running,
+    /// so an identical cycle formed later is a new incident rather than a retry.
+    pub(super) fn refresh_wait_notice(&mut self) {
+        if !self.wait_notice.is_empty() && self.wait_notice != self.wait_problem() {
+            self.wait_notice.clear();
+        }
     }
 
     /// Pure wait-graph diagnosis; no provider call is needed to find deadlocks.
@@ -221,5 +232,120 @@ impl Runner {
         self.main_feedback(&format!("Team wait graph needs intervention: {problem}. Send an addressed reply or revise assignments; waiting peers will not poll the model."));
         self.emit(EventData::Diagnostic { message: problem })?;
         Ok(true)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        model::{ModelEvent, Provider, Request, Response},
+        runtime::{
+            graph::{Step, StepStatus},
+            runner::Settings,
+            state::Session,
+        },
+        store::Store,
+        tools::{ToolHost, files::Workspace},
+    };
+    use std::sync::Arc;
+    use tokio::sync::mpsc;
+    use tokio_util::sync::CancellationToken;
+
+    struct NoRequests;
+    #[async_trait::async_trait]
+    impl Provider for NoRequests {
+        async fn respond(
+            &self,
+            _: Request,
+            _: CancellationToken,
+            _: mpsc::UnboundedSender<ModelEvent>,
+        ) -> anyhow::Result<Response> {
+            panic!("wait-graph diagnosis must not call the provider")
+        }
+    }
+
+    #[test]
+    fn repeated_wait_cycle_after_reply_gets_one_fresh_intervention() {
+        let root = tempfile::tempdir().unwrap();
+        let state = tempfile::tempdir().unwrap();
+        let mut session = Session::new(root.path().into(), "build", 100_000, 60);
+        session
+            .graph
+            .install(
+                ["a", "b"]
+                    .into_iter()
+                    .map(|id| Step {
+                        id: id.into(),
+                        description: id.into(),
+                        requirements: BTreeSet::from(["r1".into()]),
+                        dependencies: BTreeSet::new(),
+                        files: BTreeSet::new(),
+                        revision: 1,
+                        status: StepStatus::Pending,
+                    })
+                    .collect(),
+                &session.goal,
+            )
+            .unwrap();
+        let a = session.assign_member(Some("Ada"), "a", "first").unwrap();
+        let b = session.assign_member(Some("Bob"), "b", "second").unwrap();
+        let host = Arc::new(ToolHost::new(
+            Workspace::open(root.path()).unwrap(),
+            Arc::new(tokio::sync::RwLock::new(session.goal.clone())),
+            state.path().join("logs"),
+        ));
+        let store = Arc::new(Store::open(&state.path().join("db")).unwrap());
+        let (mut runner, _, mut events) = Runner::new(
+            session,
+            store,
+            Arc::new(NoRequests),
+            host,
+            Settings::default(),
+        );
+        runner.session.team.wait(&a.member, &b.member).unwrap();
+        runner.session.team.wait(&b.member, &a.member).unwrap();
+        assert!(runner.diagnose_waits().unwrap());
+        assert!(
+            !runner.diagnose_waits().unwrap(),
+            "an unchanged cycle must not repeat"
+        );
+
+        let target = runner.session.member_target("Ada").unwrap();
+        runner
+            .session
+            .team
+            .send("reply", &b.member, target, "result available", false)
+            .unwrap();
+        runner.deliver_mail().unwrap();
+        assert!(runner.session.team.wait_problem().is_empty());
+        // Model work can run while the graph is healthy, so deliberately do not
+        // call the idle-only diagnosis at this point. Reading the mail advances
+        // the same watermark as start_model, then this member waits again.
+        runner
+            .session
+            .team
+            .members
+            .get_mut(&a.member)
+            .unwrap()
+            .mail_seen = runner.session.team.mail.len();
+        runner.session.team.wait(&a.member, &b.member).unwrap();
+        assert!(
+            runner.diagnose_waits().unwrap(),
+            "the re-formed cycle needs a fresh intervention"
+        );
+        assert!(
+            !runner.diagnose_waits().unwrap(),
+            "the re-formed cycle is still notified only once"
+        );
+        let mut notices = 0;
+        while let Ok(event) = events.try_recv() {
+            if let EventData::Diagnostic { message } = event.data
+                && message.starts_with("peer wait cycle:")
+            {
+                notices += 1;
+            }
+        }
+        assert_eq!(notices, 2);
     }
 }

@@ -510,3 +510,116 @@ async fn compact_targets_idle_member_without_reviving_its_finished_assignment() 
         "read-only answer"
     );
 }
+
+struct WaitForStop {
+    main_calls: AtomicUsize,
+    resumed: Semaphore,
+}
+
+#[async_trait::async_trait]
+impl Provider for WaitForStop {
+    async fn respond(
+        &self,
+        request: ModelRequest,
+        cancel: CancellationToken,
+        _: mpsc::UnboundedSender<ModelEvent>,
+    ) -> anyhow::Result<Response> {
+        if request.instructions.starts_with("ROLE: main") {
+            if self.main_calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                return Ok(Response {
+                    output: vec![
+                        serde_json::json!({"type":"function_call","call_id":"wait-for-member","name":"wait_workers","arguments":"{}"}),
+                    ],
+                    usage: Usage::default(),
+                    model: "fixture".into(),
+                });
+            }
+            assert!(
+                request
+                    .input
+                    .iter()
+                    .any(|item| item.to_string().contains("stopped")),
+                "main needs an actionable reason for the worker disappearing"
+            );
+            self.resumed.add_permits(1);
+        }
+        cancel.cancelled().await;
+        anyhow::bail!("fixture cancelled")
+    }
+}
+
+#[tokio::test]
+async fn stopping_last_member_wakes_main_after_wait_workers() {
+    let root = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let mut s = session();
+    s.workspace = root.path().into();
+    let assignment = s.assign_member(Some("Ada"), "a", "first").unwrap();
+    let target = s.member_target("Ada").unwrap();
+    let id = s.id.clone();
+    let provider = Arc::new(WaitForStop {
+        main_calls: 0.into(),
+        resumed: Semaphore::new(0),
+    });
+    let host = Arc::new(ToolHost::new(
+        Workspace::open(root.path()).unwrap(),
+        Arc::new(tokio::sync::RwLock::new(s.goal.clone())),
+        state.path().join("logs"),
+    ));
+    let store = Arc::new(Store::open(&state.path().join("db")).unwrap());
+    let (runner, control, mut events) = Runner::new(
+        s,
+        store.clone(),
+        provider.clone(),
+        host,
+        Settings {
+            max_output: 128,
+            ..Settings::default()
+        },
+    );
+    let run = tokio::spawn(runner.run());
+    // Persist observations at explicit command boundaries, never infer blocking
+    // from a delay or from the model merely returning a wait tool call.
+    tokio::time::timeout(Duration::from_secs(3), async {
+        for sequence in 0.. {
+            let request = format!("snapshot-{sequence}");
+            control
+                .send(direct(
+                    Target::Main,
+                    &request,
+                    MemberControl::Limit { limit: 2 },
+                ))
+                .await
+                .unwrap();
+            receipt(&mut events, &request).await;
+            let snapshot = serde_json::to_value(store.load::<Session>(&id).unwrap()).unwrap();
+            if snapshot["actors"]["main"]["phase"] == "blocked" {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    control
+        .send(direct(target, "stop-member", MemberControl::Stop))
+        .await
+        .unwrap();
+    let woke = tokio::time::timeout(Duration::from_secs(3), provider.resumed.acquire()).await;
+    // Always settle the runner, including RED, so a failed assertion cannot
+    // leave an unjoined fixture task behind.
+    control.send(Control::Stop).await.unwrap();
+    let s = tokio::time::timeout(Duration::from_secs(3), run)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert!(
+        woke.is_ok(),
+        "main stayed blocked after its only member stopped"
+    );
+    assert_eq!(
+        s.team.assignments[&assignment.id].status,
+        AssignmentStatus::Stopped
+    );
+}

@@ -168,6 +168,7 @@ impl Session {
             actor.retired = true;
             actor.phase = Phase::Done;
         }
+        self.team.refresh_wait_notice();
     }
 
     /// Deterministic migration: old actor IDs become member IDs, never reused actors.
@@ -282,6 +283,13 @@ impl Runner {
                     .get_mut(&member.id)
                     .unwrap()
                     .stopping = false;
+                if let Some(assignment_id) = &member.assignment {
+                    let assignment = &self.session.team.assignments[assignment_id];
+                    self.main_feedback(&format!(
+                        "Member {} stopped after its operations settled. Assignment {} for step {} was released without completing the objective. Inspect settled changes and evidence, then reassign the unfinished work or continue it yourself.",
+                        member.name, assignment.id, assignment.step,
+                    ));
+                }
                 self.emit(crate::domain::EventData::Diagnostic {
                     message: format!("member {} stopped after operations settled", member.name),
                 })?;
