@@ -6,7 +6,7 @@ use crate::{
     domain::EventData,
     runtime::{
         daemon,
-        ipc::{self, ClientMessage, ServerMessage},
+        ipc::ServerMessage,
         state::{Control, Session},
     },
     store::Store,
@@ -39,14 +39,26 @@ pub(super) enum Reply {
         revision: u64,
     },
     Message(ServerMessage),
+    Notice {
+        origin: crate::runtime::view::ViewTarget,
+        text: String,
+    },
+    Accepted {
+        origin: crate::runtime::view::ViewTarget,
+        request: crate::runtime::team::Request,
+    },
     Sent,
     Failed {
+        origin: crate::runtime::view::ViewTarget,
         text: String,
         draft: String,
         revision: u64,
     },
-    History(super::history::Browser),
-    Copied,
+    History {
+        origin: crate::runtime::view::ViewTarget,
+        browser: super::history::Browser,
+    },
+    Copied(crate::runtime::view::ViewTarget),
 }
 pub(super) type Jobs = JoinSet<(u64, anyhow::Result<Reply>)>;
 #[derive(Clone)]
@@ -54,6 +66,7 @@ pub(super) struct Context {
     pub generation: u64,
     pub view: crate::runtime::view::ViewTarget,
     pub revision: u64,
+    pub client_id: String,
     pub paths: Paths,
     pub workspace: PathBuf,
     pub session: Option<String>,
@@ -62,7 +75,8 @@ impl Context {
     pub fn new(generation: u64, paths: &Paths, screen: &Screen) -> Self {
         Self {
             generation,
-            view: screen.view.clone(),
+            view: screen.draft_view(),
+            client_id: screen.client_id.clone(),
             revision: screen.input.revision(),
             paths: Paths::new(paths.home.clone()),
             workspace: screen.workspace.clone(),
@@ -77,6 +91,7 @@ impl Context {
                 context.session.as_deref(),
             )
             .in_view(context.view.clone())
+            .with_client(context.client_id.clone())
             .execute(command)
         });
     }
@@ -90,8 +105,10 @@ impl Context {
     ) {
         let generation = self.generation;
         let revision = self.revision;
+        let origin = self.view.clone();
         jobs.spawn(async move {
             let retained = draft.clone();
+            let failed_origin = origin.clone();
             let result = tokio::task::spawn_blocking(move || match operation(&self) {
                 Ok(outcome) => Ok(Reply::Command {
                     context: self,
@@ -99,6 +116,7 @@ impl Context {
                     draft,
                 }),
                 Err(error) => Ok(Reply::Failed {
+                    origin: origin.clone(),
                     text: error.to_string(),
                     draft,
                     revision,
@@ -107,6 +125,7 @@ impl Context {
             .await
             .unwrap_or_else(|error| {
                 Ok(Reply::Failed {
+                    origin: failed_origin,
                     text: format!("本地命令中断：{error}"),
                     draft: retained,
                     revision,
@@ -141,7 +160,7 @@ impl Context {
             let context = self.clone();
             let loaded = tokio::task::spawn_blocking(move || {
                 let session: Session = Store::open(&self.paths.database())?.load(&id)?;
-                let transcript = super::history::load(&self.paths, &id)?;
+                let transcript = super::history::load_view(&self.paths, &id, self.view.clone())?;
                 let recent = super::launch::recent(&self.paths, &session.workspace)?;
                 Ok(Reply::Open {
                     context: self,
@@ -212,11 +231,13 @@ impl Context {
                     })
                 }
                 Ok(Err(error)) => Ok(Reply::Failed {
+                    origin: self.view.clone(),
                     text: error.to_string(),
                     draft,
                     revision: self.revision,
                 }),
                 Err(error) => Ok(Reply::Failed {
+                    origin: self.view.clone(),
                     text: format!("创建会话中断：{error}"),
                     draft,
                     revision: self.revision,
@@ -225,110 +246,59 @@ impl Context {
             (generation, result)
         });
     }
-    pub fn control(self, jobs: &mut Jobs, command: Control, draft: String, connected: bool) {
+    fn local(
+        self,
+        jobs: &mut Jobs,
+        operation: impl FnOnce(Self) -> anyhow::Result<Reply> + Send + 'static,
+    ) {
         let generation = self.generation;
+        let origin = self.view.clone();
         jobs.spawn(async move {
-            let result =
-                async {
-                    let id = self
-                        .session
-                        .as_ref()
-                        .ok_or_else(|| anyhow::anyhow!("请先打开会话"))?;
-                    if !connected {
-                        let socket = self.paths.socket(id)?;
-                        if tokio::net::UnixStream::connect(&socket).await.is_ok() {
-                            ipc::check_protocol(&socket).await?;
-                        }
-                        if matches!(command, Control::Resume) {
-                            daemon::resume(&self.paths, id).await?;
-                            return Ok(Reply::Sent);
-                        }
-                        // Persist before starting an archived owner: /pause or /plan
-                        // must be applied before it can schedule old engineering work.
-                        let database = self.paths.database();
-                        let target = id.clone();
-                        let data = serde_json::to_value(&command)?;
-                        tokio::task::spawn_blocking(move || {
-                            Store::open(&database)?.enqueue(&target, &data)
-                        })
-                        .await??;
-                        daemon::launch(&self.paths, id).await.map_err(|error| anyhow::anyhow!(
-                        "指令已保存，后台启动失败：{error}。用 /resume 恢复；不要重复提交原指令"
-                    ))?;
-                        return Ok(Reply::Sent);
-                    }
-                    match ipc::request(&self.paths.socket(id)?, ClientMessage::Command { command })
-                        .await?
-                    {
-                        ServerMessage::Ack => Ok(Reply::Sent),
-                        ServerMessage::Error { message } => Err(anyhow::anyhow!(message)),
-                        message => Ok(Reply::Message(message)),
-                    }
-                }
-                .await;
+            let result = tokio::task::spawn_blocking(move || operation(self))
+                .await
+                .unwrap_or_else(|error| Err(error.into()));
             (
                 generation,
                 result.or_else(|error: anyhow::Error| {
-                    Ok(Reply::Failed {
-                        text: format!("未确认送达：{error}。请先查看会话记录，避免重复提交。"),
-                        draft,
-                        revision: self.revision,
+                    Ok(Reply::Notice {
+                        origin,
+                        text: format!("本地操作失败：{error}"),
                     })
                 }),
             )
         });
     }
     pub fn history(self, jobs: &mut Jobs, query: String, tools: bool) {
-        let generation = self.generation;
-        jobs.spawn(async move {
-            (
-                generation,
-                tokio::task::spawn_blocking(move || {
-                    let id = self
-                        .session
-                        .as_ref()
-                        .ok_or_else(|| anyhow::anyhow!("请先打开会话"))?;
-                    Ok(Reply::History(super::history::Browser::new(
-                        super::history::load(&self.paths, id)?,
-                        query,
-                        tools,
-                    )))
-                })
-                .await
-                .unwrap_or_else(|e| Err(e.into())),
-            )
+        self.local(jobs, move |context| {
+            let id = context
+                .session
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("请先打开会话"))?;
+            Ok(Reply::History {
+                origin: context.view.clone(),
+                browser: super::history::Browser::new(
+                    super::history::load_view(&context.paths, id, context.view.clone())?,
+                    query,
+                    tools,
+                ),
+            })
         });
     }
     pub fn copy_selector(self, jobs: &mut Jobs, selector: String) {
-        jobs.spawn(async move {
-            (
-                self.generation,
-                tokio::task::spawn_blocking(move || {
-                    let id = self
-                        .session
-                        .as_ref()
-                        .ok_or_else(|| anyhow::anyhow!("请先打开会话"))?;
-                    let transcript = super::history::load(&self.paths, id)?;
-                    let text = super::history::selected_text(&transcript, &selector)?;
-                    super::clipboard::copy(&text)?;
-                    Ok(Reply::Copied)
-                })
-                .await
-                .unwrap_or_else(|e| Err(e.into())),
-            )
+        self.local(jobs, move |context| {
+            let id = context
+                .session
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("请先打开会话"))?;
+            let transcript = super::history::load_view(&context.paths, id, context.view.clone())?;
+            super::clipboard::copy(&super::history::selected_text(&transcript, &selector)?)?;
+            Ok(Reply::Copied(context.view))
         });
     }
     pub fn copy(self, jobs: &mut Jobs, text: String) {
-        jobs.spawn(async move {
-            (
-                self.generation,
-                tokio::task::spawn_blocking(move || {
-                    super::clipboard::copy(&text)?;
-                    Ok(Reply::Copied)
-                })
-                .await
-                .unwrap_or_else(|e| Err(e.into())),
-            )
+        self.local(jobs, move |context| {
+            super::clipboard::copy(&text)?;
+            Ok(Reply::Copied(context.view))
         });
     }
 }

@@ -3,6 +3,12 @@ use super::Screen;
 use crate::{commands::Timing, runtime::conversation::Mode};
 
 pub(super) fn placeholder(screen: &Screen) -> &'static str {
+    if screen.view.readonly {
+        return "归档只读 · /history · /agent main";
+    }
+    if !screen.view.is_main() {
+        return "发给当前成员 · /pause 仅暂停此成员 · /agent main";
+    }
     match screen.session.as_ref().map(|session| session.mode) {
         None if !screen.entered => "输入消息、问题，或需要实现的目标…",
         None => "输入新消息，或输入 /",
@@ -31,6 +37,23 @@ pub(super) fn timing(timing: Timing) -> &'static str {
 /// Hide only known routine notices. Unknown diagnostics and all failures remain
 /// visible, so a new runtime error cannot disappear behind a broad keyword rule.
 pub(super) fn routine(message: &str) -> bool {
+    // Addressed success already has a structured, target-labelled receipt. Keep
+    // its raw diagnostic searchable without printing another pair of UUIDs.
+    let directed = message
+        .strip_prefix("directed request ")
+        .and_then(|message| {
+            message
+                .strip_suffix(": Applied")
+                .or_else(|| message.strip_suffix(": Pending"))
+        })
+        .or_else(|| {
+            message
+                .strip_prefix("directed input user:")
+                .and_then(|message| message.strip_suffix(": applied"))
+        });
+    if directed.is_some_and(|key| serde_json::from_str::<[String; 2]>(key).is_ok()) {
+        return true;
+    }
     matches!(
         message,
         "verified goal archived; ready for a new conversation turn"
@@ -54,4 +77,21 @@ pub(super) fn notice(message: &str) -> String {
         _ => return message.into(),
     };
     format!("{status} · {explanation}")
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn structured_success_diagnostic_is_quiet_but_errors_remain_visible() {
+        assert!(super::routine(
+            "directed request [\"client\",\"request\"]: Applied"
+        ));
+        assert!(super::routine(
+            "directed input user:[\"client\",\"request\"]: applied"
+        ));
+        assert!(!super::routine(
+            "directed request [\"client\",\"request\"]: Failed (stale assignment)"
+        ));
+        assert!(!super::routine("directed request unknown: Applied"));
+    }
 }

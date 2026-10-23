@@ -20,8 +20,7 @@ mod tests;
 
 pub(super) fn selected_text(transcript: &Transcript, selector: &str) -> anyhow::Result<String> {
     let entries = transcript
-        .entries()
-        .iter()
+        .visible_entries()
         .filter(|entry| entry.id.starts_with(selector))
         .collect::<Vec<_>>();
     anyhow::ensure!(
@@ -60,8 +59,7 @@ impl Browser {
     fn matches(&self) -> Vec<&Entry> {
         let query = self.query.to_lowercase();
         self.transcript
-            .entries()
-            .iter()
+            .visible_entries()
             .filter(|e| {
                 (e.kind == Kind::Tool || !self.tools && !e.body.is_empty())
                     && format!("{} {} {} {}", e.id, e.source, e.title, e.full_text())
@@ -150,11 +148,12 @@ impl Browser {
         .areas(frame.area());
         frame.render_widget(
             Paragraph::new(format!(
-                "完整历史 · {} 条 · 第 {}/{} 页 · 搜索：{}",
+                "完整历史 · {} 条 · 第 {}/{} 页 · 搜索：{} · {}",
                 entries.len(),
                 page + 1,
                 entries.len().div_ceil(PAGE).max(1),
-                super::state::clean(&self.query)
+                super::state::clean(&self.query),
+                self.transcript.heading()
             )),
             heading,
         );
@@ -194,6 +193,13 @@ impl Browser {
 pub fn load(paths: &Paths, id: &str) -> anyhow::Result<Transcript> {
     let store = Store::open(&paths.database())?;
     let mut projection = Transcript::default();
+    if let Ok(session) = store.load::<crate::runtime::state::Session>(id) {
+        projection.ownership.bindings = session.actor_bindings();
+        for archive in &session.archives {
+            projection.team(&archive.team.view());
+        }
+        projection.team(&session.team.view());
+    }
     loop {
         let events = store.event_page(id, projection.sequence(), 500)?;
         if events.is_empty() {
@@ -203,5 +209,15 @@ pub fn load(paths: &Paths, id: &str) -> anyhow::Result<Transcript> {
             projection.receive(&event);
         }
     }
+    Ok(projection)
+}
+
+pub(super) fn load_view(
+    paths: &Paths,
+    id: &str,
+    view: crate::runtime::view::ViewTarget,
+) -> anyhow::Result<Transcript> {
+    let mut projection = load(paths, id)?;
+    projection.focus(view);
     Ok(projection)
 }

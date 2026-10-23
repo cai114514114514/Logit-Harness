@@ -13,6 +13,11 @@ pub struct Recent {
 
 #[derive(Default)]
 pub struct Screen {
+    pub(super) drafts: super::team::Drafts,
+    pub(super) team_picker: bool,
+    pub(super) members: Vec<crate::runtime::team::MemberView>,
+    pub(super) member: Option<crate::runtime::team::MemberView>,
+    pub(super) client_id: String,
     pub view: crate::runtime::view::ViewTarget,
     pub input: Input,
     pub session: Option<SessionView>,
@@ -40,11 +45,12 @@ pub struct Screen {
 
 impl Screen {
     pub fn note(&mut self, text: impl Into<String>) {
-        self.transcript.note(&text.into());
+        self.transcript.note_in(&self.view, &text.into());
     }
     pub fn menu(&self) -> Vec<crate::commands::Completion> {
         if self.menu_hidden
             || self.picker
+            || self.team_picker
             || !self.input.text().starts_with('/')
             || self.input.text().chars().any(char::is_whitespace)
         {
@@ -109,6 +115,29 @@ impl Screen {
             ServerMessage::View { state, sequence } => {
                 if sequence >= self.snapshot.max(self.sequence) {
                     self.entered = true;
+                    self.transcript
+                        .ownership
+                        .bindings
+                        .extend(state.bindings.clone());
+                    self.transcript.team(&state.team);
+                    let archived = self
+                        .members
+                        .iter()
+                        .filter(|member| member.name.ends_with("（归档只读）"))
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    self.members = state.team.members.clone();
+                    self.members.extend(archived);
+                    if let Some(member) = self
+                        .members
+                        .iter()
+                        .find(|m| m.id == self.view.target.member_id())
+                        .cloned()
+                    {
+                        self.bind_draft();
+                        self.view.target = member.target.clone();
+                        self.member = Some(member);
+                    }
                     self.transcript.reconcile(&state.activities);
                     self.workspace = state.workspace.clone();
                     self.session = Some(*state);
@@ -157,6 +186,7 @@ impl Screen {
                     objective: text, ..
                 }
                 | EventData::User { message: text } = &event.data
+                    && self.view.is_main()
                 {
                     self.input.remember(text);
                 }
@@ -164,10 +194,22 @@ impl Screen {
                 self.activity.clear();
             }
             ServerMessage::Error { message } => self.note(message),
-            ServerMessage::TargetView { state, sequence } => self.receive(ServerMessage::View {
-                state: Box::new(state.session),
-                sequence,
-            }),
+            ServerMessage::TargetView { state, sequence } => {
+                if sequence >= self.snapshot.max(self.sequence)
+                    && super::ownership::same_view(&self.view, &state.origin)
+                {
+                    self.bind_draft();
+                    self.view.readonly = state.origin.readonly;
+                    if let Some(member) = &state.member {
+                        self.view.target = member.target.clone();
+                    }
+                    self.member = state.member;
+                }
+                self.receive(ServerMessage::View {
+                    state: Box::new(state.session),
+                    sequence,
+                });
+            }
             ServerMessage::Ack
             | ServerMessage::Hello { .. }
             | ServerMessage::Accepted { .. }

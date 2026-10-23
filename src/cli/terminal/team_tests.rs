@@ -1,0 +1,400 @@
+use super::*;
+use crate::{
+    domain::{EventData, SessionEvent},
+    runtime::{
+        team::{AssignmentRef, Target},
+        view::ViewTarget,
+    },
+};
+
+fn member(version: u64) -> ViewTarget {
+    ViewTarget {
+        target: Target::Member {
+            id: "member-a".into(),
+            assignment: Some(AssignmentRef {
+                id: "task-a".into(),
+                version,
+            }),
+        },
+        goal: Some("goal".into()),
+        readonly: false,
+    }
+}
+fn event(sequence: u64, data: EventData) -> SessionEvent {
+    SessionEvent {
+        sequence,
+        session: "fixture".into(),
+        timestamp: "2026-10-23T00:00:00Z".into(),
+        data,
+    }
+}
+#[test]
+fn ownership_precedes_first_output_and_filtered_events_advance_cursor() {
+    let mut transcript = Transcript::default();
+    transcript.focus(ViewTarget::main());
+    transcript.receive(&event(
+        1,
+        EventData::ActorBound {
+            actor: "worker-a".into(),
+            target: member(1).target,
+            goal: Some("goal".into()),
+        },
+    ));
+    transcript.receive(&event(
+        2,
+        EventData::Identity {
+            actor: "worker-a".into(),
+            response: "response-a".into(),
+            turn: "turn".into(),
+            goal: Some("goal".into()),
+            action: None,
+        },
+    ));
+    transcript.receive(&event(
+        3,
+        EventData::Message {
+            actor: "worker-a".into(),
+            text: "private member detail".into(),
+        },
+    ));
+    assert_eq!(transcript.sequence(), 3);
+    assert!(
+        !transcript
+            .lines(100, true)
+            .iter()
+            .any(|l| l.to_string().contains("private member detail"))
+    );
+    transcript.focus(member(1));
+    assert!(
+        transcript
+            .lines(100, true)
+            .iter()
+            .any(|l| l.to_string().contains("private member detail"))
+    );
+    transcript.receive(&event(
+        4,
+        EventData::Message {
+            actor: "main".into(),
+            text: "main detail".into(),
+        },
+    ));
+    assert_eq!(transcript.sequence(), 4);
+    assert!(
+        !transcript
+            .lines(100, true)
+            .iter()
+            .any(|l| l.to_string().contains("main detail"))
+    );
+}
+#[test]
+fn draft_binds_on_first_edit_and_survives_assignment_and_focus_changes() {
+    let mut screen = Screen::default();
+    screen.focus(member(1));
+    screen.input.insert("旧任务中文\n第二行");
+    screen.bind_draft();
+    screen.view = member(2);
+    assert_eq!(screen.draft_view(), member(1));
+    assert!(screen.stale_draft());
+    screen.focus(ViewTarget::main());
+    screen.input.insert("main draft");
+    screen.bind_draft();
+    screen.focus(member(2));
+    assert_eq!(screen.input.text(), "旧任务中文\n第二行");
+    assert_eq!(screen.draft_view(), member(1));
+    screen.input.take();
+    screen.bind_draft();
+    screen.input.insert("new intent");
+    screen.bind_draft();
+    assert_eq!(screen.draft_view(), member(2));
+}
+#[test]
+fn late_failure_returns_to_origin_and_local_pause_is_addressed() {
+    let mut screen = Screen::default();
+    screen.focus(member(1));
+    let revision = screen.input.revision();
+    screen.focus(ViewTarget::main());
+    screen.input.insert("main stays");
+    screen.restore_origin(&member(1), "member request".into(), revision);
+    assert_eq!(screen.input.text(), "main stays");
+    screen.focus(member(1));
+    assert_eq!(screen.input.text(), "member request");
+    let control = screen.pause();
+    assert!(
+        matches!(control, crate::runtime::state::Control::Directed { request } if request.target == member(1).target)
+    );
+}
+
+#[test]
+fn mail_receipt_updates_append_input_once_and_expose_uncertain_recovery() {
+    use crate::runtime::team::{Mail, MemberControl, Receipt, ReceiptStatus, Request};
+    let mut transcript = Transcript::default();
+    transcript.focus(member(1));
+    let request = Request {
+        id: "request".into(),
+        client_id: "client".into(),
+        target: member(1).target,
+        action: MemberControl::Message {
+            text: "保留 '$literal'\nsecond line".into(),
+        },
+    };
+    let mut receipt = Receipt {
+        applying: false,
+        request: request.clone(),
+        status: ReceiptStatus::Pending,
+        error: None,
+        pending_input: None,
+    };
+    transcript.receive(&event(
+        1,
+        EventData::RequestReceipt {
+            goal: "goal".into(),
+            receipt: receipt.clone(),
+        },
+    ));
+    transcript.drain_settled(100);
+    transcript.receive(&event(
+        2,
+        EventData::Mail {
+            goal: "goal".into(),
+            mail: Mail {
+                id: request.mail_id(),
+                from: "user".into(),
+                target: request.target.clone(),
+                text: "保留 '$literal'\nsecond line".into(),
+                user: true,
+                delivered: false,
+                error: None,
+            },
+        },
+    ));
+    receipt.status = ReceiptStatus::Failed;
+    receipt.error = Some(format!(
+        "partially applied; unresolved review: /answer {} TEXT",
+        request.recovery_id()
+    ));
+    transcript.receive(&event(
+        3,
+        EventData::RequestReceipt {
+            goal: "goal".into(),
+            receipt: receipt.clone(),
+        },
+    ));
+    assert_eq!(
+        transcript
+            .entries()
+            .iter()
+            .filter(|e| e.kind == super::transcript::Kind::User)
+            .count(),
+        1
+    );
+    let text = transcript
+        .drain_settled(200)
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        text.contains("应用失败")
+            && text.contains("partially applied")
+            && text.contains("保留 '$literal'")
+    );
+    assert!(text.contains("/agent main") && text.contains(&request.recovery_id()));
+    transcript.receive(&event(
+        4,
+        EventData::RequestReceipt {
+            goal: "goal".into(),
+            receipt,
+        },
+    ));
+    assert!(
+        transcript.drain_settled(200).is_empty(),
+        "identical update replayed a receipt"
+    );
+}
+
+#[test]
+fn scoped_tool_stream_and_assignment_boundaries_keep_full_history() {
+    let mut transcript = Transcript::default();
+    transcript.focus(member(1));
+    for (sequence, data) in [
+        EventData::ActorBound {
+            actor: "worker-a".into(),
+            target: member(1).target,
+            goal: Some("goal".into()),
+        },
+        EventData::Identity {
+            actor: "worker-a".into(),
+            response: "response".into(),
+            turn: "turn".into(),
+            goal: Some("goal".into()),
+            action: Some("tool".into()),
+        },
+        EventData::ActionStarted {
+            id: "tool".into(),
+            tool: "shell".into(),
+            arguments: serde_json::json!({"command":"echo own"}),
+        },
+        EventData::Delta {
+            actor: "tool".into(),
+            text: "own-stream\n".into(),
+        },
+        EventData::ActionFinished {
+            id: "tool".into(),
+            result: serde_json::json!({"stdout":"tail"}),
+            success: true,
+        },
+        EventData::ActorBound {
+            actor: "worker-b".into(),
+            target: member(2).target,
+            goal: Some("goal".into()),
+        },
+        EventData::Message {
+            actor: "worker-b".into(),
+            text: "replacement-task".into(),
+        },
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        transcript.receive(&event(sequence as u64 + 1, data));
+    }
+    assert_eq!(
+        transcript
+            .entries()
+            .iter()
+            .filter(|e| e.id.starts_with("assignment:"))
+            .count(),
+        2
+    );
+    assert!(
+        super::history::selected_text(&transcript, "tool")
+            .unwrap()
+            .contains("own-stream")
+    );
+    transcript.focus(ViewTarget::main());
+    assert!(super::history::selected_text(&transcript, "tool").is_err());
+    assert!(
+        !transcript
+            .active_lines(100)
+            .iter()
+            .any(|l| l.to_string().contains("own-stream"))
+    );
+    transcript.focus(member(2));
+    assert!(
+        super::history::selected_text(&transcript, "tool").is_ok(),
+        "identity view must retain older assignments"
+    );
+}
+
+#[test]
+fn recent_and_reconnect_are_bounded_per_view_without_replaying_settled_blocks() {
+    let mut transcript = Transcript::default();
+    transcript.focus(ViewTarget::main());
+    transcript.receive(&event(
+        1,
+        EventData::ActorBound {
+            actor: "worker-a".into(),
+            target: member(1).target,
+            goal: Some("goal".into()),
+        },
+    ));
+    for i in 2..42 {
+        transcript.receive(&event(
+            i,
+            EventData::Message {
+                actor: "worker-a".into(),
+                text: format!("item-{i}"),
+            },
+        ));
+    }
+    transcript.recent(80);
+    transcript.focus(member(1));
+    assert!(transcript.needs_recent());
+    let recent = transcript.recent(80);
+    assert!(recent.len() <= 200);
+    assert!(!recent.iter().any(|l| l.to_string().trim() == "item-2"));
+    transcript.focus(ViewTarget::main());
+    transcript.focus(member(2));
+    assert!(!transcript.needs_recent());
+    assert!(transcript.drain_settled(40).is_empty());
+    transcript.receive(&event(
+        41,
+        EventData::Message {
+            actor: "worker-a".into(),
+            text: "duplicate".into(),
+        },
+    ));
+    assert!(transcript.drain_settled(80).is_empty());
+    assert!(
+        transcript
+            .lines(80, true)
+            .iter()
+            .any(|l| l.to_string().trim() == "item-2"),
+        "complete history stays available"
+    );
+}
+
+#[tokio::test]
+async fn delayed_failure_keeps_original_assignment_and_editor_after_focus_switch() {
+    use super::jobs::{Context, Jobs, Reply};
+    let directory = tempfile::tempdir().unwrap();
+    let paths = crate::config::Paths::new(directory.path().into());
+    let mut screen = Screen::default();
+    screen.focus(member(1));
+    screen.input.insert("old assignment input");
+    screen.bind_draft();
+    let mut context = Context::new(1, &paths, &screen);
+    screen.input.take();
+    screen.bind_draft();
+    context.revision = screen.input.revision();
+    let (release, wait) = std::sync::mpsc::channel();
+    let mut jobs = Jobs::new();
+    context.execute(&mut jobs, "old assignment input".into(), move |context| {
+        wait.recv().unwrap();
+        assert_eq!(context.view, member(1));
+        anyhow::bail!("fixture delayed failure")
+    });
+    screen.view = member(2);
+    screen.focus(ViewTarget::main());
+    screen.input.insert("untouched main");
+    screen.bind_draft();
+    release.send(()).unwrap();
+    let (_, reply) = jobs.join_next().await.unwrap().unwrap();
+    let Reply::Failed {
+        origin,
+        draft,
+        revision,
+        ..
+    } = reply.unwrap()
+    else {
+        panic!("expected origin-bound failure")
+    };
+    screen.restore_origin(&origin, draft, revision);
+    assert_eq!(screen.input.text(), "untouched main");
+    screen.focus(member(2));
+    assert_eq!(screen.input.text(), "old assignment input");
+    assert!(screen.stale_draft());
+}
+
+#[test]
+fn assignment_refresh_rejects_existing_draft_before_submission() {
+    let mut screen = Screen::default();
+    screen.focus(member(1));
+    screen.input.insert("not for replacement task");
+    screen.bind_draft();
+    screen.view = member(2);
+    let paths = crate::config::Paths::new(std::env::temp_dir());
+    let context = super::jobs::Context::new(0, &paths, &screen);
+    let mut initial = super::submission::Initial::default();
+    assert!(
+        initial
+            .prepare(
+                &mut screen,
+                context,
+                &crate::commands::Command::Message("not for replacement task".into()),
+                false
+            )
+            .is_none()
+    );
+    assert_eq!(screen.input.text(), "not for replacement task");
+}

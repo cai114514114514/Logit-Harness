@@ -25,15 +25,13 @@ pub async fn attach_view(
     json: bool,
     target: crate::runtime::view::ViewTarget,
 ) -> anyhow::Result<()> {
-    if target.is_main()
-        && !json
-        && std::io::stdin().is_terminal()
-        && std::io::stdout().is_terminal()
-    {
-        return super::terminal::attach(paths, id, after).await;
+    if !json && std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
+        return super::terminal::attach_view(paths, id, target).await;
     }
     let socket = paths.socket(id)?;
     let mut reader = ipc::subscribe_target(&socket, after, target.clone()).await?;
+    let mut transcript = super::terminal::Transcript::default();
+    transcript.focus(target.clone());
     loop {
         let message = tokio::select! {
             result=ipc::receive(&mut reader)=>result?,
@@ -46,16 +44,19 @@ pub async fn attach_view(
             println!("{}", serde_json::to_string(&message)?);
         } else {
             match &message {
-                ServerMessage::TargetView { state, .. } => println!(
-                    "Logit- Harness {} · {} · {}",
-                    state.session.id,
-                    state.origin.target.member_id(),
-                    if state.origin.readonly {
-                        "只读归档"
-                    } else {
-                        "当前分配"
-                    }
-                ),
+                ServerMessage::TargetView { state, .. } => {
+                    transcript.bind(&state.session);
+                    println!(
+                        "Logit- Harness {} · {} · {}",
+                        state.session.id,
+                        state.origin.target.member_id(),
+                        if state.origin.readonly {
+                            "只读归档"
+                        } else {
+                            "当前分配"
+                        }
+                    );
+                }
                 ServerMessage::View { state, .. } => println!(
                     "Logit- Harness {} · {:?}\n{}",
                     state.id, state.status, state.title
@@ -64,16 +65,12 @@ pub async fn attach_view(
                     "Logit- Harness {} · {:?}\n{}",
                     state.id, state.status, state.title
                 ),
-                ServerMessage::Event { event } => match &event.data {
-                    EventData::Message { actor, text } => println!("\n{actor}: {text}"),
-                    EventData::ActionStarted { tool, .. } => println!("› {tool}"),
-                    EventData::Status { status, reason } => println!("{status:?}: {reason}"),
-                    EventData::Diagnostic { message } => println!("{message}"),
-                    EventData::Approval { id, reason, .. } => {
-                        println!("authorization required {id}: {reason}")
+                ServerMessage::Event { event } => {
+                    transcript.receive(event);
+                    for line in transcript.drain_settled(120) {
+                        println!("{line}");
                     }
-                    _ => (),
-                },
+                }
                 ServerMessage::Error { message } => eprintln!("{message}"),
                 _ => (),
             }

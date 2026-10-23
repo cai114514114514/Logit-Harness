@@ -20,6 +20,21 @@ impl Initial {
         command: &Command,
         opening: bool,
     ) -> Option<Context> {
+        if screen.stale_draft()
+            && !matches!(
+                command,
+                Command::Builtin {
+                    kind: crate::commands::Kind::Agent
+                        | crate::commands::Kind::Team
+                        | crate::commands::Kind::History
+                        | crate::commands::Kind::New,
+                    ..
+                }
+            )
+        {
+            screen.note("草稿属于旧任务，已保留且未提交。Ctrl+U 清空后重新输入，明确发送给当前分配；/history 可核对旧任务。");
+            return None;
+        }
         let runtime = match command {
             Command::Message(_) | Command::Skill { .. } => true,
             // Browsing Skills is local, but the same catalog entry also offers
@@ -38,6 +53,7 @@ impl Initial {
             return None;
         }
         screen.input.take();
+        screen.bind_draft();
         context.revision = screen.input.revision();
         if runtime && context.session.is_none() {
             self.revision = Some(context.revision);
@@ -69,6 +85,14 @@ pub(super) fn install_choice(
     arguments: String,
     draft: &str,
 ) -> bool {
+    if !super::ownership::same_view(&context.view, &screen.view) {
+        screen.note_origin(
+            &context.view,
+            format!("技能选择返回原视图，输入保留：\n{draft}"),
+        );
+        screen.restore_origin(&context.view, draft.into(), context.revision);
+        return false;
+    }
     if context.revision != screen.input.revision() {
         screen.note(format!(
             "技能来源选择已过期，当前草稿未改变。需要时重新提交：\n{draft}"

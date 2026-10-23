@@ -3,6 +3,52 @@ use super::{Screen, transcript::Kind};
 pub(super) fn lines(screen: &Screen) -> Vec<String> {
     let mut lines = vec![];
     if let Some(session) = &screen.session {
+        if screen.view.is_main() {
+            if !session.team.members.is_empty() {
+                lines.push(format!(
+                    "main · {} 位成员 · 并发上限 {} · /team",
+                    session.team.members.len(),
+                    session.team.limit
+                ));
+                for member in session.team.members.iter().take(2) {
+                    lines.push(format!(
+                        "{} · {} · {} · {}",
+                        member.name,
+                        super::team::member_status(member),
+                        member.task.as_deref().unwrap_or("无分配"),
+                        progress(screen, &member.id)
+                    ));
+                }
+            }
+        } else {
+            let name = screen
+                .member
+                .as_ref()
+                .map(|m| m.name.as_str())
+                .unwrap_or(screen.view.target.member_id());
+            lines.push(format!(
+                "{} [{}] · {}{}",
+                name,
+                super::team::identity(screen.view.target.member_id()),
+                super::team::assignment(&screen.view.target),
+                if screen.view.readonly {
+                    " · 归档只读"
+                } else {
+                    ""
+                }
+            ));
+            if let Some(member) = &screen.member {
+                lines.push(format!(
+                    "{} · {} · {}",
+                    super::team::member_status(member),
+                    member.task.as_deref().unwrap_or("无任务"),
+                    progress(screen, &member.id)
+                ));
+            }
+            if screen.stale_draft() {
+                lines.push("草稿属于旧任务 · Ctrl+U 清空后重新输入 · 不会自动改投".into());
+            }
+        }
         if matches!(
             session.status,
             crate::domain::Status::Pausing | crate::domain::Status::Stopping
@@ -24,11 +70,15 @@ pub(super) fn lines(screen: &Screen) -> Vec<String> {
                 owner, title
             ));
         }
-        for approval in &session.approval_actions {
+        for approval in session
+            .approval_actions
+            .iter()
+            .filter(|_| screen.view.is_main())
+        {
             // SessionView already supplies the tool and exact /approve command.
             lines.push(format!("等待授权 · {approval}"));
         }
-        for (id, question) in &session.questions {
+        for (id, question) in session.questions.iter().filter(|_| screen.view.is_main()) {
             if question.answer.is_none() {
                 lines.push(format!(
                     "等待用户回答 · /answer {id} <答复> · {}",
@@ -40,8 +90,7 @@ pub(super) fn lines(screen: &Screen) -> Vec<String> {
     let now = chrono::Utc::now();
     let active = screen
         .transcript
-        .entries()
-        .iter()
+        .visible_entries()
         .filter(|e| e.running)
         .collect::<Vec<_>>();
     for entry in &active {
@@ -65,6 +114,12 @@ pub(super) fn lines(screen: &Screen) -> Vec<String> {
     }
     if let Some(session) = &screen.session {
         for activity in &session.activities {
+            if !super::ownership::same_view(
+                &screen.view,
+                &screen.transcript.ownership.actor(&activity.actor),
+            ) {
+                continue;
+            }
             if !active
                 .iter()
                 .any(|e| e.id == activity.id || e.source == activity.id)
@@ -106,4 +161,20 @@ fn age(value: &str, now: chrono::DateTime<chrono::Utc>) -> String {
         .ok()
         .map(|t| format!("{}s", now.signed_duration_since(t).num_seconds().max(0)))
         .unwrap_or_else(|| "未知".into())
+}
+pub(super) fn progress(screen: &Screen, member: &str) -> String {
+    screen
+        .transcript
+        .entries()
+        .iter()
+        .filter(|entry| {
+            entry.origin.target.member_id() == member
+                && matches!(entry.kind, Kind::Assistant | Kind::Tool)
+        })
+        .map(|entry| &entry.updated)
+        .max()
+        .map_or_else(
+            || "暂无输出记录".into(),
+            |stamp| format!("距进展{}", age(stamp, chrono::Utc::now())),
+        )
 }

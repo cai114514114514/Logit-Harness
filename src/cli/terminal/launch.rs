@@ -9,11 +9,11 @@ pub enum Launch {
     Exit,
 }
 pub async fn welcome(paths: &Paths, _config: &Config, cwd: &Path) -> anyhow::Result<Launch> {
-    super::client::run(paths, cwd, None, false).await?;
+    super::client::run(paths, cwd, None, false, Default::default()).await?;
     Ok(Launch::Exit)
 }
 pub async fn configure(paths: &Paths, _config: &Config, cwd: &Path) -> anyhow::Result<()> {
-    super::client::run(paths, cwd, None, true).await
+    super::client::run(paths, cwd, None, true, Default::default()).await
 }
 
 pub(super) fn recent(paths: &Paths, cwd: &Path) -> anyhow::Result<Vec<Recent>> {

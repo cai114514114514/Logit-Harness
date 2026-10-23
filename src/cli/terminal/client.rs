@@ -47,13 +47,14 @@ impl Connection {
         paths: &Paths,
         id: &str,
         after: u64,
+        view: crate::runtime::view::ViewTarget,
         generation: u64,
         sender: mpsc::Sender<(u64, anyhow::Result<ServerMessage>)>,
     ) -> anyhow::Result<()> {
         self.close();
         let socket = paths.socket(id)?;
         self.0 = Some(tokio::spawn(async move {
-            let mut reader = match ipc::subscribe(&socket, after).await {
+            let mut reader = match ipc::subscribe_target(&socket, after, view).await {
                 Ok(reader) => reader,
                 Err(error) => {
                     let _ = sender.send((generation, Err(error))).await;
@@ -78,9 +79,12 @@ pub(super) async fn run(
     cwd: &Path,
     id: Option<String>,
     setup_only: bool,
+    view: crate::runtime::view::ViewTarget,
 ) -> anyhow::Result<()> {
     let config = Config::load(&paths.home)?;
     let mut screen = fresh(paths, &config, cwd)?;
+    screen.view = view;
+    screen.transcript.focus(screen.view.clone());
     let mut generation = 0;
     let mut jobs = Jobs::new();
     let mut initial = Initial::default();
@@ -114,9 +118,12 @@ pub(super) async fn run(
             terminal.modal(modal)?;
             if !modal {
                 let (columns, rows) = crossterm::terminal::size()?;
-                let lines = screen
-                    .transcript
-                    .drain_settled(terminal.width().saturating_sub(4) as usize);
+                let width = terminal.width().saturating_sub(4) as usize;
+                let lines = if screen.session.is_some() && screen.transcript.needs_recent() {
+                    screen.transcript.recent(width)
+                } else {
+                    screen.transcript.drain_settled(width)
+                };
                 terminal.present(
                     super::render::height(&screen, columns, rows),
                     screen.session.is_some(),
@@ -130,7 +137,7 @@ pub(super) async fn run(
         tokio::select! {
             _ = hangup.recv() => break,
             _ = tokio::signal::ctrl_c() => {
-                if screen.session.is_some() { Context::new(generation, paths, &screen).control(&mut jobs, Control::Pause, "/pause".into(), screen.connected); }
+                if screen.session.is_some() { Context::new(generation, paths, &screen).control(&mut jobs, screen.pause(), "/pause".into(), screen.connected); }
                 else { break; }
             }
             _ = frames.tick() => {
@@ -141,12 +148,13 @@ pub(super) async fn run(
             _ = refresh.tick(), if screen.session.is_some() && !opening => {
                 if reconnect {
                     if let Some(session) = &screen.session {
-                        connection.open(paths, &session.id, screen.transcript.sequence(), generation, sender.clone())?;
+                        connection.open(paths, &session.id, screen.transcript.sequence(), screen.view.clone(), generation, sender.clone())?;
                     }
                 } else if screen.connected {
                     let context = Context::new(generation, paths, &screen);
                     let socket = paths.socket(&screen.session.as_ref().unwrap().id)?;
-                    jobs.spawn(async move { (context.generation, ipc::request(&socket, ipc::ClientMessage::Status).await.map(Reply::Message)) });
+                    let target = screen.view.clone();
+                    jobs.spawn(async move { (context.generation, ipc::request(&socket, ipc::ClientMessage::TargetStatus { target }).await.map(Reply::Message)) });
                 }
             }
             Some((origin, result)) = incoming.recv() => {
@@ -172,7 +180,8 @@ pub(super) async fn run(
                     Ok(Reply::Open { context, session, transcript, recent }) => {
                         let sequence = transcript.sequence(); let id = session.id.clone();
                         screen.activity.clear(); screen.transcript = transcript; screen.recent = recent;
-                        screen.receive(ServerMessage::Snapshot { state: session, sequence }); screen.connected = false;
+                        let state = session.target_view(&screen.view)?;
+                        screen.receive(ServerMessage::TargetView { state: Box::new(state), sequence }); screen.connected = false;
                         let (columns, rows) = crossterm::terminal::size()?;
                         let recent = screen.transcript.recent(columns.saturating_sub(4) as usize);
                         terminal.present(super::render::height(&screen, columns, rows), true, &recent)?;
@@ -180,7 +189,7 @@ pub(super) async fn run(
                             screen.note(format!("后台启动失败：{error}\n会话 {id} 与输入已保存。/resume 恢复；请先核对记录，避免重复发送。"));
                             restore_draft(&mut screen, draft, revision);
                         }
-                        connection.open(paths, &id, sequence, generation, sender.clone())?;
+                        connection.open(paths, &id, sequence, screen.view.clone(), generation, sender.clone())?;
                         initial.finish(context.revision);
                         opening = false;
                     }
@@ -194,22 +203,32 @@ pub(super) async fn run(
                     }
                     Ok(Reply::Message(message)) => screen.receive(message),
                     Ok(Reply::Sent) => { screen.activity.clear(); if !screen.connected { reconnect = true; } }
-                    Ok(Reply::Failed { text, draft, revision }) => { screen.activity.clear(); screen.note(text); restore_draft(&mut screen, draft, revision); if initial.finish(revision) { opening = false; } }
-                    Ok(Reply::History(browser)) => screen.history = Some(browser),
-                    Ok(Reply::Copied) => screen.note("已复制所选记录原文。"),
+                    Ok(Reply::Failed { origin, text, draft, revision }) => { screen.activity.clear(); screen.note_origin(&origin, text); screen.restore_origin(&origin, draft, revision); if initial.finish(revision) { opening = false; } }
+                    Ok(Reply::History { origin, browser }) => { if super::ownership::same_view(&origin, &screen.view) { screen.history = Some(browser); } else { screen.note_origin(&origin, "历史已读取；返回原视图后 /history 查看。"); } },
+                    Ok(Reply::Copied(origin)) => screen.note_origin(&origin, "已复制所选记录原文。"),
+                    Ok(Reply::Accepted { origin, request }) => { screen.transcript.accepted(&origin, &request); screen.activity.clear(); if !screen.connected { reconnect = true; } },
+                    Ok(Reply::Notice { origin, text }) => screen.note_origin(&origin, text),
                     Ok(Reply::Command { context, outcome, draft }) => {
                         if !matches!(&outcome, Outcome::Control(_) | Outcome::Skill(_)) {
                             initial.finish(context.revision);
                         }
                         match outcome {
                         Outcome::Local { title, text } => {
-                            screen.note(format!("{title}\n{text}"));
+                            if draft.trim() == "/team" && super::ownership::same_view(&context.view, &screen.view) {
+                                super::team::open(&mut screen, &text);
+                            } else { screen.note_origin(&context.view, format!("{title}\n{text}")); }
                             if draft.trim() == "/skills" {
                                 catalog_loading = true;
                                 context.catalog(&mut jobs);
                             }
                         },
-                        Outcome::Focus { target, .. } => screen.note(format!("成员视图：{}", target.target.member_id())),
+                        Outcome::Focus { origin, target, window } => {
+                            if window { context.window(&mut jobs, target); }
+                            else if super::ownership::same_view(&origin, &screen.view) {
+                                screen.focus(target);
+                                if let Some(session) = &screen.session { connection.open(paths, &session.id, screen.transcript.sequence(), screen.view.clone(), generation, sender.clone())?; }
+                            } else { screen.note_origin(&origin, "视图已改变；原切换结果未覆盖当前焦点。"); }
+                        },
                         Outcome::ScopedSkill { request, .. } => context.control(&mut jobs, Control::Directed { request: *request }, draft, screen.connected),
                         Outcome::ScopedChoice { entries, arguments, .. } => { submission::install_choice(&mut screen, context, entries, arguments, &draft); },
                         Outcome::Setup => super::setup::open(&mut screen, paths),
@@ -274,11 +293,25 @@ pub(super) async fn run(
                 }
                 submission::clear_stale_choice(&mut screen);
                 match event {
-                    Event::Paste(text) => { screen.input.insert(&text); screen.menu_hidden = false; }
+                    Event::Paste(text) => { screen.input.insert(&text); screen.bind_draft(); screen.menu_hidden = false; }
                     Event::Key(key) if key.kind != KeyEventKind::Release => {
                         let control = key.modifiers.contains(KeyModifiers::CONTROL);
+                        if key.code == KeyCode::Char('t') && control && screen.session.is_some() {
+                            let mut context = Context::new(generation, paths, &screen); context.view = screen.view.clone();
+                            context.command(&mut jobs, crate::commands::parse("/team")?, "/team".into());
+                            continue;
+                        }
                         if (key.code == KeyCode::Char('o') && control) || key.code == KeyCode::PageUp {
                             Context::new(generation, paths, &screen).history(&mut jobs, String::new(), false); continue;
+                        }
+                        if screen.team_picker && (key.code == KeyCode::Enter || key.code == KeyCode::Char('o')) {
+                            if let Some(member) = screen.selected_member() {
+                                let window = key.code == KeyCode::Char('o');
+                                let draft = format!("/agent {member}{}", if window { " --window" } else { "" });
+                                let mut context = Context::new(generation, paths, &screen); context.view = screen.view.clone();
+                                context.command(&mut jobs, crate::commands::parse(&draft)?, draft);
+                            }
+                            continue;
                         }
                         if screen.picker && key.code == KeyCode::Enter {
                             if let Some(recent) = screen.recent.get(screen.selection) {
@@ -300,10 +333,10 @@ pub(super) async fn run(
                             }
                             continue;
                         }
-                        if super::edit::edit(&mut screen, key) { }
+                        if super::edit::edit(&mut screen, key) { screen.bind_draft(); }
                         else if key.code == KeyCode::Char('d') && control { break; }
                         else if key.code == KeyCode::Char('c') && control {
-                            if screen.session.is_some() { Context::new(generation, paths, &screen).control(&mut jobs, Control::Pause, "/pause".into(), screen.connected); } else { break; }
+                            if screen.session.is_some() { Context::new(generation, paths, &screen).control(&mut jobs, screen.pause(), "/pause".into(), screen.connected); } else { break; }
                         } else if key.code == KeyCode::Enter && screen.complete() {
                             let draft = screen.input.text().to_owned();
                             if super::setup::reject_inline(&mut screen, &draft) || draft.trim().is_empty() { continue; }
@@ -342,6 +375,7 @@ fn restore_draft(screen: &mut Screen, draft: String, revision: u64) {
 }
 fn fresh(paths: &Paths, config: &Config, cwd: &Path) -> anyhow::Result<Screen> {
     let mut screen = Screen::default();
+    screen.client_id = uuid::Uuid::new_v4().to_string();
     screen.workspace = cwd.to_owned();
     screen.model = config.model.clone();
     screen.key_present = crate::config::api::configured(paths, &config.base_url)?;

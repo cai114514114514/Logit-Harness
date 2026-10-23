@@ -9,6 +9,8 @@ pub(super) fn edit(screen: &mut Screen, key: KeyEvent) -> bool {
     let menu = screen.menu();
     let choices = if let Some(choice) = &screen.skill_choices {
         choice.entries.len()
+    } else if screen.team_picker {
+        screen.members.len() + 1
     } else if screen.picker {
         screen.recent.len()
     } else {
@@ -19,6 +21,7 @@ pub(super) fn edit(screen: &mut Screen, key: KeyEvent) -> bool {
         KeyCode::Down if choices > 0 => screen.selection = (screen.selection + 1).min(choices - 1),
         KeyCode::Esc => {
             screen.picker = false;
+            screen.team_picker = false;
             screen.skill_choices = None;
             screen.menu_hidden = true;
             screen.selection = 0;

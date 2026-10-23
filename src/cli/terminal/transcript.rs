@@ -1,11 +1,13 @@
 //! One event projection for live output, reconnect and durable history.
 use super::{state::clean, text};
+#[path = "receipts.rs"]
+pub(super) mod receipts;
 use crate::domain::{EventData, SessionEvent, Status};
 use ratatui::{
     style::{Color, Style},
     text::{Line, Span},
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Kind {
@@ -16,6 +18,7 @@ pub enum Kind {
 }
 #[derive(Clone, Debug)]
 pub struct Entry {
+    pub origin: crate::runtime::view::ViewTarget,
     pub id: String,
     pub turn: Option<String>,
     pub response: Option<String>,
@@ -32,7 +35,7 @@ pub struct Entry {
     pub running: bool,
     pub success: Option<bool>,
     pub settled: Option<u64>,
-    printed: bool,
+    printed: BTreeSet<String>,
     quiet: bool,
 }
 #[derive(Clone, Default)]
@@ -47,8 +50,77 @@ pub struct Transcript {
     identities: BTreeMap<String, Identity>,
     sequence: u64,
     local: u64,
+    pub(super) ownership: super::ownership::Ownership,
+    view: Option<crate::runtime::view::ViewTarget>,
+    origin: crate::runtime::view::ViewTarget,
+    boundaries: BTreeMap<String, crate::runtime::team::Target>,
+    pub(super) usage: BTreeMap<String, crate::domain::Usage>,
+    visited: BTreeSet<String>,
+    names: BTreeMap<String, String>,
 }
 impl Transcript {
+    pub(crate) fn bind(&mut self, state: &crate::runtime::view::SessionView) {
+        self.ownership.bindings.extend(state.bindings.clone());
+        self.team(&state.team);
+    }
+    pub(super) fn team(&mut self, team: &crate::runtime::team::TeamView) {
+        for member in &team.members {
+            self.names.insert(member.id.clone(), member.name.clone());
+            for actor in &member.attempts {
+                self.names.insert(actor.clone(), member.name.clone());
+            }
+        }
+    }
+    fn name(&self, id: &str) -> String {
+        self.names
+            .get(id)
+            .cloned()
+            .unwrap_or_else(|| super::team::identity(id))
+    }
+    fn view_key(&self) -> String {
+        self.view.as_ref().map_or_else(
+            || "all".into(),
+            |v| {
+                format!(
+                    "{}:{}",
+                    v.goal.as_deref().unwrap_or(""),
+                    v.target.member_id()
+                )
+            },
+        )
+    }
+    pub(super) fn needs_recent(&self) -> bool {
+        !self.visited.contains(&self.view_key())
+    }
+    pub fn focus(&mut self, view: crate::runtime::view::ViewTarget) {
+        self.view = Some(view);
+    }
+    pub(super) fn heading(&self) -> String {
+        self.view.as_ref().map_or_else(
+            || "完整会话".into(),
+            |view| {
+                format!(
+                    "{} · {}",
+                    self.name(view.target.member_id()),
+                    super::team::assignment(&view.target)
+                )
+            },
+        )
+    }
+    pub fn visible(&self, entry: &Entry) -> bool {
+        self.view.as_ref().is_none_or(|view| {
+            super::ownership::same_view(view, &entry.origin)
+                || view.is_main() && entry.source == "receipt"
+        })
+    }
+    pub fn visible_entries(&self) -> impl Iterator<Item = &Entry> {
+        self.entries.iter().filter(|e| self.visible(e))
+    }
+    pub(super) fn note_in(&mut self, origin: &crate::runtime::view::ViewTarget, text: &str) {
+        let previous = std::mem::replace(&mut self.origin, origin.clone());
+        self.note(text);
+        self.origin = previous;
+    }
     pub fn entries(&self) -> &[Entry] {
         &self.entries
     }
@@ -68,6 +140,7 @@ impl Transcript {
             .get(&id)
             .or_else(|| self.identities.get(source));
         self.entries.push(Entry {
+            origin: self.origin.clone(),
             id,
             kind,
             title,
@@ -82,7 +155,7 @@ impl Transcript {
             running: true,
             success: None,
             settled: None,
-            printed: false,
+            printed: BTreeSet::new(),
             quiet: false,
         });
         self.entries.len() - 1
@@ -112,9 +185,58 @@ impl Transcript {
             return;
         }
         self.sequence = event.sequence;
+        self.ownership.observe(&event.data);
+        self.origin = self.ownership.event(&event.data);
+        if let EventData::Usage {
+            input,
+            output,
+            cached,
+            ..
+        } = &event.data
+        {
+            self.usage
+                .entry(self.origin.target.member_id().into())
+                .or_default()
+                .accumulate(&crate::domain::Usage {
+                    input: *input,
+                    output: *output,
+                    cached: *cached,
+                });
+        }
+        if !self.origin.is_main()
+            && matches!(
+                event.data,
+                EventData::ModelRequested { .. }
+                    | EventData::Message { .. }
+                    | EventData::ActionStarted { .. }
+            )
+        {
+            let member = self.origin.target.member_id().to_owned();
+            if self.boundaries.get(&member) != Some(&self.origin.target) {
+                let i = self.add(
+                    format!("assignment:{}", event.sequence),
+                    Kind::Note,
+                    &member,
+                    "分配".into(),
+                    &event.timestamp,
+                );
+                self.entries[i].body = format!(
+                    "── {} · {} ──",
+                    self.name(&member),
+                    super::team::assignment(&self.origin.target)
+                );
+                self.entries[i].result = Some(
+                    serde_json::json!({"target": self.origin.target, "goal": self.origin.goal}),
+                );
+                self.done(i);
+                self.boundaries.insert(member, self.origin.target.clone());
+            }
+        }
         let stamp = &event.timestamp;
         let first = self.entries.len();
         match &event.data {
+            EventData::Mail { mail, .. } => self.mail(mail, stamp),
+            EventData::RequestReceipt { receipt, .. } => self.receipt(receipt, stamp),
             EventData::Identity {
                 actor,
                 response,
@@ -244,7 +366,30 @@ impl Transcript {
                 }
             }
             EventData::Diagnostic { message } => {
-                self.note(message);
+                let display = if !self.origin.is_main() {
+                    message
+                        .split_once(": ")
+                        .map(|(_, action)| {
+                            format!(
+                                "{} · {}",
+                                self.name(self.origin.target.member_id()),
+                                match action {
+                                    "wait_message" => "等待成员消息",
+                                    "send_message" => "成员消息已发送",
+                                    "request_scope" => "已请求调整范围",
+                                    _ => action,
+                                }
+                            )
+                        })
+                        .unwrap_or_else(|| message.clone())
+                } else {
+                    message.clone()
+                };
+                self.note(&display);
+                if display != *message {
+                    self.entries.last_mut().unwrap().result =
+                        Some(serde_json::json!({"diagnostic": message}));
+                }
                 self.entries.last_mut().unwrap().quiet = super::present::routine(message);
             }
             EventData::Approval {
@@ -259,13 +404,26 @@ impl Transcript {
             EventData::Revised { revision, changed } => {
                 self.note(&format!("需求修订 {revision} · {}", changed.join(", ")))
             }
+            EventData::Worker { id, status, task } => {
+                let label = match status.as_str() {
+                    "started" => "开始任务",
+                    "completed" | "finished" => "任务已结算",
+                    "failed" => "任务失败",
+                    "invalidated" => "任务已失效",
+                    "diagnosing" => "正在诊断",
+                    _ => status,
+                };
+                self.note(&format!("成员进展 {} · {label} · {task}", self.name(id)));
+                self.entries.last_mut().unwrap().result =
+                    Some(serde_json::json!({"actor":id,"status":status,"task":task}));
+            }
             _ => (),
         }
         for entry in self
             .entries
             .iter_mut()
             .skip(first)
-            .filter(|entry| entry.kind == Kind::Note)
+            .filter(|entry| entry.kind == Kind::Note && entry.id.starts_with("note:"))
         {
             // Persisted notices use their original event time and identity;
             // opening history must not make an old notice appear to happen now.
@@ -307,8 +465,7 @@ impl Transcript {
         }
     }
     pub fn active(&self) -> Option<&str> {
-        self.entries
-            .iter()
+        self.visible_entries()
             .find(|e| e.running)
             .map(|e| e.title.as_str())
     }
@@ -316,42 +473,53 @@ impl Transcript {
         self.entries.is_empty()
     }
     pub fn lines(&self, width: usize, expanded: bool) -> Vec<Line<'static>> {
-        self.entries
-            .iter()
+        self.visible_entries()
             .flat_map(|e| e.lines(width, expanded))
             .collect()
     }
     pub fn active_lines(&self, width: usize) -> Vec<Line<'static>> {
-        self.entries
-            .iter()
+        self.visible_entries()
             .filter(|e| e.running)
             .flat_map(|e| e.lines(width, false))
             .collect()
     }
     pub fn drain_settled(&mut self, width: usize) -> Vec<Line<'static>> {
+        let key = self.view_key();
         let mut indices = (0..self.entries.len())
             .filter(|i| {
                 let e = &self.entries[*i];
-                !e.printed && e.settled.is_some() && (!e.body.is_empty() || e.kind == Kind::Tool)
+                self.visible(e)
+                    && !e.printed.contains(&key)
+                    && e.settled.is_some()
+                    && (!e.body.is_empty() || e.kind == Kind::Tool)
             })
             .collect::<Vec<_>>();
         indices.sort_by_key(|i| self.entries[*i].settled);
         let mut lines = vec![];
         for i in indices {
             lines.extend(self.entries[i].lines(width, false));
-            self.entries[i].printed = true;
+            self.entries[i].printed.insert(key.clone());
         }
         lines
     }
     pub fn recent(&mut self, width: usize) -> Vec<Line<'static>> {
+        let view = self.view.clone();
+        let key = self.view_key();
+        self.visited.insert(key.clone());
         let mut entries = self
             .entries
             .iter_mut()
-            .filter(|e| e.settled.is_some())
+            .filter(|e| {
+                e.settled.is_some()
+                    && view.as_ref().is_none_or(|view| {
+                        super::ownership::same_view(view, &e.origin)
+                            || view.is_main() && e.source == "receipt"
+                    })
+            })
             .collect::<Vec<_>>();
         entries.sort_by_key(|e| e.settled);
         for e in &mut entries {
-            e.printed = true;
+            e.printed.insert(key.clone());
         }
         let first = entries.len().saturating_sub(20);
         let mut lines = entries[first..]

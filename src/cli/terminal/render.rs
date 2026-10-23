@@ -29,6 +29,8 @@ pub(super) fn height(screen: &Screen, columns: u16, rows: u16) -> u16 {
     };
     let choices = if let Some(choice) = &screen.skill_choices {
         choice.entries.len()
+    } else if screen.team_picker {
+        screen.members.len() + 1
     } else if screen.picker {
         screen.recent.len()
     } else {
@@ -64,6 +66,8 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
     let menu = screen.menu();
     let choices = if let Some(choice) = &screen.skill_choices {
         choice.entries.len()
+    } else if screen.team_picker {
+        screen.members.len() + 1
     } else if screen.picker {
         screen.recent.len()
     } else {
@@ -120,6 +124,8 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
                 .iter()
                 .map(|e| format!("{} · {} · {}", e.name, e.source, e.path.display()))
                 .collect()
+        } else if screen.team_picker {
+            screen.team_labels()
         } else if screen.picker {
             screen
                 .recent
@@ -158,7 +164,11 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
             ));
         }
         rows.push(Line::styled(
-            "  ↑↓ 选择 · Enter 确认 · Tab 补全 · Esc 返回",
+            if screen.team_picker {
+                "  ↑↓ 选择 · Enter 聚焦 · o 新窗口 · Esc 返回"
+            } else {
+                "  ↑↓ 选择 · Enter 确认 · Tab 补全 · Esc 返回"
+            },
             Style::default().fg(MUTED),
         ));
         frame.render_widget(Paragraph::new(rows), inset(menu_area, 2));
@@ -208,20 +218,36 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
     ));
 
     let hint = if let Some(session) = &screen.session {
-        let hit = session
-            .budget
-            .reported
+        let empty_usage = crate::domain::Usage::default();
+        let usage = if screen.view.is_main() {
+            &session.budget.reported
+        } else {
+            screen
+                .transcript
+                .usage
+                .get(screen.view.target.member_id())
+                .unwrap_or(&empty_usage)
+        };
+        let hit = usage
             .cache_hit()
             .map(|hit| format!("{:.1}%", hit * 100.0))
             .unwrap_or_else(|| "—".into());
         if area.width >= 90 {
             format!(
-                "Enter 发送 · Alt+Enter 换行 · Ctrl+O 详情   {} tokens · KV {hit} · {}s",
-                compact(session.budget.used),
+                "Enter 发送 · Alt+Enter 换行 · Ctrl+O 详情 · Ctrl+T 团队   {} tokens · KV {hit} · {}s",
+                compact(if screen.view.is_main() {
+                    session.budget.used
+                } else {
+                    screen
+                        .transcript
+                        .usage
+                        .get(screen.view.target.member_id())
+                        .map_or(0, |u| u.tokens())
+                }),
                 session.elapsed
             )
         } else {
-            format!("/ 命令 · ↑↓ 历史 · KV {hit} · /budget")
+            format!("/ 命令 · Ctrl+T 团队 · KV {hit} · /budget")
         }
     } else if area.width >= 70 {
         "Enter 开始 · Alt+Enter 换行 · ↑↓ 历史 · Ctrl+D 退出".into()
