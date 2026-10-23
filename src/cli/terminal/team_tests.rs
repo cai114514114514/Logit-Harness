@@ -398,3 +398,88 @@ fn assignment_refresh_rejects_existing_draft_before_submission() {
     );
     assert_eq!(screen.input.text(), "not for replacement task");
 }
+
+fn switch_fixture() -> Screen {
+    let mut screen = Screen::default();
+    screen.transcript.focus(ViewTarget::main());
+    screen.transcript.receive(&event(
+        1,
+        EventData::ActorBound {
+            actor: "worker-a".into(),
+            target: member(1).target,
+            goal: Some("goal".into()),
+        },
+    ));
+    screen.transcript.receive(&event(
+        2,
+        EventData::Message {
+            actor: "worker-a".into(),
+            text: "old destination output".into(),
+        },
+    ));
+    screen
+}
+
+#[test]
+fn first_view_boundary_precedes_recovered_destination_output() {
+    let mut screen = switch_fixture();
+    screen.focus(member(1));
+    let lines = screen.transcript.recent(100);
+    let boundary = lines
+        .iter()
+        .position(|line| line.to_string().contains("视图 member-a"))
+        .unwrap();
+    let output = lines
+        .iter()
+        .position(|line| line.to_string().contains("old destination output"))
+        .unwrap();
+    assert!(
+        boundary < output,
+        "destination output appeared before its view boundary"
+    );
+    assert!(lines.len() <= 200);
+    assert!(
+        screen.transcript.drain_settled(40).is_empty(),
+        "resize/repaint replayed the boundary or settled output"
+    );
+}
+
+#[test]
+fn revisited_view_boundary_precedes_only_unseen_destination_rows() {
+    let mut screen = switch_fixture();
+    screen.focus(member(1));
+    screen.transcript.recent(100);
+    screen.focus(ViewTarget::main());
+    screen.transcript.recent(100);
+    screen.transcript.receive(&event(
+        3,
+        EventData::Message {
+            actor: "worker-a".into(),
+            text: "new destination output".into(),
+        },
+    ));
+    screen.focus(member(1));
+    assert!(!screen.transcript.needs_recent());
+    let lines = screen.transcript.drain_settled(100);
+    let text = lines
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(text.find("视图 member-a").unwrap() < text.find("new destination output").unwrap());
+    assert!(
+        !text.contains("old destination output")
+            && !text.contains("恢复最近记录")
+            && !text.contains("Logit"),
+        "revisit replayed old rows, recovery or startup branding"
+    );
+    assert!(screen.transcript.drain_settled(50).is_empty());
+    assert_eq!(screen.transcript.sequence(), 3);
+    assert!(
+        screen
+            .transcript
+            .visible_entries()
+            .any(|entry| entry.body == "old destination output" && entry.origin == member(1)),
+        "view presentation changed complete history or its origin"
+    );
+}

@@ -57,6 +57,9 @@ pub struct Transcript {
     pub(super) usage: BTreeMap<String, crate::domain::Usage>,
     visited: BTreeSet<String>,
     names: BTreeMap<String, String>,
+    /// A view marker belongs before the next presentation batch, not at the
+    /// current event sequence after older, unseen destination entries.
+    boundary: Option<String>,
 }
 impl Transcript {
     pub(crate) fn bind(&mut self, state: &crate::runtime::view::SessionView) {
@@ -94,6 +97,23 @@ impl Transcript {
     }
     pub fn focus(&mut self, view: crate::runtime::view::ViewTarget) {
         self.view = Some(view);
+        self.boundary = None;
+    }
+    pub(super) fn switch(&mut self, view: crate::runtime::view::ViewTarget) {
+        let boundary = format!(
+            "── 视图 {} · {} · /history 完整历史 ──",
+            super::team::identity(view.target.member_id()),
+            super::team::assignment(&view.target)
+        );
+        self.focus(view);
+        self.boundary = Some(boundary);
+    }
+    fn take_boundary(&mut self, width: usize) -> Vec<Line<'static>> {
+        self.boundary.take().map_or_else(Vec::new, |boundary| {
+            let mut lines = text::wrap(vec![Span::raw(boundary)], width);
+            lines.push(Line::default());
+            lines
+        })
     }
     pub(super) fn heading(&self) -> String {
         self.view.as_ref().map_or_else(
@@ -484,6 +504,7 @@ impl Transcript {
             .collect()
     }
     pub fn drain_settled(&mut self, width: usize) -> Vec<Line<'static>> {
+        let mut lines = self.take_boundary(width);
         let key = self.view_key();
         let mut indices = (0..self.entries.len())
             .filter(|i| {
@@ -495,7 +516,6 @@ impl Transcript {
             })
             .collect::<Vec<_>>();
         indices.sort_by_key(|i| self.entries[*i].settled);
-        let mut lines = vec![];
         for i in indices {
             lines.extend(self.entries[i].lines(width, false));
             self.entries[i].printed.insert(key.clone());
@@ -503,6 +523,7 @@ impl Transcript {
         lines
     }
     pub fn recent(&mut self, width: usize) -> Vec<Line<'static>> {
+        let mut prefix = self.take_boundary(width);
         let view = self.view.clone();
         let key = self.view_key();
         self.visited.insert(key.clone());
@@ -532,11 +553,13 @@ impl Transcript {
             )],
             width,
         );
-        let available = 200usize.saturating_sub(marker.len());
+        prefix.extend(marker);
+        prefix.truncate(200);
+        let available = 200usize.saturating_sub(prefix.len());
         if lines.len() > available {
             lines.drain(..lines.len() - available);
         }
-        marker.into_iter().chain(lines).collect()
+        prefix.into_iter().chain(lines).collect()
     }
 }
 impl Entry {

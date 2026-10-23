@@ -57,15 +57,10 @@ impl Screen {
             .iter()
             .find(|member| member.id == self.view.target.member_id())
             .cloned();
-        self.transcript.focus(self.view.clone());
+        self.transcript.switch(self.view.clone());
         self.team_picker = false;
         self.selection = 0;
         self.menu_hidden = true;
-        self.note(format!(
-            "── 视图 {} · {} · /history 完整历史 ──",
-            identity(self.view.target.member_id()),
-            assignment(&self.view.target)
-        ));
     }
     pub(super) fn note_origin(&mut self, origin: &ViewTarget, text: impl Into<String>) {
         self.transcript.note_in(origin, &text.into());
