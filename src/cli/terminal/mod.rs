@@ -17,6 +17,8 @@ mod output;
 mod ownership;
 mod present;
 mod render;
+#[cfg(test)]
+mod review_tests;
 mod setup;
 mod state;
 mod status;

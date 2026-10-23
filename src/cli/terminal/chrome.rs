@@ -3,6 +3,7 @@ use super::{
     Screen,
     text::{self, ACCENT, MUTED},
 };
+use crate::runtime::team::{AssignmentStatus, MemberView, Target};
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
@@ -48,11 +49,24 @@ pub(super) fn lines(screen: &Screen, width: usize) -> Vec<Line<'static>> {
             .member
             .as_ref()
             .map_or(screen.view.target.member_id(), |m| m.name.as_str());
+        let badge = if screen.view.readonly
+            || screen.members.iter().filter(|m| m.name == name).count() > 1
+        {
+            format!(
+                " [{}]",
+                super::team::identity(screen.view.target.member_id())
+            )
+        } else {
+            String::new()
+        };
         rows.push(Line::from(vec![
             Span::styled(
-                text::ellipsize(
-                    &super::state::clean(name),
-                    width.saturating_sub(scope.width() + 3),
+                format!(
+                    "{}{badge}",
+                    text::ellipsize(
+                        &super::state::clean(name),
+                        width.saturating_sub(scope.width() + 3 + badge.width()),
+                    )
                 ),
                 Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
             ),
@@ -93,6 +107,20 @@ fn strip(screen: &Screen, width: usize) -> Line<'static> {
     {
         members = s.team.members.iter().collect();
     }
+    // Direct archive attach supplies its member separately from the current
+    // team's roster. Keep the exact selected identity, including after reassignment.
+    if let Some(current) = &screen.member {
+        if let Some(position) = members.iter().position(|m| m.id == current.id) {
+            members[position] = current;
+        } else {
+            members.push(current);
+        }
+    }
+    let ambiguous = members
+        .iter()
+        .filter(|m| members.iter().filter(|other| other.name == m.name).count() > 1)
+        .map(|m| m.id.as_str())
+        .collect::<Vec<_>>();
     if screen.view.readonly {
         members.retain(|m| m.id == screen.view.target.member_id());
     }
@@ -102,7 +130,7 @@ fn strip(screen: &Screen, width: usize) -> Line<'static> {
     let labels = members
         .iter()
         .map(|m| {
-            let duplicates = members.iter().filter(|other| other.name == m.name).count() > 1;
+            let duplicates = ambiguous.contains(&m.id.as_str());
             let name = if duplicates {
                 format!(
                     "{}:{}",
@@ -118,19 +146,7 @@ fn strip(screen: &Screen, width: usize) -> Line<'static> {
             } else {
                 m.name.clone()
             };
-            let state = if m.stopping {
-                "结算"
-            } else if m.paused {
-                "暂停"
-            } else if m.waiting.is_some() {
-                "等待"
-            } else if m.interrupted {
-                "补充"
-            } else if m.actor.is_some() {
-                "执行"
-            } else {
-                "空闲"
-            };
+            let state = phase(screen, m);
             let label = format!(
                 "{}·{state}",
                 text::ellipsize(&super::state::clean(&name), 12)
@@ -193,5 +209,65 @@ fn strip(screen: &Screen, width: usize) -> Line<'static> {
             text::ellipsize(&line.to_string(), width),
             Style::default().fg(ACCENT),
         )
+    }
+}
+
+fn phase(screen: &Screen, member: &MemberView) -> &'static str {
+    if screen.view.readonly {
+        return "归档";
+    }
+    if member.stopping {
+        return "结算";
+    }
+    if member.paused {
+        return "暂停";
+    }
+    if member.interrupted {
+        return "补充";
+    }
+    if member.waiting.is_some() {
+        return "等待";
+    }
+    let running = screen
+        .transcript
+        .entries()
+        .iter()
+        .any(|e| e.running && e.origin.target.member_id() == member.id)
+        || screen.session.as_ref().is_some_and(|s| {
+            s.activities.iter().any(|a| {
+                screen
+                    .transcript
+                    .ownership
+                    .actor(&a.actor)
+                    .target
+                    .member_id()
+                    == member.id
+            })
+        });
+    if running {
+        return "执行";
+    }
+    if matches!(
+        member.target,
+        Target::Member {
+            assignment: Some(_),
+            ..
+        }
+    ) {
+        return "待执行";
+    }
+    // An actor ID survives retirement. Resolve its assignment outcome instead
+    // of treating this historical identity as evidence of live work.
+    let assignment = screen.session.as_ref().and_then(|s| {
+        s.team
+            .assignments
+            .iter()
+            .find(|a| a.member == member.id && Some(a.actor.as_str()) == member.actor.as_deref())
+    });
+    match assignment.map(|a| &a.status) {
+        Some(AssignmentStatus::Finished) => "完成",
+        Some(AssignmentStatus::Stopped) => "停止",
+        Some(AssignmentStatus::Invalidated) => "失效",
+        _ => "空闲",
     }
 }

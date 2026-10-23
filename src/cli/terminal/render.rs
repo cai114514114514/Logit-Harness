@@ -28,11 +28,10 @@ impl Content {
         let available = available.saturating_sub(statuses.len());
         let menu = menu::lines(screen, width, available.min(8));
         let available = available.saturating_sub(menu.len());
-        let mut body = if screen.session.is_none() && !screen.entered {
-            welcome(screen, width)
-        } else {
-            screen.transcript.active_lines(width)
-        };
+        let mut body = screen.transcript.active_lines(width);
+        if body.is_empty() && screen.session.is_none() && !screen.entered {
+            body = welcome(screen, width);
+        }
         let keep = available.min(8);
         if body.len() > keep {
             body.drain(..body.len() - keep);

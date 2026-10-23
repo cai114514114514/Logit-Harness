@@ -3,6 +3,26 @@ use super::{Screen, transcript::Kind};
 pub(super) fn lines(screen: &Screen) -> Vec<String> {
     let mut lines = vec![];
     if let Some(session) = &screen.session {
+        if !screen.view.readonly
+            && matches!(
+                session.status,
+                crate::domain::Status::Paused
+                    | crate::domain::Status::Stopped
+                    | crate::domain::Status::Exhausted
+                    | crate::domain::Status::Failed
+            )
+        {
+            lines.push(format!(
+                "{}{} · {}",
+                if screen.view.is_main() { "" } else { "整队" },
+                super::state::label(&session.status),
+                if screen.view.is_main() {
+                    "/resume"
+                } else {
+                    "/agent main"
+                }
+            ));
+        }
         if !screen.view.is_main()
             && let Some(member) = &screen.member
             && (member.paused || member.stopping || member.waiting.is_some())

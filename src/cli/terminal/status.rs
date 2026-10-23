@@ -10,7 +10,12 @@ fn priority(line: &str) -> u8 {
         0
     } else if line.starts_with("等待授权") || line.starts_with("等待用户回答") {
         1
-    } else if line.contains("等待活动结算") {
+    } else if line.contains("等待活动结算")
+        || line.contains("已暂停")
+        || line.contains("已停止")
+        || line.contains("预算已用尽")
+        || line.contains("需要恢复")
+    {
         2
     } else if line.starts_with("等待工作区") {
         3
@@ -44,7 +49,11 @@ pub(super) fn lines(screen: &Screen, width: usize, limit: usize) -> Vec<Line<'st
             // Facts containing an actionable command are atomic: show its full
             // ID or a complete details route, never an apparently usable prefix.
             if rows.is_empty() {
-                let subject = fact.split(" · ").next().unwrap_or("当前状态");
+                let subject = if fact.contains("已接收，等待处理") {
+                    "已接收，等待处理"
+                } else {
+                    fact.split(" · ").next().unwrap_or("当前状态")
+                };
                 let route = " · /status";
                 use unicode_width::UnicodeWidthStr;
                 rows.push(Line::raw(format!(
@@ -53,7 +62,11 @@ pub(super) fn lines(screen: &Screen, width: usize, limit: usize) -> Vec<Line<'st
                 )));
             } else {
                 rows.push(Line::raw(text::ellipsize(
-                    &format!("/status · 另 {} 项状态", facts.len() - i),
+                    &if fact.contains("已接收，等待处理") {
+                        "已接收，等待处理 · /status".into()
+                    } else {
+                        format!("/status · 另 {} 项状态", facts.len() - i)
+                    },
                     width,
                 )));
             }
