@@ -89,6 +89,56 @@ fn terminal_receipts_are_quiet_after_applied_even_when_ack_is_late() {
 }
 
 #[test]
+fn tell_pending_keeps_sender_and_recipient_views_until_application() {
+    use crate::runtime::team::{MemberControl, Receipt, ReceiptStatus, Request};
+    let request = Request {
+        id: "tell-pending".into(),
+        client_id: "ui-client".into(),
+        target: member(1).target,
+        action: MemberControl::Message {
+            text: "please inspect".into(),
+        },
+    };
+    let mut transcript = Transcript::default();
+    transcript.focus(ViewTarget::main());
+    transcript.accepted(&ViewTarget::main(), &request);
+    let mut receipt = Receipt {
+        request,
+        status: ReceiptStatus::Pending,
+        applying: false,
+        error: None,
+        pending_input: None,
+    };
+    transcript.receive(&event(
+        1,
+        EventData::RequestReceipt {
+            goal: "goal".into(),
+            receipt: receipt.clone(),
+        },
+    ));
+    assert!(
+        !transcript.pending_lines(100).is_empty(),
+        "durable receipt must not remove the sender's pending status"
+    );
+    transcript.switch(member(1));
+    assert!(
+        !transcript.pending_lines(100).is_empty(),
+        "recipient also sees its pending work"
+    );
+    receipt.status = ReceiptStatus::Applied;
+    transcript.receive(&event(
+        2,
+        EventData::RequestReceipt {
+            goal: "goal".into(),
+            receipt,
+        },
+    ));
+    assert!(transcript.pending_lines(100).is_empty());
+    transcript.switch(ViewTarget::main());
+    assert!(transcript.pending_lines(100).is_empty());
+}
+
+#[test]
 fn pending_delivery_survives_long_history_and_stays_in_its_view() {
     use crate::runtime::team::{MemberControl, Request};
     let mut p = Transcript::default();
@@ -455,6 +505,7 @@ async fn delayed_failure_keeps_original_assignment_and_editor_after_focus_switch
     context.revision = screen.input.revision();
     let (release, wait) = std::sync::mpsc::channel();
     let mut jobs = Jobs::new();
+    screen.feedback.start(&context);
     context.execute(&mut jobs, "old assignment input".into(), move |context| {
         wait.recv().unwrap();
         assert_eq!(context.view, member(1));
@@ -464,9 +515,12 @@ async fn delayed_failure_keeps_original_assignment_and_editor_after_focus_switch
     screen.focus(ViewTarget::main());
     screen.input.insert("untouched main");
     screen.bind_draft();
+    let main_input = Context::new(1, &paths, &screen);
+    screen.feedback.start(&main_input);
     release.send(()).unwrap();
     let (_, reply) = jobs.join_next().await.unwrap().unwrap();
     let Reply::Failed {
+        operation,
         origin,
         draft,
         revision,
@@ -475,6 +529,12 @@ async fn delayed_failure_keeps_original_assignment_and_editor_after_focus_switch
     else {
         panic!("expected origin-bound failure")
     };
+    screen.feedback.finish(&operation);
+    assert!(
+        !screen.feedback.lines(&screen.view).is_empty(),
+        "old failure cleared main's newer sending state"
+    );
+    assert!(screen.feedback.lines(&member(1)).is_empty());
     screen.restore_origin(&origin, draft, revision);
     assert_eq!(screen.input.text(), "untouched main");
     screen.focus(member(2));

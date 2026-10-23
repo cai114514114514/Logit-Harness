@@ -137,7 +137,7 @@ pub(super) async fn run(
         tokio::select! {
             _ = hangup.recv() => break,
             _ = tokio::signal::ctrl_c() => {
-                if screen.session.is_some() { Context::new(generation, paths, &screen).control(&mut jobs, screen.pause(), "/pause".into(), screen.connected); }
+                if screen.session.is_some() { let context = Context::new(generation, paths, &screen); screen.feedback.start(&context); context.control(&mut jobs, screen.pause(), "/pause".into(), screen.connected); }
                 else { break; }
             }
             _ = frames.tick() => {
@@ -179,7 +179,7 @@ pub(super) async fn run(
                     Ok(Reply::Catalog(entries)) => { screen.completions = Some(entries); catalog_loading = false; }
                     Ok(Reply::Open { context, session, transcript, recent }) => {
                         let sequence = transcript.sequence(); let id = session.id.clone();
-                        screen.activity.clear(); screen.transcript = transcript; screen.recent = recent;
+                        screen.feedback.finish(&context.operation); screen.activity.clear(); screen.transcript = transcript; screen.recent = recent;
                         let state = session.target_view(&screen.view)?;
                         screen.receive(ServerMessage::TargetView { state: Box::new(state), sequence }); screen.connected = false;
                         let (columns, rows) = crossterm::terminal::size()?;
@@ -194,7 +194,7 @@ pub(super) async fn run(
                         opening = false;
                     }
                     Ok(Reply::OpenFailed { context, error }) => {
-                        screen.note(format!("打开会话失败：{error}"));
+                        screen.feedback.finish(&context.operation); screen.note(format!("打开会话失败：{error}"));
                         initial.finish(context.revision); opening = false;
                     }
                     Ok(Reply::Created { context, id, error, draft, revision }) => {
@@ -202,14 +202,20 @@ pub(super) async fn run(
                         context.open(&mut jobs, id); opening = true;
                     }
                     Ok(Reply::Message(message)) => screen.receive(message),
-                    Ok(Reply::Sent) => { screen.activity.clear(); if !screen.connected { reconnect = true; } }
-                    Ok(Reply::Failed { origin, text, draft, revision }) => { screen.activity.clear(); screen.note_origin(&origin, text); screen.restore_origin(&origin, draft, revision); if initial.finish(revision) { opening = false; } }
+                    Ok(Reply::Sent(context)) => {
+                        screen.feedback.finish(&context.operation);
+                        // A legacy Ack only proves persistence, never application.
+                        // Execution state continues to come from the runtime stream.
+                        if !screen.connected { reconnect = true; }
+                    }
+                    Ok(Reply::Failed { operation, origin, text, draft, revision }) => { screen.feedback.finish(&operation); screen.note_origin(&origin, text); screen.restore_origin(&origin, draft, revision); if initial.finish(revision) { opening = false; } }
                     Ok(Reply::History { origin, browser }) => { if super::ownership::same_view(&origin, &screen.view) { screen.history = Some(browser); } else { screen.note_origin(&origin, "历史已读取；返回原视图后 /history 查看。"); } },
                     Ok(Reply::Copied(origin)) => screen.note_origin(&origin, "已复制所选记录原文。"),
-                    Ok(Reply::Accepted { origin, request }) => { screen.transcript.accepted(&origin, &request); screen.activity.clear(); if !screen.connected { reconnect = true; } },
-                    Ok(Reply::Notice { origin, text }) => screen.note_origin(&origin, text),
+                    Ok(Reply::Accepted { operation, origin, request }) => { screen.transcript.accepted(&origin, &request); screen.feedback.finish(&operation); if !screen.connected { reconnect = true; } },
+                    Ok(Reply::Notice { operation, origin, text }) => { if let Some(operation) = operation { screen.feedback.finish(&operation); } screen.note_origin(&origin, text); },
                     Ok(Reply::Command { context, outcome, draft }) => {
-                        if !matches!(&outcome, Outcome::Control(_) | Outcome::Skill(_)) {
+                        if !matches!(&outcome, Outcome::Control(_) | Outcome::Skill(_) | Outcome::ScopedSkill { .. }) {
+                            screen.feedback.finish(&context.operation);
                             initial.finish(context.revision);
                         }
                         match outcome {
@@ -250,7 +256,7 @@ pub(super) async fn run(
                             if context.session.is_none() {
                                 context.clone().create(&mut jobs, control, draft); opening = true;
                             } else { context.clone().control(&mut jobs, control, draft, screen.connected); }
-                            screen.activity = "正在提交（输入尚未确认处理）".into();
+                            screen.feedback.start(&context);
                         }
                         Outcome::Skill(invocation) => {
                             let control = invocation.control();
@@ -336,7 +342,7 @@ pub(super) async fn run(
                         if super::edit::edit(&mut screen, key) { screen.bind_draft(); }
                         else if key.code == KeyCode::Char('d') && control { break; }
                         else if key.code == KeyCode::Char('c') && control {
-                            if screen.session.is_some() { Context::new(generation, paths, &screen).control(&mut jobs, screen.pause(), "/pause".into(), screen.connected); } else { break; }
+                            if screen.session.is_some() { let context = Context::new(generation, paths, &screen); screen.feedback.start(&context); context.control(&mut jobs, screen.pause(), "/pause".into(), screen.connected); } else { break; }
                         } else if key.code == KeyCode::Enter && screen.complete() {
                             let draft = screen.input.text().to_owned();
                             if super::setup::reject_inline(&mut screen, &draft) || draft.trim().is_empty() { continue; }

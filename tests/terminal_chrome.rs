@@ -121,3 +121,27 @@ fn command_catalog_keeps_sources_without_repeated_tags() {
     assert!(output.contains("/"));
     assert!(output.matches("本地操作").count() <= 1, "{output}");
 }
+
+#[test]
+fn long_team_title_does_not_hide_the_current_assignment_in_a_narrow_view() {
+    let mut screen = team();
+    screen.session.as_mut().unwrap().goal.original = "很长很长的团队目标".repeat(10);
+    let output = painted(&screen, 40, 12);
+    assert!(output.contains("检查空列表"), "current task lost: {output}");
+}
+
+#[test]
+fn main_shows_members_waiting_when_no_actual_work_is_running() {
+    let mut screen = team();
+    screen.view = ViewTarget::main();
+    let output = painted(&screen, 110, 34);
+    assert!(
+        output.contains("成员等待") && output.contains("main"),
+        "wait reason lost: {output}"
+    );
+}
+
+#[test]
+fn unusably_small_team_view_requests_space_instead_of_overlapping_the_editor() {
+    assert!(painted(&team(), 40, 5).contains("请扩大终端窗口"));
+}

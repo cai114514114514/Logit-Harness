@@ -5,6 +5,7 @@ use ratatui::{
     style::{Color, Style},
     text::{Line, Span},
 };
+use unicode_width::UnicodeWidthStr;
 
 impl Entry {
     /// Search, expansion and both copy routes share the same complete record.
@@ -159,23 +160,28 @@ impl Entry {
             (_, Some(false)) => ("✕", Color::Red),
             _ => ("?", text::MUTED),
         };
-        let mut title = clean(&self.title);
-        if let Some(result) = &self.result {
-            title.push_str(&tool_text::suffix(result));
-        }
+        let suffix = self
+            .result
+            .as_ref()
+            .map(tool_text::suffix)
+            .unwrap_or_default();
+        let title = text::ellipsize(
+            &format!("{mark} {}", clean(&self.title)),
+            width.saturating_sub(suffix.width()),
+        );
         let mut lines = vec![Line::styled(
-            text::ellipsize(&format!("{mark} {title}"), width),
+            format!("{title}{suffix}"),
             Style::default().fg(color),
         )];
-        if self.success == Some(false) || self.success.is_none() && !self.running {
+        if self.running || self.success != Some(true) {
             let content = clean(&self.display_text(false));
             let rows = content
                 .lines()
                 .flat_map(|line| text::wrap(vec![Span::raw(format!("  {line}"))], width))
                 .collect::<Vec<_>>();
-            if rows.len() > 4 {
+            if rows.len() > 4 && !self.running {
                 lines.push(Line::styled(
-                    "  … 完整输出 /history",
+                    text::ellipsize("  /history · 完整输出", width),
                     Style::default().fg(text::MUTED),
                 ));
             }

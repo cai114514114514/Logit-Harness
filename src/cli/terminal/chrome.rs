@@ -63,10 +63,24 @@ pub(super) fn lines(screen: &Screen, width: usize) -> Vec<Line<'static>> {
             .as_ref()
             .and_then(|m| m.task.as_deref())
             .unwrap_or("无分配");
-        rows.push(Line::styled(
-            text::ellipsize(&super::state::clean(&format!("{title} · {task}")), width),
-            Style::default().fg(MUTED),
-        ));
+        let subtitle = if width < 60 {
+            let team = format!(" · 团队 {}", super::team::identity(goal));
+            format!(
+                "{}{team}",
+                text::ellipsize(
+                    &super::state::clean(task),
+                    width.saturating_sub(team.width())
+                )
+            )
+        } else {
+            let title = text::ellipsize(&title, width / 2);
+            let remaining = width.saturating_sub(title.width() + 3);
+            format!(
+                "{title} · {}",
+                text::ellipsize(&super::state::clean(task), remaining)
+            )
+        };
+        rows.push(Line::styled(subtitle, Style::default().fg(MUTED)));
     }
     rows.push(strip(screen, width));
     rows
@@ -92,7 +106,7 @@ fn strip(screen: &Screen, width: usize) -> Line<'static> {
             let name = if duplicates {
                 format!(
                     "{}:{}",
-                    m.name,
+                    text::ellipsize(&super::state::clean(&m.name), 7),
                     m.id.chars()
                         .rev()
                         .take(4)

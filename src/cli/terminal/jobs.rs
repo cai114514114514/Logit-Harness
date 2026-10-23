@@ -40,15 +40,18 @@ pub(super) enum Reply {
     },
     Message(ServerMessage),
     Notice {
+        operation: Option<String>,
         origin: crate::runtime::view::ViewTarget,
         text: String,
     },
     Accepted {
+        operation: String,
         origin: crate::runtime::view::ViewTarget,
         request: crate::runtime::team::Request,
     },
-    Sent,
+    Sent(Context),
     Failed {
+        operation: String,
         origin: crate::runtime::view::ViewTarget,
         text: String,
         draft: String,
@@ -63,6 +66,7 @@ pub(super) enum Reply {
 pub(super) type Jobs = JoinSet<(u64, anyhow::Result<Reply>)>;
 #[derive(Clone)]
 pub(super) struct Context {
+    pub operation: String,
     pub generation: u64,
     pub view: crate::runtime::view::ViewTarget,
     pub revision: u64,
@@ -74,6 +78,7 @@ pub(super) struct Context {
 impl Context {
     pub fn new(generation: u64, paths: &Paths, screen: &Screen) -> Self {
         Self {
+            operation: uuid::Uuid::new_v4().to_string(),
             generation,
             view: screen.draft_view(),
             client_id: screen.client_id.clone(),
@@ -106,6 +111,7 @@ impl Context {
         let generation = self.generation;
         let revision = self.revision;
         let origin = self.view.clone();
+        let operation_id = self.operation.clone();
         jobs.spawn(async move {
             let retained = draft.clone();
             let failed_origin = origin.clone();
@@ -116,6 +122,7 @@ impl Context {
                     draft,
                 }),
                 Err(error) => Ok(Reply::Failed {
+                    operation: self.operation.clone(),
                     origin: origin.clone(),
                     text: error.to_string(),
                     draft,
@@ -125,6 +132,7 @@ impl Context {
             .await
             .unwrap_or_else(|error| {
                 Ok(Reply::Failed {
+                    operation: operation_id,
                     origin: failed_origin,
                     text: format!("本地命令中断：{error}"),
                     draft: retained,
@@ -232,12 +240,14 @@ impl Context {
                     })
                 }
                 Ok(Err(error)) => Ok(Reply::Failed {
+                    operation: self.operation.clone(),
                     origin: self.view.clone(),
                     text: error.to_string(),
                     draft,
                     revision: self.revision,
                 }),
                 Err(error) => Ok(Reply::Failed {
+                    operation: self.operation.clone(),
                     origin: self.view.clone(),
                     text: format!("创建会话中断：{error}"),
                     draft,
@@ -262,6 +272,7 @@ impl Context {
                 generation,
                 result.or_else(|error: anyhow::Error| {
                     Ok(Reply::Notice {
+                        operation: None,
                         origin,
                         text: format!("本地操作失败：{error}"),
                     })

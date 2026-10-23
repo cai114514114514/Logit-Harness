@@ -14,7 +14,7 @@ fn priority(line: &str) -> u8 {
         2
     } else if line.starts_with("等待工作区") {
         3
-    } else if line.contains("已接收，等待处理") {
+    } else if line.contains("已接收，等待处理") || line.starts_with("正在发送") {
         4
     } else {
         5

@@ -32,6 +32,7 @@ impl Context {
             (
                 self.generation,
                 Ok(Reply::Notice {
+                    operation: None,
                     origin,
                     text: match result {
                         Ok(Ok(text)) => text,
@@ -85,6 +86,7 @@ impl Context {
                                 .await
                                 {
                                     return Ok(Reply::Notice {
+                                        operation: Some(self.operation.clone()),
                                         origin: self.view.clone(),
                                         text: super::transcript::receipts::detail(&receipt),
                                     });
@@ -97,6 +99,7 @@ impl Context {
                         }
                     }
                     return Ok(Reply::Accepted {
+                        operation: self.operation.clone(),
                         origin: self.view.clone(),
                         request: request.clone(),
                     });
@@ -108,7 +111,7 @@ impl Context {
                     }
                     if matches!(command, Control::Resume) {
                         daemon::resume(&self.paths, id).await?;
-                        return Ok(Reply::Sent);
+                        return Ok(Reply::Sent(self.clone()));
                     }
                     // Persist before starting an archived owner: /pause or /plan
                     // must be applied before it can schedule old engineering work.
@@ -124,12 +127,12 @@ impl Context {
                             "指令已保存，后台启动失败：{error}。用 /resume 恢复；不要重复提交原指令"
                         )
                     })?;
-                    return Ok(Reply::Sent);
+                    return Ok(Reply::Sent(self.clone()));
                 }
                 match ipc::request(&self.paths.socket(id)?, ClientMessage::Command { command })
                     .await?
                 {
-                    ServerMessage::Ack => Ok(Reply::Sent),
+                    ServerMessage::Ack => Ok(Reply::Sent(self.clone())),
                     ServerMessage::Error { message } => Err(anyhow::anyhow!(message)),
                     message => Ok(Reply::Message(message)),
                 }
@@ -139,6 +142,7 @@ impl Context {
                 generation,
                 result.or_else(|error: anyhow::Error| {
                     Ok(Reply::Failed {
+                        operation: self.operation.clone(),
                         origin: self.view.clone(),
                         text: format!("未确认送达：{error}。请先查看会话记录，避免重复提交。"),
                         draft,

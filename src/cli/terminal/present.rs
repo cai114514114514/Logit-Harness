@@ -57,6 +57,7 @@ pub(super) fn routine(message: &str) -> bool {
     matches!(
         message,
         "verified goal archived; ready for a new conversation turn"
+            | "user input classified and applied"
             | "compaction queued at a fully paired tool boundary; durable requirements and corrections remain authoritative"
     ) || message.ends_with(" context compacted; current requirements and pending work retained")
 }

@@ -7,6 +7,7 @@ mod clipboard;
 mod composer;
 mod delivery;
 mod edit;
+mod feedback;
 mod history;
 mod input;
 mod jobs;

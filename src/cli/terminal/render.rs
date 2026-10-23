@@ -18,9 +18,11 @@ struct Content {
 impl Content {
     fn measure(screen: &Screen, columns: u16, rows: u16) -> Self {
         let width = columns.saturating_sub(4) as usize;
-        let composer =
-            (wrap(screen.input.text(), width.saturating_sub(2)).len() + 2).clamp(3, 6) as u16;
         let chrome = chrome::lines(screen, width);
+        let max_editor = rows.saturating_sub(chrome.len() as u16 + 1).clamp(3, 6);
+        let composer = ((wrap(screen.input.text(), width.saturating_sub(2)).len() + 2).clamp(3, 6)
+            as u16)
+            .min(max_editor);
         let available = rows.saturating_sub(composer + 1 + chrome.len() as u16) as usize;
         let statuses = status::lines(screen, width, available.min(3));
         let available = available.saturating_sub(statuses.len());
@@ -71,7 +73,8 @@ pub fn render(frame: &mut Frame, screen: &Screen) {
         return;
     }
     let area = frame.area();
-    if area.width < 24 || area.height < 5 {
+    let minimum = chrome::lines(screen, area.width.saturating_sub(4) as usize).len() as u16 + 5;
+    if area.width < 24 || area.height < minimum {
         frame.render_widget("loh · 请扩大终端窗口", area);
         return;
     }

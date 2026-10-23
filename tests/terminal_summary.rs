@@ -136,3 +136,130 @@ fn failed_read_keeps_error_and_source_limit() {
         "{rows}"
     );
 }
+
+#[test]
+fn running_command_keeps_a_bounded_live_tail_until_it_settles() {
+    let mut p = Transcript::default();
+    push(
+        &mut p,
+        EventData::ActionStarted {
+            id: "run".into(),
+            tool: "shell".into(),
+            arguments: json!({"command":"python3 check.py"}),
+        },
+    );
+    push(
+        &mut p,
+        EventData::Delta {
+            actor: "run".into(),
+            text: "old1\nold2\nline3\nline4\nline5\nLIVE-OUTPUT".into(),
+        },
+    );
+    let live = text(p.active_lines(40));
+    assert!(
+        live.contains("LIVE-OUTPUT"),
+        "running output disappeared: {live}"
+    );
+    assert!(!live.contains("old1"), "preview should have a bounded tail");
+    push(
+        &mut p,
+        EventData::ActionFinished {
+            id: "run".into(),
+            success: true,
+            result: json!({"exit_code":0}),
+        },
+    );
+    assert!(!text(p.drain_settled(40)).contains("LIVE-OUTPUT"));
+    assert!(text(p.lines(40, true)).contains("old1"));
+}
+
+#[test]
+fn long_command_reserves_space_for_its_exit_status() {
+    let mut p = Transcript::default();
+    push(
+        &mut p,
+        EventData::ActionStarted {
+            id: "long".into(),
+            tool: "shell".into(),
+            arguments: json!({"command": "printf 'a very long shell invocation'; ".repeat(10)}),
+        },
+    );
+    push(
+        &mut p,
+        EventData::ActionFinished {
+            id: "long".into(),
+            success: false,
+            result: json!({"result":{"data":{"process":loh::tools::process::ProcessOutput {
+                pid: 1, code: Some(9), cancelled: false, timed_out: false, output: "failed".into()
+            }}}}),
+        },
+    );
+    for width in [106, 76, 56, 36] {
+        let rows = p.entries()[0].lines(width, false);
+        assert!(
+            rows[0].to_string().contains("退出 9"),
+            "{width}: {}",
+            rows[0]
+        );
+        assert!(rows.iter().all(|row| row.width() <= width));
+    }
+}
+
+#[test]
+fn process_cancellation_and_timeout_are_explicit_without_an_error_string() {
+    for (cancelled, timed_out, label) in [(true, false, "已取消"), (false, true, "超时")] {
+        let mut p = Transcript::default();
+        push(
+            &mut p,
+            EventData::ActionStarted {
+                id: "process".into(),
+                tool: "shell".into(),
+                arguments: json!({"command":"sleep 30"}),
+            },
+        );
+        push(
+            &mut p,
+            EventData::ActionFinished {
+                id: "process".into(),
+                success: false,
+                result: json!({"result":{"data":{"process":loh::tools::process::ProcessOutput {
+                    pid: 1, code: Some(1), cancelled, timed_out, output: String::new()
+                }}}}),
+            },
+        );
+        let result = text(p.drain_settled(36));
+        assert!(result.contains(label), "{result}");
+    }
+}
+
+#[test]
+fn routine_classification_and_ready_boundary_stay_in_details() {
+    let mut p = Transcript::default();
+    push(
+        &mut p,
+        EventData::Diagnostic {
+            message: "user input classified and applied".into(),
+        },
+    );
+    push(
+        &mut p,
+        EventData::Status {
+            status: loh::domain::Status::Ready,
+            reason: "execution boundary settled".into(),
+        },
+    );
+    assert!(p.drain_settled(80).is_empty());
+    let full = text(p.lines(80, true));
+    assert!(
+        full.contains("user input classified and applied")
+            && full.contains("execution boundary settled")
+    );
+    push(
+        &mut p,
+        EventData::Status {
+            status: loh::domain::Status::Paused,
+            reason: "execution boundary settled".into(),
+        },
+    );
+    assert!(text(p.drain_settled(80)).contains("已暂停"));
+}

@@ -389,7 +389,10 @@ impl Transcript {
                     self.note(&format!("{} · {reason}", super::state::label(status)));
                     // Normal lifecycle transitions already have a live status
                     // above the composer. Keep their raw reason in details only.
-                    if reason == "response complete; waiting for user input" {
+                    if reason == "response complete; waiting for user input"
+                        || reason == "execution boundary settled"
+                            && matches!(status, Status::Ready | Status::Waiting)
+                    {
                         self.entries.last_mut().unwrap().quiet = true;
                     }
                 }

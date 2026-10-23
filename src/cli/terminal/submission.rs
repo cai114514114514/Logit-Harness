@@ -58,6 +58,9 @@ impl Initial {
         if runtime && context.session.is_none() {
             self.revision = Some(context.revision);
         }
+        if runtime {
+            screen.feedback.start(&context);
+        }
         Some(context)
     }
     pub fn owns(&self, context: &Context) -> bool {
@@ -146,6 +149,10 @@ mod tests {
                 let owner = initial
                     .prepare(&mut screen, context, &command, false)
                     .unwrap();
+                assert!(
+                    screen.activity_lines().iter().any(|s| s.contains("发送")),
+                    "Enter must show feedback before service work runs"
+                );
                 let mut jobs = Jobs::new();
                 let (release_owner, owner_wait) = std::sync::mpsc::channel();
                 owner.clone().execute(&mut jobs, first.into(), move |_| {

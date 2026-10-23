@@ -95,6 +95,24 @@ pub(super) fn lines(screen: &Screen) -> Vec<String> {
                 ));
             }
         }
+        if lines.is_empty() && screen.view.is_main() {
+            let waiting = session
+                .team
+                .members
+                .iter()
+                .filter_map(|member| {
+                    member
+                        .waiting
+                        .as_ref()
+                        .map(|reason| format!("{} → {reason}", member.name))
+                })
+                .collect::<Vec<_>>();
+            if !waiting.is_empty() {
+                // These are reported member waits, not an inferred main-agent
+                // phase. A running request above always takes precedence.
+                lines.push(format!("成员等待 · {} · /team", waiting.join("；")));
+            }
+        }
         if lines.is_empty() {
             lines.push(if session.verifying {
                 "等待独立验收调度 · /tasks".into()
@@ -115,6 +133,7 @@ pub(super) fn lines(screen: &Screen) -> Vec<String> {
     if !screen.activity.is_empty() {
         lines.push(screen.activity.clone());
     }
+    lines.extend(screen.feedback.lines(&screen.view));
     if lines.is_empty() {
         lines.push("输入消息开始对话 · / 查看命令".into());
     }

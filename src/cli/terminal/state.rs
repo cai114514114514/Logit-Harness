@@ -13,6 +13,7 @@ pub struct Recent {
 
 #[derive(Default)]
 pub struct Screen {
+    pub(super) feedback: super::feedback::Feedback,
     pub(super) drafts: super::team::Drafts,
     pub(super) team_picker: bool,
     pub(super) members: Vec<crate::runtime::team::MemberView>,

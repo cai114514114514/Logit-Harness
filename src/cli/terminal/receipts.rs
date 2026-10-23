@@ -6,6 +6,7 @@ use ratatui::text::{Line, Span};
 
 pub(super) struct Delivery {
     origin: ViewTarget,
+    sender: Option<ViewTarget>,
     status: ReceiptStatus,
     request: crate::runtime::team::Request,
 }
@@ -56,13 +57,15 @@ impl Transcript {
         origin: &crate::runtime::view::ViewTarget,
         request: &crate::runtime::team::Request,
     ) {
-        if self.deliveries.contains_key(&request.key()) {
+        if let Some(delivery) = self.deliveries.get_mut(&request.key()) {
+            delivery.sender = Some(origin.clone());
             return;
         }
         self.deliveries.insert(
             request.key(),
             Delivery {
                 origin: origin.clone(),
+                sender: Some(origin.clone()),
                 status: ReceiptStatus::Pending,
                 request: request.clone(),
             },
@@ -121,10 +124,15 @@ impl Transcript {
         {
             return;
         }
+        let sender = self
+            .deliveries
+            .get(&receipt.request.key())
+            .and_then(|d| d.sender.clone());
         self.deliveries.insert(
             receipt.request.key(),
             Delivery {
                 origin: self.origin.clone(),
+                sender,
                 status: receipt.status.clone(),
                 request: receipt.request.clone(),
             },
@@ -157,13 +165,20 @@ impl Transcript {
                 delivery.status == ReceiptStatus::Pending
                     && self.view.as_ref().is_none_or(|view| {
                         super::super::ownership::same_view(view, &delivery.origin)
+                            || delivery.sender.as_ref().is_some_and(|sender| {
+                                super::super::ownership::same_view(view, sender)
+                            })
                     })
             })
             .flat_map(|delivery| {
-                let stale = self
-                    .view
-                    .as_ref()
-                    .is_some_and(|view| view.target != delivery.origin.target);
+                let stale = self.view.as_ref().is_some_and(|view| {
+                    let origin = delivery
+                        .sender
+                        .as_ref()
+                        .filter(|sender| super::super::ownership::same_view(view, sender))
+                        .unwrap_or(&delivery.origin);
+                    view.target != origin.target
+                });
                 super::super::text::wrap(
                     vec![Span::raw(format!(
                         "{} · 已接收，等待处理{} · {}",

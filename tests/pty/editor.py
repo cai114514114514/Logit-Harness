@@ -66,7 +66,7 @@ with tempfile.TemporaryDirectory(prefix='loh-editor-') as directory:
         (args.output / f'{name}.ansi').write_text(''.join(chunks))
 
     try:
-        wait('Ctrl+D')
+        wait('Ctrl-D')
         send('/help\r')
         wait('/setup')
         # Text wraps at 34 cells. Up must move to the previous visual row,

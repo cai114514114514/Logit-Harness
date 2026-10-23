@@ -11,11 +11,23 @@ fn data(result: &Value) -> &Value {
 
 pub(super) fn suffix(result: &Value) -> String {
     let data = data(result);
+    let process = &data["process"];
+    let state = if process["timed_out"] == true {
+        " · 超时"
+    } else if process["cancelled"] == true {
+        " · 已取消"
+    } else {
+        ""
+    };
     if let Some(code) = data["exit_code"]
         .as_i64()
         .or_else(|| data["process"]["exit_code"].as_i64())
+        .or_else(|| data["process"]["code"].as_i64())
     {
-        return format!(" · 退出 {code}");
+        return format!("{state} · 退出 {code}");
+    }
+    if !state.is_empty() {
+        return state.into();
     }
     if let Some(matches) = data["matches"].as_array() {
         return format!(" · {} 个结果", matches.len());

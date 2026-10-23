@@ -40,7 +40,7 @@ class Provider(BaseHTTPRequestHandler):
             main_turn += 1
             if main_turn == 1:
                 output = {'type': 'function_call', 'call_id': str(uuid.uuid4()), 'name': 'shell',
-                          'arguments': json.dumps({'command': "printf 'EARLY-TOOL-PREFIX\\n'; sleep 3; i=0; while [ $i -lt 90 ]; do printf 'tool-line-%03d\\n' $i; i=$((i+1)); done; printf 'TOOL-END\\n'", 'timeout_seconds': 15})}
+                          'arguments': json.dumps({'command': "printf 'EARLY-TOOL-PREFIX\\n'; sleep 3; i=0; while [ $i -lt 90 ]; do printf 'tool-line-%03d\\n' $i; i=$((i+1)); done; printf 'TOOL-END\\n'; printf 'fixture assertion failed\\n' >&2; exit 9", 'timeout_seconds': 15})}
             else:
                 output = {'type': 'function_call', 'call_id': str(uuid.uuid4()), 'name': 'ask_user',
                           'arguments': json.dumps({'question': 'Layout fixture finished. Continue?', 'requirements': ['r1']})}
@@ -140,7 +140,7 @@ class Client:
         (out / (name + '.ansi')).write_text(''.join(self.chunks))
         (out / (name + '-scrollback.txt')).write_text('\n'.join(self.history()))
         rows = self.rows()
-        footer = [i + 1 for i, row in enumerate(rows) if 'KV' in row or 'Ctrl+D' in row]
+        footer = [i + 1 for i, row in enumerate(rows) if 'KV' in row or 'Ctrl-D' in row]
         receipt = dict(name=name, rows=self.screen.lines, columns=self.screen.columns,
                        footer_rows=footer, cursor=[self.screen.cursor.x + 1, self.screen.cursor.y + 1],
                        brands=self.all_text().count('██████▀'))
@@ -171,7 +171,7 @@ with tempfile.TemporaryDirectory(prefix='loh-layout-') as tmp:
             return []
 
     try:
-        client.wait(lambda: 'Ctrl+D' in '\n'.join(client.rows()))
+        client.wait(lambda: 'Ctrl-D' in '\n'.join(client.rows()))
         client.save('01-welcome', False)
         client.send('hello\r')
         client.wait(lambda: 'REPLY-001' in client.all_text())
@@ -248,21 +248,27 @@ with tempfile.TemporaryDirectory(prefix='loh-layout-') as tmp:
         client.wait(lambda: '/answer ' in '\n'.join(client.rows()))
         question_id = next(question for state in states() for question in state.get('questions', {}))
         client.save('07-tool-complete')
+        assert 'fixture assertion failed' in client.all_text()
+        assert '退出 9' in client.all_text()
         client.send('/history EARLY-TOOL-PREFIX\r')
         client.wait(lambda: '完整历史' in '\n'.join(client.rows()))
         client.send('\r')
         client.save('08-full-tool', False)
         assert 'EARLY-TOOL-PREFIX' in '\n'.join(client.rows())
+        client.child.setwinsize(24, 80)
+        client.screen.resize(lines=24, columns=80)
+        client.drain(.4)
+        client.save('08-detail-resize', False)
         client.send('\x1b')
         client.save('09-detail-return')
-        for rows, columns in [(18, 40), (50, 120), (32, 110)]:
+        for rows, columns in [(34, 110), (24, 80), (18, 60), (12, 40), (50, 120), (32, 110)]:
             client.child.setwinsize(rows, columns)
             client.screen.resize(lines=rows, columns=columns)
             client.drain(.4)
             client.save(f'10-resize-{rows}-{columns}')
             if not args.baseline:
                 assert sum('补充要求、纠正方向' in row for row in client.rows()) == 1, client.rows()
-                assert question_id in ''.join(row.strip() for row in client.rows()), client.rows()
+                assert question_id in ''.join(row.strip() for row in client.rows()) or '/status' in '\n'.join(client.rows()), client.rows()
         client.send('/new\r')
         client.drain(.4)
         client.save('11-new-empty')

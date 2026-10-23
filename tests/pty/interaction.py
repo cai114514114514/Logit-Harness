@@ -98,7 +98,7 @@ with tempfile.TemporaryDirectory(prefix='loh-task3-') as tmp:
     def events(ident):
         with db() as conn:return [json.loads(s) for (s,) in conn.execute('SELECT data FROM events WHERE session=? ORDER BY sequence',(ident,))]
     try:
-        c=Client(home,cwd);clients.append(c);c.wait(lambda:'Ctrl+D' in c.grid())
+        c=Client(home,cwd);clients.append(c);c.wait(lambda:'Ctrl-D' in c.grid())
         c.send('/goal Run the isolated quiet fixture command\r')
         c.wait(lambda:any(e['type']=='process_started' for i,s in sessions() for e in events(i)))
         ident=sessions()[0][0]
@@ -131,12 +131,12 @@ with tempfile.TemporaryDirectory(prefix='loh-task3-') as tmp:
             for seq,ts,data in conn.execute('SELECT sequence,timestamp,data FROM events WHERE session=? ORDER BY sequence',(ident,)):
                 replay.append(dict(sequence=seq,session=ident,timestamp=ts,**json.loads(data)))
         (OUT/'task3-replay.json').write_text(json.dumps(replay,ensure_ascii=False,indent=2))
-        c=Client(home,cwd,['attach',ident]);clients.append(c);c.wait(lambda:'Ctrl+O' in c.grid());c.save('task3-recent')
+        c=Client(home,cwd,['attach',ident]);clients.append(c);c.wait(lambda:'Ctrl-O' in c.grid());c.save('task3-recent')
         assert 'OLD-HISTORY-000' not in ''.join(c.chunks)
         recent_raw=''.join(c.chunks);assert recent_raw.count('OLD-HISTORY-')<=20
         c.send('/history OLD-HISTORY-000\r');c.wait(lambda:'OLD-HISTORY-000' in c.grid());c.save('task3-history-search')
         assert '1 条' in c.grid();c.send('\r');c.save('task3-history-expanded');c.send('\x1b')
-        c.wait(lambda:'Ctrl+O' in c.grid());c.save('task3-history-return')
+        c.wait(lambda:'Ctrl-O' in c.grid());c.save('task3-history-return')
         count=''.join(c.chunks).count('OLD-HISTORY-364')
         c.child.setwinsize(26,70);c.screen.resize(lines=26,columns=70);c.drain(.5)
         c.child.setwinsize(32,110);c.screen.resize(lines=32,columns=110);c.drain(.5);c.save('task3-resize')
@@ -150,7 +150,7 @@ with tempfile.TemporaryDirectory(prefix='loh-task3-') as tmp:
             try:
                 with sqlite3.connect(failure_home/'sessions.sqlite') as conn:return [(i,json.loads(data)) for i,data in conn.execute('SELECT id,state FROM sessions')]
             except sqlite3.OperationalError:return []
-        f=Client(failure_home,cwd,key=None);clients.append(f);f.wait(lambda:'Ctrl+D' in f.grid())
+        f=Client(failure_home,cwd,key=None);clients.append(f);f.wait(lambda:'Ctrl-D' in f.grid())
         before=len(requests);f.send('recoverable hello\r');f.wait(lambda:'后台启动失败' in ''.join(f.chunks))
         assert f.child.isalive() and len(requests)==before and len(failed_sessions())==1
         f.save('task3-startup-failure');assert 'recoverable hello' in f.grid()
@@ -167,7 +167,7 @@ with tempfile.TemporaryDirectory(prefix='loh-task3-') as tmp:
         f.wait(lambda:any(st['budget']['limit']==123456 for i,st in failed_sessions()))
         # SQLite creation precedes the asynchronous client attachment. Local
         # export needs that rendered session context, not merely a database row.
-        f.wait(lambda:'new defaults hello' in f.grid() and 'Ctrl+O' in f.grid())
+        f.wait(lambda:'new defaults hello' in f.grid() and 'Ctrl-O' in f.grid())
         f.send('/export fixture-export.json\r');f.wait(lambda:(cwd/'fixture-export.json').exists())
         before=len(requests);f.send('/new\r');f.drain(.2);f.send('/plan\r');f.wait(lambda:any(st['mode']=='plan' for i,st in failed_sessions()))
         f.drain(.4);assert len(requests)==before, 'bare /plan must remain model-idle'

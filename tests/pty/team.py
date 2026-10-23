@@ -37,7 +37,7 @@ with tempfile.TemporaryDirectory(prefix='loh-team-offline-') as temporary:
     try:
         main = Client(binary, home, cwd)
         clients.append(main)
-        main.wait(lambda: 'Ctrl+D' in main.text())
+        main.wait(lambda: 'Ctrl-D' in main.text())
         main.send('/goal OFFLINE two independent fixture tasks\r')
         def state():
             return sessions(home)[0][1] if sessions(home) else {}
@@ -45,7 +45,7 @@ with tempfile.TemporaryDirectory(prefix='loh-team-offline-') as temporary:
         ident = sessions(home)[0][0]
         main.wait(lambda: all(m['waiting'] == 'main' for m in state()['team']['members'].values()))
         main.drain(2.5)
-        team_label = '团队 '+state()['goal']['id'][:8]
+        team_label = state()['goal']['original']
         assert team_label in main.text(), 'main roster must identify its team'
         main.save(output, 'team-main')
         members = {m['name']: m['id'] for m in state()['team']['members'].values()}
@@ -53,8 +53,8 @@ with tempfile.TemporaryDirectory(prefix='loh-team-offline-') as temporary:
         ada = Client(binary, home, cwd, ['attach', ident, '--agent', members['Ada']])
         bob = Client(binary, home, cwd, ['attach', ident, '--agent', members['Bob']])
         clients.extend([ada, bob])
-        ada.wait(lambda: 'Ada [' in ada.text())
-        bob.wait(lambda: 'Bob [' in bob.text())
+        ada.wait(lambda: 'Ada · 仅控制此成员' in ada.text())
+        bob.wait(lambda: 'Bob · 仅控制此成员' in bob.text())
         assert team_label in ada.text() and team_label in bob.text(), 'member headers must identify the same team as main'
         ada.save(output, 'team-ada')
         bob.save(output, 'team-bob')
@@ -69,7 +69,7 @@ with tempfile.TemporaryDirectory(prefix='loh-team-offline-') as temporary:
         main.send('\x1b[B\r')
         main.wait(lambda: '视图 member-' in ''.join(main.chunks))
         main.send('/agent main\r')
-        main.wait(lambda: '位成员' in main.text() and '/team' in main.text())
+        main.wait(lambda: '[主控]' in main.text() and 'Ctrl-T' in main.text())
         assert len(provider.requests) == frozen, 'Viewing/attaching must not call provider'
         if args.serve:
             for client in clients:
@@ -95,21 +95,22 @@ with tempfile.TemporaryDirectory(prefix='loh-team-offline-') as temporary:
             ada.send('\x14')
             ada.wait(lambda: 'o 新窗口' in ada.text())
             ada.send('\r')
-            ada.wait(lambda: '位成员' in ada.text())
+            ada.wait(lambda: '[主控]' in ada.text())
             ada.send('main scoped draft')
             ada.save(output, 'team-draft-main')
             ada.send('\x14')
             ada.wait(lambda: 'o 新窗口' in ada.text())
             position = list(state()['team']['members']).index(members['Ada']) + 1
             ada.send('\x1b[B'*position+'\r')
-            ada.wait(lambda: '中文草稿' in ada.text() and 'Ada [' in ada.text())
+            ada.wait(lambda: '中文草稿' in ada.text() and 'Ada · 仅控制此成员' in ada.text())
             assert 'main scoped draft' not in ada.text()
             ada.save(output, 'team-draft-return')
             ada.send('\x15')
             ada.send('\x03')
             ada.wait(lambda: state()['team']['members'][members['Ada']]['paused'])
             assert not state()['team']['members'][members['Bob']]['paused']
-            ada.wait(lambda: '已应用' in ''.join(ada.chunks))
+            ada.wait(lambda: 'Ada·暂停' in ada.text())
+            assert '已接收（持久化确认）' not in ''.join(ada.chunks)
             ada.save(output, 'team-local-pause')
             bob.send('/goal must be refused\r')
             bob.wait(lambda: '需要 main' in ''.join(bob.chunks))
@@ -159,7 +160,8 @@ with tempfile.TemporaryDirectory(prefix='loh-team-offline-') as temporary:
             targets = {receipt['request']['target'].get('id', 'main') for receipt in received}
             assert targets == {'main', members['Ada'], members['Bob']}
             assert state()['team']['limit'] == 1
-            main.wait(lambda: '并发上限 1' in main.text())
+            main.drain(.4)
+            assert '已接收（持久化确认）' not in ''.join(main.chunks)
             for label, client in [('main', main), ('ada', ada), ('bob', bob)]:
                 client.save(output, 'team-concurrent-'+label)
             # Member resume cannot defeat global pause. Global resume must retain
@@ -178,18 +180,20 @@ with tempfile.TemporaryDirectory(prefix='loh-team-offline-') as temporary:
             main.wait(lambda: state()['actors']['main']['phase'] == 'blocked' and all(actor['busy'] == 0 for actor in state()['actors'].values()))
             before = len(provider.requests)
             main.save(output, 'team-global-resume')
-            for client in [ada, bob]:
-                client.child.setwinsize(24, 70)
-                client.screen.resize(lines=24, columns=70)
-                client.drain(.4)
-                client.child.setwinsize(32, 110)
-                client.screen.resize(lines=32, columns=110)
-                client.drain(.4)
+            for name, client in [('ada', ada), ('bob', bob)]:
+                for columns, rows in [(110, 34), (80, 24), (60, 18), (40, 12), (110, 34)]:
+                    client.child.setwinsize(rows, columns)
+                    client.screen.resize(lines=rows, columns=columns)
+                    client.drain(.4)
+                    client.save(output, f'team-{name}-{columns}x{rows}')
+                    assert '仅控制此成员' in client.text()
+                    assert 0 <= client.screen.cursor.y < rows
+                    assert ''.join(client.chunks).count('██████▀') == 1
             bob.save(output, 'team-resize')
             bob.close()
             bob = Client(binary, home, cwd, ['attach', ident, '--agent', members['Bob']])
             clients.append(bob)
-            bob.wait(lambda: 'Bob [' in bob.text())
+            bob.wait(lambda: 'Bob · 仅控制此成员' in bob.text())
             bob.save(output, 'team-reconnect')
             assert len(provider.requests) == before, 'History/resize/reattach must stay provider-idle'
             bob.send('/new\r')
