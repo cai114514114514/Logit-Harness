@@ -41,6 +41,10 @@ impl Runner {
             )
         });
         main.role = Role::Main;
+        // This boundary follows explicit implementation authorization. Release
+        // only the restored owner's global gate; other paused attempts retain
+        // their gates and are not revived by planning reconciliation.
+        main.global_pause = false;
         main.retired = false;
         main.phase = Phase::Ready;
         main.busy = 0;

@@ -571,6 +571,10 @@ async fn planning_changes_revise_the_suspended_goal_before_implementation_resume
         .unwrap();
     live.waiting().await;
     assert_eq!(live.saved().goal.id, goal);
+    assert!(
+        !live.saved().suspended.as_ref().unwrap().global_pause,
+        "an internal mode-switch cancellation must not create a user-resume gate"
+    );
     assert!(!root.path().join("first.txt").exists());
     live.control
         .send(Control::Message {
@@ -602,6 +606,50 @@ async fn planning_changes_revise_the_suspended_goal_before_implementation_resume
                 .contains("SQLite instead of JSON")
         );
     }
+    live.stop().await;
+}
+
+#[tokio::test]
+async fn explicit_implementation_resumes_the_paused_owner_after_planning() {
+    let root = tempfile::tempdir().unwrap();
+    let provider = Engineer::new(true);
+    let mut session = Session::new(root.path().into(), "Create first.txt", 1_000_000, 60);
+    session.interactive = true;
+    let mut live = Live::start(session, provider.clone());
+    live.until(|e| matches!(e, EventData::ModelRequested { .. }))
+        .await;
+    live.control.send(Control::Pause).await.unwrap();
+    live.until(|e| {
+        matches!(
+            e,
+            EventData::Status {
+                status: Status::Paused,
+                ..
+            }
+        )
+    })
+    .await;
+    assert!(live.saved().actors["main"].global_pause);
+    live.control
+        .send(Control::Plan { text: None })
+        .await
+        .unwrap();
+    live.waiting().await;
+    assert!(live.saved().suspended.as_ref().unwrap().global_pause);
+    assert!(!root.path().join("first.txt").exists());
+    assert_eq!(
+        provider.count("main"),
+        1,
+        "planning alone must not resume engineering"
+    );
+    live.control
+        .send(Control::Message {
+            text: "Implement now".into(),
+        })
+        .await
+        .unwrap();
+    live.completed().await;
+    assert!(root.path().join("first.txt").exists());
     live.stop().await;
 }
 
