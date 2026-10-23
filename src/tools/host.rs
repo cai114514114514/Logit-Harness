@@ -1,3 +1,4 @@
+use super::assignment::{AssignmentLease, WriteGrant};
 use super::files::{WORKSPACE_FINGERPRINT_KEY, Workspace};
 use crate::domain::{EvidenceKind, Fingerprints, Goal};
 use crate::model::ToolCall;
@@ -42,6 +43,8 @@ pub struct ToolSpec {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Scope {
+    #[serde(default)]
+    pub assignment: Option<AssignmentLease>,
     pub requirements: BTreeMap<String, u64>,
     #[serde(default)]
     pub epoch: u64,
@@ -115,6 +118,7 @@ pub struct ToolHost {
     pub mutation: Arc<Mutex<()>>,
     pub steps: Arc<RwLock<BTreeMap<String, u64>>>,
     pub blocked: Arc<RwLock<BTreeSet<String>>>,
+    pub assignments: Arc<RwLock<BTreeMap<String, WriteGrant>>>,
     pub services: Option<Arc<super::services::Services>>,
     pub knowledge: Option<Arc<crate::extensions::knowledge::Knowledge>>,
     pub mcp: Option<Arc<crate::extensions::mcp::Registry>>,
@@ -135,6 +139,7 @@ impl ToolHost {
             mutation: Arc::new(Mutex::new(())),
             steps: Arc::new(RwLock::new(BTreeMap::new())),
             blocked: Arc::new(RwLock::new(BTreeSet::new())),
+            assignments: Arc::new(RwLock::new(BTreeMap::new())),
             services: None,
             knowledge: None,
             mcp: None,
@@ -198,6 +203,15 @@ impl ToolHost {
         if (!effect.readonly() || effect == Effect::Check) && effect != Effect::Control {
             self.check_stale(&scope).await?;
         }
+        // Hold the authority read lease through dispatch. Revocation cancels the
+        // job first and then publishes new grants; it cannot race an admitted write.
+        let _assignment = if effect == Effect::Write && scope.assignment.is_some() {
+            let grants = self.assignments.read().await;
+            self.check_assignment(&call, &scope, &grants)?;
+            Some(grants)
+        } else {
+            None
+        };
         if call.name == "apply_patch"
             && let Some(knowledge) = &self.knowledge
         {

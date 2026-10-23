@@ -1,4 +1,6 @@
 mod address;
+mod assignment;
+pub use assignment::{AssignmentLease, WriteGrant};
 pub mod approval;
 pub mod browser;
 mod builtin;

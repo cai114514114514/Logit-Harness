@@ -32,6 +32,14 @@ pub struct Graph {
 }
 
 impl Graph {
+    pub fn covers_requirements(&self, goal: &Goal) -> bool {
+        self.steps.is_empty()
+            || goal.active_versions().keys().all(|id| {
+                self.steps
+                    .values()
+                    .any(|step| step.requirements.contains(id))
+            })
+    }
     /// Every validation runs before `self.steps` is touched: a rejected plan
     /// must leave the previous plan intact (tests/runtime.rs relies on this
     /// atomicity), so no early-return may follow the assignment at the end.
@@ -126,6 +134,22 @@ impl Graph {
     }
     pub fn invalidate(&mut self, requirements: &BTreeSet<String>) -> BTreeSet<String> {
         let affected = self.affected(requirements);
+        self.invalidate_steps(&affected)
+    }
+    /// Execution corrections invalidate only roots and their downstream consumers.
+    pub fn invalidate_steps(&mut self, roots: &BTreeSet<String>) -> BTreeSet<String> {
+        let mut affected = roots.clone();
+        loop {
+            let before = affected.len();
+            for step in self.steps.values() {
+                if !step.dependencies.is_disjoint(&affected) {
+                    affected.insert(step.id.clone());
+                }
+            }
+            if before == affected.len() {
+                break;
+            }
+        }
         self.generation += 1;
         for id in &affected {
             let step = self.steps.get_mut(id).expect("step from this graph");

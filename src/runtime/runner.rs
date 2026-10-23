@@ -109,6 +109,18 @@ impl Runner {
             session.team.limit = settings.workers;
         }
         session.normalize_team();
+        if session.followup.is_none()
+            && session.interactive
+            && session.status == Status::Completed
+            && session.mode == super::conversation::Mode::Conversation
+            && session.goal.id.is_empty()
+        {
+            session.followup = session
+                .archives
+                .last()
+                .filter(|a| a.status == Status::Completed)
+                .map(|a| a.goal.id.clone());
+        }
         let (control, receiver) = mpsc::channel(64);
         let (events, subscriber) = broadcast::channel(1024);
         let (send, wire) = mpsc::unbounded_channel();
@@ -140,6 +152,9 @@ impl Runner {
         } else {
             self.store.commit(&self.session.id, &self.session, data)?
         };
+        self.publish(event)
+    }
+    pub(super) fn publish(&self, event: SessionEvent) -> anyhow::Result<()> {
         if let Some(observer) = &self.observer {
             observer.on_event(&event)?;
         }
@@ -156,6 +171,11 @@ impl Runner {
     }
     pub(super) fn status(&mut self, status: Status, reason: &str) -> anyhow::Result<()> {
         self.account_time()?;
+        if status == Status::Completed
+            && self.session.mode == super::conversation::Mode::Engineering
+        {
+            return self.completion_candidate(reason);
+        }
         self.session.status = status.clone();
         self.emit(EventData::Status {
             status,
@@ -240,13 +260,15 @@ impl Runner {
                     self.check_time()?;
                     self.handle_control(control).await?;
                 }
-                Some(wire)=self.wire.recv()=>{
-                    self.check_time()?;
-                    self.handle_wire(wire)?;
-                }
+                // Settled cancellation outranks a buffered stream. Otherwise an
+                // already-finished job can retain ownership behind old deltas.
                 Some(result)=self.tasks.join_next(),if !self.tasks.is_empty()=>{
                     self.check_time()?;
                     let (id,result)=result?;self.handle_result(id,result).await?;
+                }
+                Some(wire)=self.wire.recv()=>{
+                    self.check_time()?;
+                    self.handle_wire(wire)?;
                 }
                 _=tick.tick()=>self.check_time()?,
             }
@@ -290,6 +312,7 @@ impl Runner {
         )
     }
     pub(super) fn main_feedback(&mut self, text: &str) {
+        self.session.completion = None;
         self.session.verification_pending = false;
         if let Some(main) = self.session.actors.get_mut("main") {
             main.step = None;

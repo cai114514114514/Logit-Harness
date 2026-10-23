@@ -9,6 +9,8 @@ pub struct Team {
     pub mail: Vec<Mail>,
     pub receipts: BTreeMap<String, Receipt>,
     pub wait_notice: String,
+    #[serde(default)]
+    pub corrections: Vec<Correction>,
 }
 impl Default for Team {
     fn default() -> Self {
@@ -19,6 +21,7 @@ impl Default for Team {
             mail: vec![],
             receipts: BTreeMap::new(),
             wait_notice: String::new(),
+            corrections: vec![],
         }
     }
 }
@@ -31,6 +34,9 @@ pub struct Member {
     pub actor: Option<String>,
     pub attempts: Vec<String>,
     pub paused: bool,
+    /// Temporary interruption by unknown input is independent of explicit Pause.
+    #[serde(default)]
+    pub interrupted: bool,
     pub stopping: bool,
     pub waiting: Option<String>,
     #[serde(default)]
@@ -56,6 +62,14 @@ pub enum AssignmentStatus {
     Finished,
     Stopped,
     Invalidated,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Correction {
+    #[serde(default)]
+    pub target: Option<Target>,
+    pub source: String,
+    pub steps: BTreeSet<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -108,6 +122,8 @@ pub struct Receipt {
     pub request: Request,
     pub status: ReceiptStatus,
     pub error: Option<String>,
+    #[serde(default)]
+    pub pending_input: Option<String>,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -147,10 +163,24 @@ pub struct MemberView {
     pub attempts: Vec<String>,
     pub task: Option<String>,
     pub paused: bool,
+    #[serde(default)]
+    pub interrupted: bool,
     pub stopping: bool,
     pub waiting: Option<String>,
 }
 impl Team {
+    pub fn engineering_settled(&self) -> bool {
+        !self
+            .assignments
+            .values()
+            .any(|a| a.status == AssignmentStatus::Active)
+            && !self.members.values().any(|m| m.stopping || m.interrupted)
+            && !self.mail.iter().any(|m| !m.delivered && m.error.is_none())
+            && !self
+                .receipts
+                .values()
+                .any(|r| r.status == ReceiptStatus::Pending)
+    }
     pub fn target(&self, name: &str) -> anyhow::Result<Target> {
         if name == "main" {
             return Ok(Target::Main);
@@ -200,6 +230,7 @@ impl Team {
                         .as_ref()
                         .map(|id| self.assignments[id].task.clone()),
                     paused: m.paused,
+                    interrupted: m.interrupted,
                     stopping: m.stopping,
                     waiting: m.waiting.clone(),
                 })

@@ -70,6 +70,7 @@ impl Runner {
         self.session.questions.insert(
             pending.call.id.clone(),
             Question {
+                target: self.session.actors[actor_id].target.clone(),
                 text: text.clone(),
                 requirements: ids
                     .into_iter()

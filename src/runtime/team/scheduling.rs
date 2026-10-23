@@ -75,6 +75,12 @@ impl Session {
         if let Some(id) = &selected {
             let member = &self.team.members[id];
             anyhow::ensure!(
+                !self.actions.values().any(|action| action.running
+                    && !action.pending.scope.readonly
+                    && member.attempts.contains(&action.actor)),
+                "member's previous writes are still settling"
+            );
+            anyhow::ensure!(
                 member.assignment.is_none() && !member.stopping,
                 "member already owns an assignment"
             );
@@ -134,6 +140,7 @@ impl Session {
                 actor: None,
                 attempts: vec![],
                 paused: false,
+                interrupted: false,
                 stopping: false,
                 waiting: None,
                 mail_seen: 0,
@@ -173,6 +180,11 @@ impl Session {
 
     /// Deterministic migration: old actor IDs become member IDs, never reused actors.
     pub fn normalize_team(&mut self) {
+        for member in self.team.members.values_mut() {
+            member.interrupted = self.team.mail.iter().any(|m| {
+                m.user && m.target.member_id() == member.id && !m.delivered && m.error.is_none()
+            });
+        }
         let legacy: Vec<_> = self
             .actors
             .values()
@@ -215,6 +227,7 @@ impl Session {
                     actor: Some(id.clone()),
                     attempts: vec![id],
                     paused: false,
+                    interrupted: false,
                     stopping: false,
                     waiting: None,
                     mail_seen: 0,
@@ -226,6 +239,35 @@ impl Session {
 }
 
 impl Runner {
+    pub(crate) async fn sync_assignments(&self) {
+        let grants = self
+            .session
+            .team
+            .assignments
+            .values()
+            .filter(|a| {
+                let member = &self.session.team.members[&a.member];
+                a.status == AssignmentStatus::Active
+                    && !member.paused
+                    && !member.interrupted
+                    && !member.stopping
+            })
+            .map(|a| {
+                (
+                    a.id.clone(),
+                    crate::tools::WriteGrant {
+                        lease: crate::tools::AssignmentLease {
+                            id: a.id.clone(),
+                            version: a.version,
+                            actor: a.actor.clone(),
+                        },
+                        writable: a.writable.clone(),
+                    },
+                )
+            })
+            .collect();
+        *self.tools.assignments.write().await = grants;
+    }
     pub(crate) fn settle_members(&mut self) -> anyhow::Result<()> {
         let members: Vec<_> = self.session.team.members.values().cloned().collect();
         for member in members {
@@ -305,6 +347,11 @@ impl Runner {
                     .get_mut(&member.id)
                     .unwrap()
                     .compact_pending = false;
+            } else if member.assignment.is_some() && self.session.actors[id].retired {
+                // Mode changes retire attempts before cancellation completes.
+                // Release ownership only here, after the job barrier above.
+                self.session
+                    .finish_assignment(id, AssignmentStatus::Invalidated);
             }
         }
         Ok(())

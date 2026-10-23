@@ -15,6 +15,12 @@ impl Runner {
         actor_id: &str,
         arguments: &Value,
     ) -> anyhow::Result<()> {
+        if matches!(
+            self.session.actors[actor_id].target,
+            Some(super::team::Target::Member { .. })
+        ) {
+            return self.apply_member_steering(actor_id, arguments).await;
+        }
         #[derive(Deserialize)]
         struct Input {
             intent: String,
@@ -29,6 +35,10 @@ impl Runner {
             objective_quotes: Vec<String>,
         }
         let input: Input = serde_json::from_value(arguments.clone())?;
+        let from_archive = self.session.followup_goal().is_some();
+        if from_archive && matches!(input.intent.as_str(), "refine" | "nudge") {
+            self.restore_followup().await?;
+        }
         let message_id = actor_id
             .strip_prefix("steer-")
             .ok_or_else(|| anyhow::anyhow!("steering identity missing"))?;
@@ -85,6 +95,12 @@ impl Runner {
                     actor: "question".into(),
                     text: input.answer,
                 })?;
+            }
+            "queue" if from_archive => {
+                self.request_boundary(super::conversation::Boundary::Goal {
+                    text: message.clone(),
+                    turn: message_id.into(),
+                })?
             }
             "queue" => self.queue_goal(message.clone(), message_id.into())?,
             "replace" if self.session.interactive => {
@@ -186,6 +202,7 @@ impl Runner {
                 self.session.questions.insert(
                     message_id.into(),
                     Question {
+                        target: None,
                         text: input.answer.clone(),
                         requirements: self.session.goal.active_versions(),
                         answer: None,
@@ -206,6 +223,16 @@ impl Runner {
             .find(|m| m.id == message_id)
             .unwrap()
             .applied = true;
+        for receipt in self
+            .session
+            .team
+            .receipts
+            .values_mut()
+            .filter(|r| r.pending_input.as_deref() == Some(message_id))
+        {
+            receipt.status = super::team::ReceiptStatus::Applied;
+            receipt.pending_input = None;
+        }
         self.session.actors.get_mut(actor_id).unwrap().phase = Phase::Done;
         self.emit(EventData::Diagnostic {
             message: "user input classified and applied".into(),

@@ -45,12 +45,25 @@ pub fn instructions(role: &Role, session: &Session) -> String {
 /// Mutable state belongs at the tail of the transcript. Keep the system rules
 /// stable even when requirements, source hashes, project guidance or plans change.
 pub fn state(session: &Session, actor: &super::actor::Actor, guidance: &str) -> Value {
+    let archive = (actor.role == Role::Steering)
+        .then(|| session.followup_goal())
+        .flatten();
+    let goal = archive.map_or(&session.goal, |archive| &archive.goal);
+    let plan = archive.map_or(&session.graph, |archive| &archive.graph);
+    let questions: std::collections::BTreeMap<_, _> = session
+        .questions
+        .iter()
+        .filter(|(_, q)| actor.target.is_none() || q.target == actor.target)
+        .collect();
     json!({
-        "objective": session.goal.original,
-        "requirements": session.goal.requirements,
-        "plan": session.graph,
+        "objective": goal.original,
+        "requirements": goal.requirements,
+        "plan": plan,
+        "completed_followup": archive.is_some(),
         "messages": session.inbox,
-        "questions": session.questions,
+        "questions": questions,
+        "directed_input": if actor.role == Role::Steering { session.team.mail.iter().find(|m| m.id == actor.turn && m.user) } else { None },
+        "execution_corrections": session.team.corrections.iter().filter(|c| actor.role == Role::Main || c.steps.iter().any(|step| actor.scope.steps.contains_key(step))).collect::<Vec<_>>(),
         "workspace": session.workspace,
         "annotations": session.goal.notes.iter().filter(|note| note.current(&session.goal)).collect::<Vec<_>>(),
         "guidance": guidance,

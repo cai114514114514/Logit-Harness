@@ -37,6 +37,8 @@ pub struct Turn {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Archive {
+    #[serde(default)]
+    pub team: super::team::Team,
     pub goal: Goal,
     pub status: Status,
     pub graph: Graph,

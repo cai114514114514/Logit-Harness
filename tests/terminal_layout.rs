@@ -264,6 +264,7 @@ fn narrow_blockers_show_whole_action_ids_or_an_explicit_details_route() {
         view.questions.insert(
             question.into(),
             Question {
+                target: None,
                 text: "请确认接下来的工作范围".into(),
                 requirements: Default::default(),
                 answer: None,

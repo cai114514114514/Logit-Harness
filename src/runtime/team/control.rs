@@ -23,11 +23,29 @@ impl Runner {
                 request: request.clone(),
                 status: ReceiptStatus::Pending,
                 error: None,
+                pending_input: None,
             },
         );
+        let inbox_before = self.session.inbox.len();
         let result = self.apply_member_control(&request).await;
+        self.sync_assignments().await;
+        let pending_input = self
+            .session
+            .inbox
+            .iter()
+            .skip(inbox_before)
+            .find(|m| !m.applied)
+            .map(|m| m.id.clone());
+        let queued = self.session.team.mail.iter().any(|mail| {
+            mail.id == format!("user:{}:{}", request.client_id, request.id)
+                && !mail.delivered
+                && mail.error.is_none()
+        });
         let receipt = self.session.team.receipts.get_mut(&key).unwrap();
-        receipt.status = if result.is_ok() {
+        receipt.pending_input = pending_input;
+        receipt.status = if result.is_ok() && (queued || receipt.pending_input.is_some()) {
+            ReceiptStatus::Pending
+        } else if result.is_ok() {
             ReceiptStatus::Applied
         } else {
             ReceiptStatus::Failed
@@ -88,8 +106,7 @@ impl Runner {
                 if member.assignment.is_none() {
                     self.member_question(id, text, &request.id)?;
                 } else {
-                    // Preserve unknown user intent for Task 2's scoped correction classifier.
-                    // It must never enter the worker as lower-trust peer mail.
+                    // Unknown user intent interrupts only this assignment until classified.
                     self.session.team.send(
                         &format!("user:{}:{}", request.client_id, request.id),
                         "user",
@@ -97,7 +114,7 @@ impl Runner {
                         text,
                         true,
                     )?;
-                    self.session.team.members.get_mut(id).unwrap().paused = true;
+                    self.session.team.members.get_mut(id).unwrap().interrupted = true;
                     for job in self
                         .jobs
                         .values()
@@ -111,7 +128,7 @@ impl Runner {
         Ok(())
     }
 
-    fn member_question(
+    pub(super) fn member_question(
         &mut self,
         member_id: &str,
         text: &str,

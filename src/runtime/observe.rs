@@ -11,6 +11,15 @@ use serde_json::json;
 
 impl Runner {
     pub(super) fn handle_wire(&mut self, wire: Wire) -> anyhow::Result<()> {
+        if let Wire::Tool { id, .. } = &wire
+            && !self
+                .session
+                .actions
+                .get(id)
+                .is_some_and(|action| action.running)
+        {
+            return Ok(());
+        }
         if let Wire::Model { id, .. } = &wire {
             let Some(job) = self.jobs.get(id) else {
                 return Ok(());
@@ -350,8 +359,8 @@ impl Runner {
     }
     pub(super) fn start_verifier(&mut self) -> anyhow::Result<()> {
         if !self.session.verification_pending
-            || self.has_workers()
-            || self.session.actions.values().any(|a| a.running)
+            || !self.session.team.engineering_settled()
+            || !self.session.actions.is_empty()
             || !self.blocked_requirements().is_empty()
             || self
                 .session
@@ -363,10 +372,16 @@ impl Runner {
         }
         if !self.session.condition.verifies() {
             self.session.verification_pending = false;
-            self.status(
-                Status::Completed,
+            self.completion_candidate(
                 "prompt baseline ended its attempt; external acceptance is separate",
             )?;
+            return Ok(());
+        }
+        if !self.session.graph.covers_requirements(&self.session.goal) {
+            self.main_feedback("The current plan omits active requirements. Reconcile task coverage before requesting independent acceptance.");
+            self.emit(EventData::Diagnostic {
+                message: "acceptance deferred to main for current task coverage".into(),
+            })?;
             return Ok(());
         }
         let id = format!("verify-{}", uuid::Uuid::new_v4());
@@ -377,6 +392,7 @@ impl Runner {
                 .into(),
             Scope {
                 requirements: self.session.goal.active_versions(),
+                steps: self.session.graph.versions(),
                 readonly: true,
                 ..Scope::default()
             },

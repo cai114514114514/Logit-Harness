@@ -195,6 +195,11 @@ impl Runner {
                 if matches!(trimmed, "stop" | "停止" | "停下" | "停") {
                     return self.halt(Status::Stopped, "user requested stop");
                 }
+                if self.session.mode == super::conversation::Mode::Conversation
+                    && self.session.followup_goal().is_some()
+                {
+                    return self.submit_work_message(text);
+                }
                 if matches!(trimmed, "pause" | "暂停" | "等一下" | "等一下，停着") {
                     return self.halt(Status::Paused, "user requested pause");
                 }

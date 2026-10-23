@@ -105,6 +105,12 @@ impl Runner {
         // This is the only elevation a worker receives. The host still validates
         // requirement/step versions and every observed file under its mutation lock.
         proposal.scope.readonly = false;
+        proposal.scope.assignment = Some(crate::tools::AssignmentLease {
+            id: assignment.id.clone(),
+            version: assignment.version,
+            actor: actor.into(),
+        });
+        self.sync_assignments().await;
         self.start_tool(actor, proposal).await
     }
 
@@ -166,7 +172,9 @@ impl Runner {
             .filter(|a| {
                 matches!(a.role, Role::Worker | Role::Verifier | Role::Diagnosis)
                     && !a.retired
-                    && !self.scope_current(&a.scope)
+                    && (!self.scope_current(&a.scope)
+                        || (a.role == Role::Verifier
+                            && a.scope.steps != self.session.graph.versions()))
             })
             .map(|a| a.id.clone())
             .collect();
@@ -189,6 +197,7 @@ impl Runner {
                 task,
             })?;
         }
+        self.sync_assignments().await;
         Ok(())
     }
 

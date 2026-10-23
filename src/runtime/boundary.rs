@@ -12,6 +12,7 @@ use serde_json::json;
 
 impl Runner {
     pub(super) fn request_boundary(&mut self, boundary: Boundary) -> anyhow::Result<()> {
+        self.session.completion = None;
         self.session.boundary = Some(boundary);
         let blocked: Vec<_> = self
             .session
@@ -72,10 +73,14 @@ impl Runner {
         {
             if self.session.queue.is_empty() {
                 self.archive_goal();
+                self.session.followup = Some(self.session.goal.id.clone());
                 self.session.mode = Mode::Conversation;
                 self.session.goal = empty_goal(self.session.goal.epoch.saturating_add(1));
                 self.session.graph = Default::default();
+                self.session.team = Default::default();
+                self.session.completion = None;
                 self.session.questions.clear();
+                self.session.actors.clear();
                 self.session.actors.insert(
                     "main".into(),
                     conversation_actor("", self.session.goal.epoch, true),
@@ -148,6 +153,9 @@ impl Runner {
             }
             Boundary::Goal { text, .. } => {
                 self.archive_goal();
+                self.session.followup = None;
+                self.session.team = Default::default();
+                self.session.completion = None;
                 self.session.mode = Mode::Engineering;
                 let mut goal = Goal::new(&text);
                 goal.epoch = epoch;
@@ -212,6 +220,7 @@ impl Runner {
             return;
         }
         self.session.archives.push(Archive {
+            team: self.session.team.clone(),
             goal: self.session.goal.clone(),
             status: if self.session.status == Status::Completed {
                 Status::Completed

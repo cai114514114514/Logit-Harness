@@ -21,6 +21,11 @@ impl Runner {
         let mut progressed = false;
         let owned = self.execution_owner().await?;
         self.start_steering();
+        self.start_member_steering().await?;
+        self.sync_assignments().await;
+        if self.try_completion()? {
+            return Ok(true);
+        }
         if self.session.replan_pending {
             if !self.jobs.is_empty() {
                 return Ok(false);
@@ -31,8 +36,12 @@ impl Runner {
             && self.session.status == Status::Running
             && self.session.actors["main"].phase == Phase::Done
             && self.session.final_report.is_some()
+            && self.session.completion.is_none()
         {
             self.start_verifier()?;
+            if self.session.completion.is_some() {
+                return Ok(true);
+            }
         }
         let mut ids: Vec<_> = self.session.actors.keys().cloned().collect();
         ids.sort_by_key(|id| {
@@ -57,7 +66,7 @@ impl Runner {
                 && let Some(member) = self.session.team.member_for_actor(&id)
             {
                 if member.stopping
-                    || ((member.paused || member.waiting.is_some())
+                    || ((member.paused || member.interrupted || member.waiting.is_some())
                         && !self.session.actors[&id].compact)
                 {
                     continue;
@@ -253,6 +262,15 @@ impl Runner {
             });
         }
         tools.extend(prompts::special(&actor.role));
+        let member_steering = actor.role == Role::Steering && actor.target.is_some();
+        if member_steering {
+            for tool in &mut tools {
+                if tool["name"] == "classify_input" {
+                    tool["parameters"]["properties"]["intent"]["enum"] =
+                        json!(["question", "answer", "local", "refine", "clarify"]);
+                }
+            }
+        }
         if actor.role == Role::Conversation && !actor.allow_goal {
             tools.retain(|v| v["name"] != "begin_goal");
         }
@@ -287,7 +305,13 @@ impl Runner {
             || (actor.role != Role::Steering
                 && serde_json::to_vec(&actor.context.items)?.len() > self.settings.context_limit);
         let state = prompts::state(&self.session, actor, &guidance);
-        let instructions = prompts::instructions(&actor.role, &self.session);
+        let mut instructions = prompts::instructions(&actor.role, &self.session);
+        if actor.role == Role::Steering && self.session.followup_goal().is_some() {
+            instructions.push_str("\nThe displayed objective is a completed archive, supplied only as read-only context. Greetings, thanks and knowledge questions MUST use question and must not restart engineering. Use refine only for a real delivery correction, nudge only for an actual request to continue that whole objective, and queue/replace for an explicit new task. Never reduce the old objective to just the latest correction sentence.");
+        }
+        if member_steering {
+            instructions.push_str("\nThis input is addressed exclusively to the member/assignment in directed_input. Use question for read-only side questions, answer only for an unanswered question with this exact target, local only for execution procedure changes that do not change the deliverable or acceptance. Every delivery/acceptance/constraint change MUST use refine with canonical requirement updates/additions; uncertain impact uses clarify and preserves exact user wording as a requirement. Never replace or queue the whole objective from a member window. The user's exact text must not leak into unrelated actors' inboxes.");
+        }
         let actor = self.session.actors.get_mut(actor_id).unwrap();
         actor.context.sync_state(state)?;
         let request = Request {
@@ -390,13 +414,25 @@ impl Runner {
         let response_id = id.clone();
         self.tasks.spawn(async move {
             let (output, mut receiver) = mpsc::unbounded_channel();
+            let relay_cancel = token.clone();
             let relay = tokio::spawn(async move {
-                while let Some(event) = receiver.recv().await {
-                    let _ = send.send(Wire::Model {
-                        id: response_id.clone(),
-                        actor: actor.clone(),
-                        event,
-                    });
+                let mut forwarding = true;
+                loop {
+                    let event = tokio::select! {
+                        biased;
+                        // Keep the provider's receiver alive even when it ignores
+                        // cancellation. Drain obsolete output without extending
+                        // the runner's wire backlog; settlement still waits for it.
+                        _ = relay_cancel.cancelled(), if forwarding => { forwarding = false; continue; },
+                        event = receiver.recv() => match event { Some(event) => event, None => break },
+                    };
+                    if forwarding {
+                        let _ = send.send(Wire::Model {
+                            id: response_id.clone(),
+                            actor: actor.clone(),
+                            event,
+                        });
+                    }
                 }
             });
             let result = provider.respond(request, token, output).await;

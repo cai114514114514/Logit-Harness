@@ -1,5 +1,5 @@
 use super::{actor::Phase, runner::Runner};
-use crate::domain::{EventData, Evidence, EvidenceKind, Status};
+use crate::domain::{EventData, Evidence, EvidenceKind};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -24,7 +24,8 @@ impl Runner {
         }
         let report: Report = serde_json::from_value(arguments.clone())?;
         anyhow::ensure!(
-            !self.session.actions.values().any(|a| a.running)
+            self.session.actions.is_empty()
+                && self.session.team.engineering_settled()
                 && self.blocked_requirements().is_empty(),
             "active actions or missing user input must settle before completion"
         );
@@ -74,6 +75,10 @@ impl Runner {
         anyhow::ensure!(
             reported == versions.keys().cloned().collect(),
             "report must cover every active requirement ID"
+        );
+        anyhow::ensure!(
+            self.session.graph.covers_requirements(&self.session.goal),
+            "plan omits current requirements; reconcile task coverage before acceptance"
         );
         let mut covered = BTreeSet::new();
         let mut failures = vec![];
@@ -130,11 +135,10 @@ impl Runner {
         if failures.is_empty()
             && actor_scope.requirements == versions
             && !self.frozen()
-            && !self.has_workers()
+            && self.session.team.engineering_settled()
         {
             self.session.final_report = Some(report.summary);
-            self.status(
-                Status::Completed,
+            self.completion_candidate(
                 "every active requirement passed independent evidence-backed verification",
             )?;
         } else {

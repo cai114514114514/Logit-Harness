@@ -34,6 +34,8 @@ pub struct UserMessage {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Question {
+    #[serde(default)]
+    pub target: Option<super::team::Target>,
     pub text: String,
     pub requirements: BTreeMap<String, u64>,
     pub answer: Option<String>,
@@ -41,6 +43,12 @@ pub struct Question {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Session {
+    /// Completed goal offered only as read-only steering context until a genuine
+    /// correction or continuation selects it. Explicit new goals clear it.
+    #[serde(default)]
+    pub followup: Option<String>,
+    #[serde(default)]
+    pub completion: Option<super::completion::Candidate>,
     #[serde(default)]
     pub team: super::team::Team,
     #[serde(default)]
@@ -153,6 +161,8 @@ impl Session {
         }];
         Self {
             team: super::team::Team::default(),
+            completion: None,
+            followup: None,
             defaults: None,
             mcp_disabled: BTreeSet::new(),
             mcp_pending: vec![],

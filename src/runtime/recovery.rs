@@ -15,7 +15,13 @@ pub async fn reconcile(session: &mut Session, store: &Store, logs: &Path) -> any
             .values()
             .any(|a| a.busy > 0 || a.phase == Phase::Busy)
         || !session.budget.reservations.is_empty()
-        || session.transition.is_some();
+        || session.transition.is_some()
+        || session
+            .team
+            .members
+            .values()
+            .any(|m| m.stopping || m.interrupted)
+        || session.boundary.is_some();
     if !interrupted {
         return Ok(());
     }
@@ -52,7 +58,7 @@ pub async fn reconcile(session: &mut Session, store: &Store, logs: &Path) -> any
         .map(|a| a.id.clone())
         .collect();
     for id in interrupted_ids {
-        let action = session.actions.remove(&id).unwrap();
+        let mut action = session.actions.remove(&id).unwrap();
         let actor = session
             .actors
             .get_mut(&action.actor)
@@ -62,12 +68,20 @@ pub async fn reconcile(session: &mut Session, store: &Store, logs: &Path) -> any
             "current_files":snapshot,"logs":logs,"action":id
         }));
         actor.scope.observed.clear();
-        actor.phase = Phase::Ready;
+        actor.phase = if actor.retired {
+            Phase::Done
+        } else {
+            Phase::Ready
+        };
+        action.running = false;
+        session.settled_actions.insert(id, action);
     }
     for actor in session.actors.values_mut() {
         if actor.busy > 0 || actor.phase == Phase::Busy {
             actor.busy = 0;
-            actor.phase = if actor.pending.is_empty() {
+            actor.phase = if actor.retired {
+                Phase::Done
+            } else if actor.pending.is_empty() {
                 Phase::Ready
             } else {
                 Phase::Awaiting

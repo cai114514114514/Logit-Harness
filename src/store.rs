@@ -82,6 +82,41 @@ impl Store {
             data,
         })
     }
+    /// Linearize acceptance against IPC writers, including other connections.
+    /// A rejected barrier writes neither snapshot nor event.
+    pub fn commit_if_controls_current<T: Serialize>(
+        &self,
+        session: &str,
+        processed_cursor: u64,
+        state: &T,
+        data: EventData,
+    ) -> anyhow::Result<Option<SessionEvent>> {
+        let mut connection = self.conn()?;
+        let transaction =
+            connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let latest: u64 = transaction.query_row(
+            "SELECT COALESCE(MAX(id),0) FROM controls WHERE session=?1",
+            [session],
+            |row| row.get(0),
+        )?;
+        if latest != processed_cursor {
+            return Ok(None);
+        }
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        transaction.execute("INSERT INTO sessions(id,state,updated) VALUES(?1,?2,?3) ON CONFLICT(id) DO UPDATE SET state=excluded.state,updated=excluded.updated", params![session, serde_json::to_string(state)?, timestamp])?;
+        transaction.execute(
+            "INSERT INTO events(session,timestamp,data) VALUES(?1,?2,?3)",
+            params![session, timestamp, serde_json::to_string(&data)?],
+        )?;
+        let sequence = u64::try_from(transaction.last_insert_rowid())?;
+        transaction.commit()?;
+        Ok(Some(SessionEvent {
+            sequence,
+            session: session.into(),
+            timestamp,
+            data,
+        }))
+    }
     pub fn load<T: DeserializeOwned>(&self, session: &str) -> anyhow::Result<T> {
         let connection = self.conn()?;
         let state: String = connection
