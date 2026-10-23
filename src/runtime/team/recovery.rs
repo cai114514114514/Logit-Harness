@@ -4,6 +4,7 @@ use crate::{
     domain::EventData,
     runtime::{
         actor::Phase,
+        conversation::Boundary,
         state::{Question, Session},
     },
     store::Store,
@@ -20,6 +21,24 @@ pub(crate) fn recover_requests(session: &mut Session, store: &Store) -> anyhow::
     for request in uncertain {
         let mail_id = request.mail_id();
         let pending_input = session.team.receipts[&request.key()].pending_input.clone();
+        let boundary_turn = session
+            .boundary
+            .as_ref()
+            .and_then(|boundary| match boundary {
+                Boundary::Plan { turn, .. } => turn.as_deref(),
+                Boundary::Goal { turn, .. }
+                | Boundary::Implement { turn, .. }
+                | Boundary::ResumeGoal { turn, .. }
+                | Boundary::Conversation { turn, .. } => Some(turn.as_str()),
+            });
+        if boundary_turn
+            .is_some_and(|turn| turn == request.key() || Some(turn) == pending_input.as_deref())
+        {
+            // Boundary settlement is executable authority. Quarantine only the
+            // deferred turn belonging to this uncertain request; other queued
+            // Skills and passive workflow provenance have no matching turn.
+            session.boundary = None;
+        }
         let notice = "runner restarted while applying this request; it may have partially applied. Pending input is quarantined. Inspect current state and confirm intended requirements before retrying; the original input is preserved";
         for mail in session.team.mail.iter_mut().filter(|m| m.id == mail_id) {
             mail.error = Some(notice.into());
@@ -118,3 +137,6 @@ pub(crate) fn recover_requests(session: &mut Session, store: &Store) -> anyhow::
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

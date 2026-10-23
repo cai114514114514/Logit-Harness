@@ -79,6 +79,7 @@ impl Runner {
                 })
                 .map(|old| old.request.recovery_id())
                 .collect::<Vec<_>>();
+            let mut resolved = false;
             for id in reviews {
                 if let Some(question) = self.session.questions.get_mut(&id)
                     && question.answer.is_none()
@@ -87,7 +88,11 @@ impl Runner {
                         "User resubmitted intended input as {}",
                         request.key()
                     ));
+                    resolved = true;
                 }
+            }
+            if resolved {
+                self.refresh_questions().await;
             }
         }
         let message = format!(

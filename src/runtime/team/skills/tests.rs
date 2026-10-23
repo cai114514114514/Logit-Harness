@@ -268,3 +268,5 @@ async fn idle_and_archived_member_skills_use_readonly_actors_without_reviving_wo
         ReceiptStatus::Applied
     );
 }
+
+mod recovery;
