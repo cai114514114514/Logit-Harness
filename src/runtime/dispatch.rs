@@ -12,6 +12,9 @@ use serde_json::json;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+/// The last turn of every summary request.
+const COMPACTION_TURN: &str = "Write the summary now from the conversation above. Do not continue the task, call tools or start new analysis.";
+
 impl Runner {
     pub(super) async fn schedule(&mut self) -> anyhow::Result<bool> {
         if !self.session.mcp_pending.is_empty() {
@@ -329,17 +332,23 @@ impl Runner {
                 // The summary request must itself fit: bound its input, and
                 // tighten the bounds after each overflow of a summary request.
                 let shrink = actor.compact_shrink.min(8);
-                actor.context.compaction_items(
+                let mut items = actor.context.compaction_items(
                     ((self.settings.context_limit / 4) >> shrink).max(1024),
                     ((self.settings.context_limit * 2) >> shrink).max(8192),
-                )?
+                )?;
+                // The history ends with the user's latest task. Without an explicit
+                // last turn a reasoning model keeps working on that task instead of
+                // summarizing it. Request-only: the history itself is unchanged.
+                items.push(json!({"role":"user","content":COMPACTION_TURN}));
+                items
             } else {
                 actor.context.request_items()?
             },
             tools: if compact { vec![] } else { tools },
-            max_output: if compact {
-                4096
-            } else if actor.role == Role::Steering {
+            // A summary is short, but reasoning models think before writing it;
+            // a 4096-token cap was spent entirely on reasoning, three times in a
+            // row, and the session paused. Summaries get the configured budget.
+            max_output: if actor.role == Role::Steering && !compact {
                 self.settings.max_output.min(8192)
             } else {
                 self.settings.max_output

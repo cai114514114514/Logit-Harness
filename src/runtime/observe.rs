@@ -341,7 +341,9 @@ impl Runner {
                             }
                             // Invalid credentials and request formats cannot be repaired by
                             // asking the model for a smaller completion with the same request.
-                            if request_failure.is_none() {
+                            // A summary request has no tools to retry with; the
+                            // note would only be carried into the next summary.
+                            if request_failure.is_none() && !compact {
                                 actor.context.user(&format!("The previous model response was not executable: {error}. Retry with a smaller, complete response; split large edits into separate tool calls. No partial tool call was executed."));
                             }
                             let advice = request_failure.map_or("", |failure| failure.advice());
