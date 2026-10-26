@@ -879,3 +879,15 @@ Spec: docs/spec.md
   overflow/compaction loop, a runner that could not finish after exhausted retries and three
   terminal edge cases. Fixed in `e9b0ee4` and `6943fb6`; 423 tests passed; installed binary SHA-256
   `27ac77f4dd232e6d13f0d1a643910b9a72d682c175456148952e1c4ef9f70f44`. Details are in the incident record.
+
+## Summary requests on reasoning models — 2026-10-26
+
+- Session `def76a9829014366` paused with "provider failed repeatedly": three summary requests ended
+  as `response.incomplete`, each spending all 4096 output tokens on reasoning while continuing the
+  user's review instead of summarizing it.
+- Fixed in `0367949`: summary requests use the configured output budget, end with an explicit
+  request-only turn asking for the summary, and failures no longer add the tool-retry note to
+  history. The new regression failed with the 4096 cap and passes with the fix; 424 tests passed.
+  Installed binary SHA-256 `86588ca70fe32fc4b317aad61ba001a937481fd082c83a03c5872266df029a6f`;
+  all 144 pre-existing processes remained. A daemon started before installation keeps the old
+  code until it exits: `/stop`, then `/resume`, loads the fix.
