@@ -875,3 +875,7 @@ Spec: docs/spec.md
 - Fixed in `324ac91` (bounded fingerprint views for the model) and `19276e0` (automatic
   compaction and retry with bounded, shrinking summary requests). 420 tests passed; installed
   binary SHA-256 `7d496e75f470e02d89cc971962dfcfdcfa49d5485949f0aa6473956a7c145b24`. No paid calls.
+- A review the same day found two more fingerprint paths (`focus_step`, recovery), an unbounded
+  overflow/compaction loop, a runner that could not finish after exhausted retries and three
+  terminal edge cases. Fixed in `e9b0ee4` and `6943fb6`; 423 tests passed; installed binary SHA-256
+  `27ac77f4dd232e6d13f0d1a643910b9a72d682c175456148952e1c4ef9f70f44`. Details are in the incident record.

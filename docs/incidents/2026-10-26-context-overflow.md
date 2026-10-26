@@ -40,3 +40,25 @@ messages and one `project_diff` call:
   processes remained. Installed PTY suites passed; evidence is `artifacts/context-overflow-2026-10-26`.
 - Not verified against the real provider: no paid request was made. The affected sessions recover
   with `/resume`, which first sends a bounded summary request.
+
+## Review follow-up
+
+A review of the day's changes found the fix incomplete and four further problems:
+
+- `focus_step` returned the complete scope, and recovery put a workspace-wide fingerprint snapshot
+  into every interrupted action's result. Both now use the bounded view.
+- An ordinary request that overflowed even right after compaction would alternate with paid
+  compactions forever. Ordinary overflows now stop after two retries.
+- Stopping on exhausted retries left the compaction flag set, so a non-lingering runner (`loh run`,
+  evaluations) never returned. The flag is cleared; `/resume` retries with fresh bounds.
+- Terminal: a new goal's first contract briefly showed the archived goal's stamps; keys pressed
+  during the startup background query left escape-sequence text in the draft; a check that changed
+  its own sources failed without a stated reason.
+
+Fixed in `e9b0ee4` and `6943fb6`, each with a regression test. 423 tests passed with formatting,
+strict Clippy and release build. Installed binary SHA-256
+`27ac77f4dd232e6d13f0d1a643910b9a72d682c175456148952e1c4ef9f70f44` (source hash
+`37b65991d1ab92e098cb2c151f9cf32216c50aac64afc6f368c8c4e9a63d1108`); all 137 pre-existing processes
+remained and installed PTY suites passed (`artifacts/review-fixes-2026-10-26`). The existing
+`execution_limit_measures_wall_time_during_continuous_streaming` test has a tight 3-second margin
+for a 1.75-second run and can time out under full parallel load; it was not changed.
