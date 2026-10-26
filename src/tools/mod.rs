@@ -4,6 +4,7 @@ pub use assignment::{AssignmentLease, WriteGrant};
 pub mod approval;
 pub mod browser;
 mod builtin;
+mod diffstat;
 mod edit;
 pub mod files;
 pub mod group;

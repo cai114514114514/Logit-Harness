@@ -73,6 +73,12 @@ pub struct FileDelta {
     pub path: String,
     pub before: String,
     pub after: String,
+    /// Exact line counts for display; absent in older results and when the
+    /// difference was too large to measure.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub added: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub removed: Option<u64>,
 }
 
 impl Workspace {

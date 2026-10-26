@@ -22,10 +22,13 @@ impl Workspace {
         prepared
             .iter()
             .map(|p| {
+                let stat = super::diffstat::lines(p.before.as_deref(), p.after.as_deref());
                 Ok(FileDelta {
                     path: p.edit.path.clone(),
                     before: p.edit.expected.clone(),
                     after: fingerprint(&p.path)?,
+                    added: stat.map(|(added, _)| added),
+                    removed: stat.map(|(_, removed)| removed),
                 })
             })
             .collect()
