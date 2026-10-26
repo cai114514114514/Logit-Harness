@@ -70,7 +70,7 @@ pub fn state(session: &Session, actor: &super::actor::Actor, guidance: &str) -> 
         "task": actor.task,
         "team": {"limit":session.team.limit,"members":session.team.view().members},
         "member": session.team.member_for_actor(&actor.id),
-        "scope": actor.scope,
+        "scope": scope(&actor.scope),
         "mode": session.mode,
         "goal_id": session.active_goal().map(|goal| &goal.id),
         "queued_tasks": session.queue,
@@ -79,6 +79,14 @@ pub fn state(session: &Session, actor: &super::actor::Actor, guidance: &str) -> 
         "planning_user_turns": session.plan_turns,
         "mcp_disabled": session.mcp_disabled,
     })
+}
+
+/// The model's view of a scope: observed fingerprints are bounded, the harness
+/// keeps the complete map for its own checks.
+fn scope(scope: &crate::tools::Scope) -> Value {
+    let mut view = json!(scope);
+    view["observed"] = crate::domain::visible_fingerprints(&scope.observed);
+    view
 }
 
 fn function(name: &str, description: &str, properties: Value, required: Value) -> Value {
@@ -199,4 +207,25 @@ pub fn special(role: &Role) -> Vec<Value> {
         definitions.push(function("request_scope", "Ask main for an explicit writable scope revision; do not write outside current assignment.", json!({"text":{"type":"string"}}), json!(["text"])));
     }
     definitions
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::runtime::state::Session;
+
+    #[test]
+    fn a_workspace_wide_observation_does_not_flood_the_state_snapshot() {
+        let mut session = Session::new(std::env::temp_dir(), "审查代码", 1_000_000, 60);
+        let mut actor = session.actors["main"].clone();
+        actor.scope.observed = (0..9197)
+            .map(|i| (format!("artifacts/run/{i}.txt"), format!("{i:064x}")))
+            .collect();
+        session.actors.insert("main".into(), actor.clone());
+        let state = super::state(&session, &actor, "");
+        assert_eq!(state["scope"]["observed"]["count"], 9197);
+        let size = serde_json::to_vec(&state).unwrap().len();
+        assert!(size < 16 * 1024, "{size} bytes");
+        // The harness itself still has every fingerprint.
+        assert_eq!(actor.scope.observed.len(), 9197);
+    }
 }

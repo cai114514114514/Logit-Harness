@@ -380,7 +380,12 @@ impl Runner {
                             .scope
                             .observed
                             .extend(result.files.clone());
-                        json!({"result":result,"evidence":evidence_id})
+                        // The model, the event log and the progress log all get the
+                        // bounded view; Evidence above keeps the complete map.
+                        let files = crate::domain::visible_fingerprints(&result.files);
+                        let mut value = json!({"result":result,"evidence":evidence_id});
+                        value["result"]["files"] = files;
+                        value
                     }
                     Err(error) => json!({"error":error.to_string()}),
                 };

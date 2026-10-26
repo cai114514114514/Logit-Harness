@@ -4,6 +4,23 @@ use std::collections::BTreeMap;
 
 pub type Fingerprints = BTreeMap<String, String>;
 
+/// Beyond this many files a fingerprint map tells the model nothing it can act
+/// on, yet a workspace-wide snapshot of thousands of hashes costs more than a
+/// million tokens. The harness keeps every map in full for evidence checks.
+pub const VISIBLE_FINGERPRINTS: usize = 128;
+
+/// What the model is shown of a fingerprint map.
+pub fn visible_fingerprints(files: &Fingerprints) -> serde_json::Value {
+    if files.len() <= VISIBLE_FINGERPRINTS {
+        serde_json::json!(files)
+    } else {
+        serde_json::json!({
+            "count": files.len(),
+            "omitted": "fingerprints are kept by the harness for evidence checks; read a file to see its current hash",
+        })
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum EvidenceKind {
