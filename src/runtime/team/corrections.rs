@@ -198,6 +198,7 @@ impl Runner {
                 if input.updates.is_empty() && additions.is_empty() {
                     additions.push(mail.text.clone());
                 }
+                let before = self.contract_before();
                 let impact = self.session.goal.revise(Change {
                     source: mail.text.clone(),
                     updates: input.updates,
@@ -217,6 +218,7 @@ impl Runner {
                     revision: self.session.goal.revision,
                     changed: impact.changed.into_iter().collect(),
                 })?;
+                self.emit_contract("member", &mail.text, Some(before))?;
             }
             _ => anyhow::bail!(
                 "member input permits question, answer, local, refine or clarify; whole-goal replacement requires main"

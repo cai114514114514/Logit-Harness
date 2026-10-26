@@ -1,5 +1,5 @@
 use super::{actor::Phase, runner::Runner};
-use crate::domain::{EventData, Evidence, EvidenceKind};
+use crate::domain::{EventData, Evidence, EvidenceKind, contract::AcceptanceCheck};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -82,6 +82,7 @@ impl Runner {
         );
         let mut covered = BTreeSet::new();
         let mut failures = vec![];
+        let mut checks = vec![];
         let actor_scope = self.session.actors[actor_id].scope.clone();
         for check in report.checks {
             let support: Vec<_> = check
@@ -101,6 +102,12 @@ impl Runner {
                 && support
                     .iter()
                     .any(|e| e.requirements.contains_key(&check.requirement));
+            checks.push(AcceptanceCheck {
+                requirement: check.requirement.clone(),
+                passed: check.passed && supported,
+                evidence: super::contract::cited(&self.session, &check.evidence),
+                reason: check.reason.clone(),
+            });
             if !check.passed || !supported || !versions.contains_key(&check.requirement) {
                 failures.push(format!(
                     "{}: {} (valid evidence: {supported})",
@@ -132,11 +139,12 @@ impl Runner {
         }
         self.session.actors.get_mut(actor_id).unwrap().phase = Phase::Done;
         self.session.verification_pending = false;
-        if failures.is_empty()
+        let accepted = failures.is_empty()
             && actor_scope.requirements == versions
             && !self.frozen()
-            && self.session.team.engineering_settled()
-        {
+            && self.session.team.engineering_settled();
+        self.record_acceptance(accepted, checks, &report.summary, &versions)?;
+        if accepted {
             self.session.final_report = Some(report.summary);
             self.completion_candidate(
                 "every active requirement passed independent evidence-backed verification",

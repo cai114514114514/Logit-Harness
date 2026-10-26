@@ -135,6 +135,26 @@ pub enum EventData {
     Diagnostic {
         message: String,
     },
+    /// The contract after initial extraction (`cause = "extract"`) or after a
+    /// revision, written right after `Revised`, with what that revision actually
+    /// did to clauses, running jobs, evidence and steps.
+    Contract {
+        revision: u64,
+        epoch: u64,
+        /// The user's words that caused this contract version.
+        source: String,
+        cause: String,
+        clauses: Vec<super::contract::ClauseRecord>,
+        #[serde(default)]
+        changes: super::contract::ContractChanges,
+    },
+    /// An independent verdict, written before the runtime completes or withholds.
+    Acceptance {
+        revision: u64,
+        passed: bool,
+        checks: Vec<super::contract::AcceptanceCheck>,
+        summary: String,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

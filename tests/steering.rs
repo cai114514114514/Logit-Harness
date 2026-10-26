@@ -108,6 +108,22 @@ async fn contradictory_classification_is_retried_without_losing_the_goal() {
         }
     })
     .await;
+    // The ledger records the same revision immediately afterwards.
+    let contract = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            if let EventData::Contract {
+                revision,
+                cause,
+                changes,
+                ..
+            } = events.recv().await.unwrap().data
+            {
+                break (revision, cause, changes);
+            }
+        }
+    })
+    .await
+    .unwrap();
     control.send(Control::Stop).await.unwrap();
     let result = running.await.unwrap().unwrap();
     assert_eq!(
@@ -116,6 +132,16 @@ async fn contradictory_classification_is_retried_without_losing_the_goal() {
         "rejected classification cannot advance the revision"
     );
     assert_eq!(provider.turns.load(Ordering::SeqCst), 2);
+    let (revision, cause, changes) = contract;
+    assert_eq!((revision, cause.as_str()), (2, "refine"));
+    assert_eq!(changes.updated.len(), 1);
+    assert_eq!(changes.updated[0].id, "r1");
+    assert_eq!(
+        changes.updated[0].before,
+        "Keep the CLI and store data in JSON"
+    );
+    assert_eq!(changes.added, ["r2"]);
+    assert!(changes.retired.is_empty() && changes.cancelled.is_empty());
     assert_eq!(result.goal.history.len(), 1);
     assert!(result.goal.requirements["r1"].active);
     assert!(result.goal.requirements["r1"].text.contains("SQLite"));

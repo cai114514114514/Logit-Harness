@@ -29,6 +29,27 @@ pub struct Evidence {
 }
 
 impl Evidence {
+    /// Bound to the current clause versions, epoch and step versions, whether or
+    /// not the observation passed. File fingerprints are deliberately ignored:
+    /// the terminal refreshes every two seconds and cannot hash the workspace each
+    /// time, so file drift is left to the verifier, which checks it at acceptance.
+    pub fn matches_versions(&self, goal: &Goal, steps: &BTreeMap<String, u64>) -> bool {
+        !self.requirements.is_empty()
+            && self.epoch == goal.epoch
+            && self.requirements.iter().all(|(id, revision)| {
+                goal.requirements
+                    .get(id)
+                    .is_some_and(|r| r.active && r.revision == *revision)
+            })
+            && self
+                .steps
+                .iter()
+                .all(|(id, revision)| steps.get(id) == Some(revision))
+    }
+    /// `current_at` without the file comparison; used only for display.
+    pub fn current_version(&self, goal: &Goal, steps: &BTreeMap<String, u64>) -> bool {
+        self.passed && self.matches_versions(goal, steps)
+    }
     pub fn current_at(
         &self,
         goal: &Goal,

@@ -129,6 +129,8 @@ fn cancellation_settlement_stays_visible_alongside_work_after_reconnect() {
                 id: "draining-tool".into(),
                 actor: "main".into(),
                 title: "shell sleep 30".into(),
+                requirements: Default::default(),
+                focused: false,
             });
             if !reconnect {
                 event(

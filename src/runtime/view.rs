@@ -29,6 +29,9 @@ pub struct SessionView {
     pub approval_actions: Vec<String>,
     #[serde(default)]
     pub verifying: bool,
+    /// Clause stamps and the latest verdict; absent before a goal exists.
+    #[serde(default)]
+    pub contract: Option<super::contract::ContractView>,
     pub id: String,
     pub workspace: PathBuf,
     pub goal: Goal,
@@ -43,6 +46,7 @@ impl From<Session> for SessionView {
     fn from(mut session: Session) -> Self {
         session.normalize_team();
         let bindings = session.actor_bindings();
+        let contract = super::contract::derive(&session);
         let mut team = session.team.view();
         team.targets = session
             .actors
@@ -61,6 +65,8 @@ impl From<Session> for SessionView {
             .map(|a| Activity {
                 id: a.id.clone(),
                 actor: a.actor.clone(),
+                requirements: a.pending.scope.requirements.clone(),
+                focused: super::contract::focused(&a.pending.scope.requirements, &session.goal),
                 title: format!(
                     "{} {}",
                     a.pending.call.name,
@@ -76,6 +82,8 @@ impl From<Session> for SessionView {
                 activities.push(Activity {
                     id: actor.id.clone(),
                     actor: actor.id.clone(),
+                    requirements: Default::default(),
+                    focused: false,
                     title: format!("模型响应 · {}", actor.task.lines().next().unwrap_or("")),
                 });
             }
@@ -95,6 +103,7 @@ impl From<Session> for SessionView {
             activities,
             approval_actions,
             verifying: session.verification_pending,
+            contract,
             title: if session.title.is_empty() {
                 if session.goal.original.is_empty() {
                     "新对话".into()
@@ -126,4 +135,10 @@ pub struct Activity {
     pub id: String,
     pub actor: String,
     pub title: String,
+    /// Clause versions the action is scoped to.
+    #[serde(default)]
+    pub requirements: BTreeMap<String, u64>,
+    /// The scope is narrower than every active clause, so naming it is informative.
+    #[serde(default)]
+    pub focused: bool,
 }

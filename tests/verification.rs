@@ -128,4 +128,20 @@ async fn failed_support_in_a_passing_verdict_returns_to_the_verifier() {
         std::fs::read_to_string(workspace.path().join("result.txt")).unwrap(),
         "keep this deliverable"
     );
+    // Only the accepted verdict is recorded; the contradictory one was a
+    // protocol error and never reached the ledger.
+    let acceptance = result.acceptance.clone().unwrap();
+    assert!(acceptance.passed);
+    assert_eq!(acceptance.checks.len(), 1);
+    assert_eq!(acceptance.checks[0].requirement, "r1");
+    assert_eq!(acceptance.checks[0].evidence[0].tool, "check");
+    assert_eq!(
+        acceptance.checks[0].evidence[0].subject,
+        "test -f result.txt"
+    );
+    let contract = loh::runtime::contract::derive(&result).unwrap();
+    assert_eq!(
+        contract.clauses[0].stamp,
+        loh::runtime::contract::Stamp::Accepted
+    );
 }

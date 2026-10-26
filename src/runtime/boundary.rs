@@ -162,6 +162,7 @@ impl Runner {
                 self.session.goal = goal;
                 self.session.graph = Default::default();
                 self.session.evidence.clear();
+                self.session.acceptance = None;
                 self.session.settled_actions.clear();
                 self.session.questions.clear();
                 self.session.approvals.clear();

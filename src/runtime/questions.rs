@@ -131,6 +131,7 @@ impl Runner {
             !updates.is_empty(),
             "question dependencies are no longer active"
         );
+        let before = self.contract_before();
         let impact = self.session.goal.revise(Change {
             source: text.into(),
             updates,
@@ -150,6 +151,7 @@ impl Runner {
             revision: self.session.goal.revision,
             changed: impact.changed.into_iter().collect(),
         })?;
+        self.emit_contract("answer", text, Some(before))?;
         if self.session.status == Status::Waiting {
             self.status(Status::Running, "required input received")?;
         }

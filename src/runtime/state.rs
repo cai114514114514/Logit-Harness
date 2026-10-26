@@ -125,6 +125,9 @@ pub struct Session {
     pub final_report: Option<String>,
     #[serde(default)]
     pub verification_pending: bool,
+    /// Latest independent verdict for the current goal; display only.
+    #[serde(default)]
+    pub acceptance: Option<crate::domain::contract::Acceptance>,
     /// Id of the last control row consumed from the store's controls queue;
     /// replay starts strictly after it. Advancing it before handling the
     /// control is deliberate (see drain_inbox).
@@ -207,6 +210,7 @@ impl Session {
             elapsed: 0,
             final_report: None,
             verification_pending: false,
+            acceptance: None,
             cursor: 0,
             campaign: None,
         }

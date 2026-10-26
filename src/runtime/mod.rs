@@ -5,6 +5,7 @@ mod clock;
 mod commands;
 pub mod completion;
 pub mod condition;
+pub mod contract;
 mod control;
 pub mod conversation;
 pub mod daemon;

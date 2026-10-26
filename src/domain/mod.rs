@@ -1,4 +1,5 @@
 mod budget;
+pub mod contract;
 mod event;
 mod evidence;
 mod goal;

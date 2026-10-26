@@ -117,6 +117,7 @@ impl Runner {
                 self.answer_question(id, &message).await?;
             }
             "refine" | "replace" => {
+                let before = self.contract_before();
                 let impact = self.session.goal.revise(Change {
                     source: message.clone(),
                     updates: input.updates,
@@ -151,6 +152,7 @@ impl Runner {
                     revision: self.session.goal.revision,
                     changed: impact.changed.into_iter().collect(),
                 })?;
+                self.emit_contract(&input.intent, &message, Some(before))?;
             }
             "question" => {
                 if input.needs_tools {

@@ -53,6 +53,8 @@ impl Runner {
                 self.emit(EventData::Diagnostic {
                     message: "initial user requirements decomposed with exact provenance".into(),
                 })?;
+                let original = self.session.goal.original.clone();
+                self.emit_contract("extract", &original, None)?;
             }
             (Role::Main, "delegate") => self.delegate(actor_id, pending)?,
             (Role::Main, "finish_step") => {
