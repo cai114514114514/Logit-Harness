@@ -98,7 +98,42 @@ impl ContractView {
     /// bound to a changed clause, or to any clause when the epoch advanced, is no
     /// longer current, so the same stamp rules give Stale or Open exactly; step
     /// invalidation of other clauses waits for the next view.
-    pub fn revise(&mut self, revision: u64, epoch: u64, records: &[ClauseRecord]) {
+    pub fn revise(&mut self, revision: u64, epoch: u64, records: &[ClauseRecord], extract: bool) {
+        // Extraction for the same goal keeps what is known about r1; a new goal
+        // (after an archive, or with a different full request) starts clean.
+        let current = self.clauses.iter().find(|c| c.id == "r1").map(|c| &c.text);
+        let next = records.iter().find(|c| c.id == "r1").map(|c| &c.text);
+        let fresh = extract && (self.archived || current != next);
+        self.archived = false;
+        if fresh {
+            // A new goal's first contract reuses clause IDs (r1, r2, …) but none of
+            // the previous goal's evidence or verdict.
+            self.clauses = records
+                .iter()
+                .map(|record| ClauseView {
+                    id: record.id.clone(),
+                    text: record.text.clone(),
+                    revision: record.revision,
+                    active: record.active,
+                    source: record.source.clone(),
+                    origin: if record.id == "r1" {
+                        Origin::Original
+                    } else {
+                        Origin::Quote
+                    },
+                    stamp: Stamp::Open,
+                    working: false,
+                    history: vec![],
+                    evidence: vec![],
+                })
+                .collect();
+            self.clauses
+                .sort_by_key(|c| (!c.active, clause_order(&c.id)));
+            self.revision = revision;
+            self.epoch = epoch;
+            self.acceptance = None;
+            return;
+        }
         let advanced = epoch != self.epoch;
         let mut clauses = records
             .iter()

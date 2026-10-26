@@ -47,6 +47,9 @@ pub(super) fn outcome(result: &Value) -> Option<String> {
     {
         return if code != 0 {
             Some(format!("退出 {code}"))
+        } else if data["source_stable"] == false {
+            // A check that changed the sources it inspected does not count.
+            Some("检查期间文件有变化".into())
         } else {
             passed_tests(&self::result(result)).map(|n| format!("{n} 通过"))
         };

@@ -252,7 +252,7 @@ fn a_contract_event_moves_the_bar_before_the_next_view() {
         }])
         .collect::<Vec<_>>();
     // An addition advances the epoch: r3's evidence is no longer current.
-    view.revise(2, s.goal.epoch + 1, &records);
+    view.revise(2, s.goal.epoch + 1, &records, false);
     let stamps = view
         .active()
         .map(|c| (c.id.as_str(), c.stamp))
@@ -281,6 +281,35 @@ fn a_contract_event_moves_the_bar_before_the_next_view() {
         .map(|c| (c.id.as_str(), c.stamp))
         .collect::<Vec<_>>();
     assert_eq!(stamps, truth, "the projection agrees with the next view");
+}
+
+#[test]
+fn a_new_goals_first_contract_inherits_nothing_from_the_previous_goal() {
+    let mut s = session();
+    let review = evidence(&s, EvidenceKind::Review, &["r1", "r2", "r3"], true);
+    s.evidence.push(review);
+    let mut view = derive(&s).unwrap();
+    view.archived = true;
+    assert!(view.active().all(|c| c.stamp == Stamp::Accepted));
+    // The next goal extracts r1 and r2 again, at revision 1.
+    let records = [("r1", "给 CLI 加 --json 输出"), ("r2", "--json 输出")].map(|(id, text)| {
+        crate::domain::contract::ClauseRecord {
+            id: id.into(),
+            text: text.into(),
+            revision: 1,
+            active: true,
+            source: text.into(),
+        }
+    });
+    view.revise(1, s.goal.epoch + 1, &records, true);
+    assert!(!view.archived);
+    assert_eq!(view.clauses.len(), 2);
+    assert!(
+        view.clauses
+            .iter()
+            .all(|c| c.stamp == Stamp::Open && c.evidence.is_empty())
+    );
+    assert_eq!(view.clauses[0].text, "给 CLI 加 --json 输出");
 }
 
 #[test]

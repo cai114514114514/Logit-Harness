@@ -304,3 +304,34 @@ fn narrow_blockers_show_whole_action_ids_or_an_explicit_details_route() {
         assert_eq!(terminal.get_cursor_position().unwrap().y, 16);
     }
 }
+
+#[test]
+fn a_check_that_changed_its_own_sources_says_so() {
+    let mut screen = Screen::default();
+    event(
+        &mut screen,
+        1,
+        EventData::ActionStarted {
+            id: "check".into(),
+            tool: "check".into(),
+            arguments: json!({"command":"cargo fmt"}),
+        },
+    );
+    event(
+        &mut screen,
+        2,
+        EventData::ActionFinished {
+            id: "check".into(),
+            success: false,
+            result: json!({"result":{"data":{"process":{"code":0,"output":""},"source_stable":false}}}),
+        },
+    );
+    let text = screen
+        .transcript
+        .lines(90, false)
+        .iter()
+        .map(ToString::to_string)
+        .collect::<String>();
+    assert!(text.contains("✕ 检查  cargo fmt"), "{text}");
+    assert!(text.contains("检查期间文件有变化"), "{text}");
+}

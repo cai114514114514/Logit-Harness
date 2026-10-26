@@ -187,11 +187,12 @@ impl Screen {
                         EventData::Contract {
                             revision,
                             epoch,
+                            cause,
                             clauses,
                             ..
                         } => {
                             if let Some(contract) = &mut session.contract {
-                                contract.revise(*revision, *epoch, clauses);
+                                contract.revise(*revision, *epoch, clauses, cause == "extract");
                             }
                         }
                         EventData::Acceptance { passed, checks, .. } => {

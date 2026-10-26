@@ -163,6 +163,10 @@ fn parse(bytes: &[u8]) -> Reply {
             };
             reply.complete = true;
             i += 3 + end + 1;
+        } else if bytes[i] == 0x1b {
+            // Any other escape sequence is a key such as an arrow or an unrelated
+            // report, never text for the editor: skip it whole.
+            i += escape_length(rest);
         } else {
             other.push(bytes[i]);
             i += 1;
@@ -173,6 +177,27 @@ fn parse(bytes: &[u8]) -> Reply {
         .filter(|c| !c.is_control())
         .collect();
     reply
+}
+
+/// Length of the escape sequence at the start of `bytes` (which begins with ESC):
+/// CSI up to its final byte, SS3 plus one byte, string sequences up to BEL or ST.
+fn escape_length(bytes: &[u8]) -> usize {
+    let end = |found: Option<usize>| found.map_or(bytes.len(), |n| n + 1);
+    match bytes.get(1) {
+        None => 1,
+        Some(b'[') => end(bytes
+            .iter()
+            .skip(2)
+            .position(|b| (0x40..=0x7e).contains(b))
+            .map(|n| n + 2)),
+        Some(b'O') => bytes.len().min(3),
+        Some(b']' | b'P' | b'_' | b'^') => end(bytes
+            .windows(2)
+            .position(|w| w == b"\x1b\\")
+            .map(|n| n + 1)
+            .or_else(|| bytes.iter().position(|b| *b == 0x07))),
+        Some(_) => 2,
+    }
 }
 
 /// `rgb:R/G/B` with 1–4 hex digits per channel, scaled to 0..=1.
@@ -233,6 +258,9 @@ mod tests {
         assert_eq!(reply.typed, "修复");
         let partial = parse(b"ab\x1b]11;rgb:ff");
         assert!(!partial.complete);
+        // Arrow keys and other reports are not text.
+        let keys = parse(b"a\x1b[A\x1bOBb\x1b[1;5C\x1b]11;rgb:0/0/0\x07c\x1b[?62c");
+        assert_eq!(keys.typed, "abc");
     }
 
     #[test]
