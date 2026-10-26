@@ -15,7 +15,7 @@ use std::collections::BTreeSet;
 const PAGE: usize = 20;
 
 #[cfg(test)]
-#[path = "history_tests.rs"]
+#[path = "../tests/history_tests.rs"]
 mod tests;
 
 pub(super) fn selected_text(transcript: &Transcript, selector: &str) -> anyhow::Result<String> {

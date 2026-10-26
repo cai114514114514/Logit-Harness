@@ -25,7 +25,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use unicode_width::UnicodeWidthStr;
 
 #[cfg(test)]
-#[path = "contract_tests.rs"]
+#[path = "../tests/contract_tests.rs"]
 mod tests;
 
 /// Indent of a clause's detail rows, under its wording.

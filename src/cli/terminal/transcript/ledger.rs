@@ -539,5 +539,5 @@ fn receipt(
 }
 
 #[cfg(test)]
-#[path = "ledger_tests.rs"]
+#[path = "../tests/ledger_tests.rs"]
 mod tests;
