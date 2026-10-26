@@ -99,6 +99,8 @@ pub(super) async fn run(
     }
     let _restore = Restore;
     let mut terminal = super::surface::open(true)?;
+    // Keys typed while the background query owned stdin belong to the draft.
+    screen.input.insert(&super::theme::take_typed());
     terminal.append(&super::brand::lines(&screen, terminal.width()))?;
     crossterm::execute!(std::io::stdout(), EnableBracketedPaste)?;
     let mut keys = EventStream::new();
@@ -114,11 +116,13 @@ pub(super) async fn run(
         // Keystrokes repaint immediately; model/tool streams remain coalesced by
         // the frame timer. Typing must not wait behind its 80 ms animation tick.
         if paint && dirty {
-            let modal = screen.history.is_some();
+            let modal = screen.history.is_some() || screen.contract.is_some();
             terminal.modal(modal)?;
             if !modal {
                 let (columns, rows) = crossterm::terminal::size()?;
-                let width = terminal.width().saturating_sub(4) as usize;
+                // Committed history starts at column 0 with its speaker bar. The
+                // last column stays empty so no terminal auto-wraps a full row.
+                let width = terminal.width().saturating_sub(1) as usize;
                 let lines = if screen.session.is_some() && screen.transcript.needs_recent() {
                     screen.transcript.recent(width)
                 } else {
@@ -183,7 +187,7 @@ pub(super) async fn run(
                         let state = session.target_view(&screen.view)?;
                         screen.receive(ServerMessage::TargetView { state: Box::new(state), sequence }); screen.connected = false;
                         let (columns, rows) = crossterm::terminal::size()?;
-                        let recent = screen.transcript.recent(columns.saturating_sub(4) as usize);
+                        let recent = screen.transcript.recent(columns.saturating_sub(1) as usize);
                         terminal.present(super::render::height(&screen, columns, rows), true, &recent)?;
                         if let Some((error, draft, revision)) = failure_after_open.take() {
                             screen.note(format!("后台启动失败：{error}\n会话 {id} 与输入已保存。/resume 恢复；请先核对记录，避免重复发送。"));
@@ -268,6 +272,7 @@ pub(super) async fn run(
                             submission::install_choice(&mut screen, context, entries, arguments, &draft);
                         }
                         Outcome::History(history) => context.history(&mut jobs, history.query, history.tools_only),
+                        Outcome::Contract => screen.contract = Some(super::contract::Detail::open(&screen)),
                         Outcome::Copy { selector, .. } => {
                             if selector.is_empty() { context.history(&mut jobs, String::new(), false); }
                             else { context.copy_selector(&mut jobs, selector); }
@@ -281,6 +286,18 @@ pub(super) async fn run(
                 let event = match event { Some(Ok(event)) => event, Some(Err(error)) => return Err(error.into()), None => break };
                 dirty = true;
                 paint = true;
+                if let Some(detail) = &mut screen.contract {
+                    match event {
+                        Event::Paste(text) => detail.paste(&text),
+                        Event::Key(key) if key.kind != KeyEventKind::Release => match detail.key(key) {
+                            super::history::Action::Close => screen.contract = None,
+                            super::history::Action::Copy(text) => Context::new(generation, paths, &screen).copy(&mut jobs, text),
+                            super::history::Action::Stay => (),
+                        },
+                        _ => (),
+                    }
+                    continue;
+                }
                 if let Some(browser) = &mut screen.history {
                     match event {
                         Event::Paste(text) => browser.paste(&text),

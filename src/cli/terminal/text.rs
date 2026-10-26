@@ -5,9 +5,7 @@ use ratatui::{
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-/// Shared blue for the terminal mark, selections and progress.
-pub const ACCENT: Color = Color::Rgb(91, 156, 255);
-pub const MUTED: Color = Color::DarkGray;
+pub(super) use super::theme::{accent, fail, fresh, muted, stale};
 
 /// Truncate at a grapheme boundary and count terminal cells, not UTF-8 bytes.
 pub(super) fn ellipsize(text: &str, width: usize) -> String {
@@ -41,7 +39,7 @@ pub fn markdown(text: &str, width: usize, base: Style) -> Vec<Line<'static>> {
             if code {
                 lines.push(Line::styled(
                     format!("  {}", raw.trim_start().trim_start_matches('`')),
-                    Style::default().fg(MUTED),
+                    Style::default().fg(muted()),
                 ));
             }
             continue;

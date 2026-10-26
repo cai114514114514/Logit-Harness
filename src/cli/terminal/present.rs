@@ -2,28 +2,31 @@
 use super::Screen;
 use crate::{commands::Timing, runtime::conversation::Mode};
 
-pub(super) fn placeholder(screen: &Screen) -> &'static str {
+pub(super) fn placeholder(screen: &Screen, width: usize) -> String {
     if screen.view.readonly {
-        return "归档只读 · /history · /agent main";
+        return "归档只读 · /history · /agent main".into();
     }
     if !screen.view.is_main() {
-        return "发给当前成员 · /pause 仅暂停此成员 · /agent main";
+        let name = screen
+            .member
+            .as_ref()
+            .map_or("当前成员", |member| member.name.as_str());
+        return format!("给 {} 的补充，或输入 /", super::state::clean(name));
     }
-    match screen.session.as_ref().map(|session| session.mode) {
+    let session = screen.session.as_ref();
+    let completed = session.is_some_and(|s| s.status == crate::domain::Status::Completed);
+    match session.map(|session| session.mode) {
         None if !screen.entered => "输入消息、问题，或需要实现的目标…",
         None => "输入新消息，或输入 /",
         Some(Mode::Conversation) => "继续提问，或输入 /",
         Some(Mode::Plan) => "补充只读规划，或输入 /",
+        Some(Mode::Engineering) if completed => "有新目标或追问，直接输入",
+        // `width` is the editor's own width: 35 at 40 columns, 55 at 60.
+        Some(Mode::Engineering) if width < 36 => "补充或纠正…",
+        Some(Mode::Engineering) if width < 56 => "补充或纠正，或输入 /",
         Some(Mode::Engineering) => "补充要求、纠正方向，或输入 /",
     }
-}
-
-pub(super) fn mode(screen: &Screen) -> &'static str {
-    match screen.session.as_ref().map(|session| session.mode) {
-        None | Some(Mode::Conversation) => "对话",
-        Some(Mode::Plan) => "Plan · 只读",
-        Some(Mode::Engineering) => "Engineering",
-    }
+    .into()
 }
 
 pub(super) fn timing(timing: Timing) -> &'static str {
@@ -58,6 +61,10 @@ pub(super) fn routine(message: &str) -> bool {
         message,
         "verified goal archived; ready for a new conversation turn"
             | "user input classified and applied"
+            // The contract card and the acceptance receipt say these in full.
+            | "initial user requirements decomposed with exact provenance"
+            | "acceptance candidate saved; checking settled controls and evidence"
+            | "completion withheld; verification is incomplete"
             | "compaction queued at a fully paired tool boundary; durable requirements and corrections remain authoritative"
     ) || message.ends_with(" context compacted; current requirements and pending work retained")
 }
@@ -75,6 +82,9 @@ pub(super) fn notice(message: &str) -> String {
             "当前工作已结算，等待答复 · /status 查看待答问题"
         }
         "waiting for scoped authorization" => "等待授权 · /status 查看详情",
+        "every active requirement passed independent evidence-backed verification" => {
+            "每条有效条款都有独立验收证据 · /contract"
+        }
         _ => return message.into(),
     };
     format!("{status} · {explanation}")

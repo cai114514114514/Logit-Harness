@@ -1,7 +1,7 @@
 use super::Form;
 use crate::cli::terminal::{
     Screen,
-    text::{ACCENT, MUTED},
+    text::{accent, muted},
 };
 use ratatui::{
     Frame,
@@ -43,7 +43,13 @@ pub(crate) fn render(frame: &mut Frame, _screen: &Screen, form: &Form) {
     } else {
         "*".repeat(form.secret.text().chars().count().min(width))
     };
-    let field_style = |field| Style::default().fg(if field == form.field { ACCENT } else { MUTED });
+    let field_style = |field| {
+        Style::default().fg(if field == form.field {
+            accent()
+        } else {
+            muted()
+        })
+    };
     let mut lines = vec![
         Line::styled("API 设置", Style::default().add_modifier(Modifier::BOLD)),
         Line::from(""),
@@ -62,11 +68,11 @@ pub(crate) fn render(frame: &mut Frame, _screen: &Screen, form: &Form) {
             } else {
                 "密钥单独保存在本机 credentials.json（权限 600）"
             },
-            Style::default().fg(MUTED),
+            Style::default().fg(muted()),
         ),
         Line::styled(
             "保存仅做本地校验，不发起模型请求。",
-            Style::default().fg(MUTED),
+            Style::default().fg(muted()),
         ),
     ];
     if let Some(error) = &form.error {
@@ -75,7 +81,7 @@ pub(crate) fn render(frame: &mut Frame, _screen: &Screen, form: &Form) {
     frame.render_widget(Paragraph::new(lines), body);
     frame.render_widget(
         Paragraph::new("  Tab / ↑↓ 切换 · Enter 下一项 / 保存\n  Ctrl+U 清空当前项 · Esc 取消")
-            .style(Style::default().fg(MUTED)),
+            .style(Style::default().fg(muted())),
         footer,
     );
     let row = if form.field == 0 { 3 } else { 6 };

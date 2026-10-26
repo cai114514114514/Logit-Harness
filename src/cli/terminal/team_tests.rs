@@ -949,13 +949,13 @@ fn footer_uses_reported_view_usage_and_keeps_kv_at_every_width() {
             "member usage lost at {w}: {output}"
         );
         if w == 106 {
-            assert!(output.contains("110 tokens"), "{output}");
+            assert!(output.contains(" · 110 · KV"), "{output}");
         }
     }
     screen.view = ViewTarget::default();
     let output = super::composer::footer(&screen, 106).to_string();
     assert!(
-        output.contains("KV 70%") && output.contains("1.1k tokens"),
+        output.contains("KV 70%") && output.contains("1.1k"),
         "{output}"
     );
     screen.session.as_mut().unwrap().budget.reported = Usage::default();

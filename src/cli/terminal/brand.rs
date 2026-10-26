@@ -1,7 +1,7 @@
 //! A terminal-native L mark: three rows, beside the product, model and project.
 use super::{
     Screen,
-    text::{ACCENT, MUTED},
+    text::{accent, muted},
 };
 use ratatui::{
     style::{Modifier, Style},
@@ -39,13 +39,13 @@ pub(super) fn lines(screen: &Screen, width: u16) -> Vec<Line<'static>> {
         .enumerate()
         .map(|(row, (mark, detail))| {
             Line::from(vec![
-                Span::styled(*mark, Style::default().fg(ACCENT)),
+                Span::styled(*mark, Style::default().fg(accent())),
                 Span::styled(
                     detail,
                     if row == 0 {
                         Style::default().add_modifier(Modifier::BOLD)
                     } else {
-                        Style::default().fg(MUTED)
+                        Style::default().fg(muted())
                     },
                 ),
             ])

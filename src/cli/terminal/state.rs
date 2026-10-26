@@ -36,6 +36,7 @@ pub struct Screen {
     pub(super) completions: Option<Vec<crate::commands::Completion>>,
     pub(super) skill_choices: Option<super::submission::Choice>,
     pub(super) history: Option<super::history::Browser>,
+    pub(super) contract: Option<super::contract::Detail>,
     pub(super) setup: Option<super::setup::Form>,
     /// Welcome copy is only for the first entry in this client. `/new` keeps
     /// the conversation layout even while no session has been created yet.
@@ -121,6 +122,7 @@ impl Screen {
                         .bindings
                         .extend(state.bindings.clone());
                     self.transcript.team(&state.team);
+                    self.transcript.contract_view(state.contract.as_ref());
                     let archived = self
                         .members
                         .iter()
@@ -179,6 +181,24 @@ impl Screen {
                         }
                         EventData::ActionFinished { id, .. } => {
                             session.activities.retain(|a| a.id != *id)
+                        }
+                        // The bar follows the ledger at once; the next session
+                        // view replaces this projection with derived state.
+                        EventData::Contract {
+                            revision,
+                            epoch,
+                            clauses,
+                            ..
+                        } => {
+                            if let Some(contract) = &mut session.contract {
+                                contract.revise(*revision, *epoch, clauses);
+                            }
+                        }
+                        EventData::Acceptance { passed, checks, .. } => {
+                            let goal = session.goal.id.clone();
+                            if let Some(contract) = &mut session.contract {
+                                contract.verdict(&goal, *passed, checks);
+                            }
                         }
                         _ => (),
                     }
@@ -260,7 +280,7 @@ impl Screen {
     pub fn status(&self) -> String {
         match &self.session {
             Some(session) => format!(
-                "{} · {}\n需求版本 {}，{} 项有效需求，{} 个执行步骤。\n{}",
+                "{} · {}\n契约 v{} · {} 条条款，{} 个执行步骤 · /contract 查看详情。\n{}",
                 session.id,
                 label(&session.status),
                 session.goal.revision,

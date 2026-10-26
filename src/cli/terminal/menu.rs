@@ -1,7 +1,7 @@
 //! One presentation for command, team, session and Skill choices.
 use super::{
     Screen,
-    text::{self, ACCENT, MUTED},
+    text::{self, accent, muted},
 };
 use ratatui::{
     style::{Modifier, Style},
@@ -102,9 +102,9 @@ pub(super) fn lines(screen: &Screen, width: usize, limit: usize) -> Vec<Line<'st
                     width,
                 ),
                 if i == selected {
-                    Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
+                    Style::default().fg(accent()).add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(MUTED)
+                    Style::default().fg(muted())
                 },
             )
         })
@@ -112,7 +112,7 @@ pub(super) fn lines(screen: &Screen, width: usize, limit: usize) -> Vec<Line<'st
     if rows.len() < limit {
         rows.push(Line::styled(
             text::ellipsize(&super::state::clean(&items[selected].1), width),
-            Style::default().fg(MUTED),
+            Style::default().fg(muted()),
         ));
     }
     if rows.len() < limit {
@@ -122,7 +122,7 @@ pub(super) fn lines(screen: &Screen, width: usize, limit: usize) -> Vec<Line<'st
             } else {
                 "↑↓ 选择 · Enter 确认 · Tab 补全 · Esc 返回"
             },
-            Style::default().fg(MUTED),
+            Style::default().fg(muted()),
         ));
     }
     rows.into_iter()

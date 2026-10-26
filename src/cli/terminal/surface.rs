@@ -205,13 +205,19 @@ impl Surface {
             if self.terminal.get_frame().area() != area {
                 self.reset(area)?;
             }
-            self.terminal.draw(draw)?;
+            self.terminal.draw(|frame| {
+                draw(frame);
+                super::theme::strip(frame.buffer_mut());
+            })?;
             return Ok(());
         }
         if size != self.size {
             self.layout(self.area.height, self.docked)?;
         }
-        self.terminal.draw(draw)?;
+        self.terminal.draw(|frame| {
+            draw(frame);
+            super::theme::strip(frame.buffer_mut());
+        })?;
         Ok(())
     }
 }
@@ -237,6 +243,8 @@ impl Drop for Surface {
 
 pub(super) fn open(welcome: bool) -> std::io::Result<Surface> {
     crossterm::terminal::enable_raw_mode()?;
+    // Same constraint as the cursor query below: stdin is still ours.
+    super::theme::detect();
     let size = crossterm::terminal::size()?;
     let saved = NEXT_ROW.load(Ordering::SeqCst);
     let row = if saved == UNKNOWN {

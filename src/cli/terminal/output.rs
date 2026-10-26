@@ -8,7 +8,7 @@ pub(super) fn line(
     for span in &line.spans {
         let style = line.style.patch(span.style);
         crossterm::queue!(output, SetAttribute(Attribute::Reset), ResetColor)?;
-        if let Some(color) = style.fg {
+        if let Some(color) = style.fg.filter(|_| !super::theme::plain()) {
             crossterm::queue!(output, SetForegroundColor(terminal_color(color)))?;
         }
         if style.add_modifier.contains(ratatui::style::Modifier::BOLD) {

@@ -87,8 +87,8 @@ fn quiet_commands_and_parallel_actors_have_measured_independent_activity() {
         "internal action IDs belong in details"
     );
     assert!(rows.contains("独立验收"));
-    assert!(rows.contains("已用12s"));
-    assert!(rows.contains("距输出12s"));
+    assert!(rows.contains("已用 12s"));
+    assert!(rows.contains("距输出 12s"));
     event(
         &mut screen,
         3,

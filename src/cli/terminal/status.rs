@@ -25,6 +25,17 @@ fn priority(line: &str) -> u8 {
         5
     }
 }
+/// A running step keeps to one row: the time since its last output goes first,
+/// then the end of the line. Blockers and commands are never shortened here.
+fn fit_activity(fact: &str, width: usize) -> String {
+    use unicode_width::UnicodeWidthStr;
+    if !fact.contains("⋯ ") || fact.width() <= width {
+        return fact.into();
+    }
+    let shorter = fact.split_once(" · 距输出 ").map_or(fact, |(head, _)| head);
+    text::ellipsize(shorter, width)
+}
+
 pub(super) fn lines(screen: &Screen, width: usize, limit: usize) -> Vec<Line<'static>> {
     if limit == 0 {
         return vec![];
@@ -43,6 +54,7 @@ pub(super) fn lines(screen: &Screen, width: usize, limit: usize) -> Vec<Line<'st
     facts.sort_by_key(|line| priority(line));
     let mut rows = vec![];
     for (i, fact) in facts.iter().enumerate() {
+        let fact = &fit_activity(fact, width);
         let wrapped = text::wrap(vec![Span::raw(super::state::clean(fact))], width);
         let reserve = usize::from(i + 1 < facts.len());
         if rows.len() + wrapped.len() + reserve > limit || i > 0 && priority(fact) == 5 {
@@ -75,7 +87,7 @@ pub(super) fn lines(screen: &Screen, width: usize, limit: usize) -> Vec<Line<'st
         rows.extend(wrapped);
     }
     for row in &mut rows {
-        row.style = Style::default().fg(text::ACCENT);
+        row.style = Style::default().fg(text::accent());
     }
     rows
 }

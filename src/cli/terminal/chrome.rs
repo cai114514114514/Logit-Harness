@@ -1,7 +1,7 @@
 //! Stable view identity and a single member strip inside the active region.
 use super::{
     Screen,
-    text::{self, ACCENT, MUTED},
+    text::{self, accent, muted},
 };
 use crate::runtime::team::{AssignmentStatus, MemberView, Target};
 use ratatui::{
@@ -35,9 +35,9 @@ pub(super) fn lines(screen: &Screen, width: usize) -> Vec<Line<'static>> {
     let mut rows = vec![];
     if screen.view.is_main() {
         rows.push(Line::from(vec![
-            Span::styled("┗ ", Style::default().fg(ACCENT)),
+            Span::styled("┗ ", Style::default().fg(accent())),
             Span::raw(title),
-            Span::styled(" · 主控", Style::default().fg(MUTED)),
+            Span::styled(" · 主控", Style::default().fg(muted())),
         ]));
     } else {
         let scope = if screen.view.readonly {
@@ -68,7 +68,7 @@ pub(super) fn lines(screen: &Screen, width: usize) -> Vec<Line<'static>> {
                         width.saturating_sub(scope.width() + 3 + badge.width()),
                     )
                 ),
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                Style::default().fg(accent()).add_modifier(Modifier::BOLD),
             ),
             Span::raw(format!(" · {scope}")),
         ]));
@@ -94,7 +94,7 @@ pub(super) fn lines(screen: &Screen, width: usize) -> Vec<Line<'static>> {
                 text::ellipsize(&super::state::clean(task), remaining)
             )
         };
-        rows.push(Line::styled(subtitle, Style::default().fg(MUTED)));
+        rows.push(Line::styled(subtitle, Style::default().fg(muted())));
     }
     rows.push(strip(screen, width));
     rows
@@ -182,15 +182,19 @@ fn strip(screen: &Screen, width: usize) -> Line<'static> {
     }
     let mut spans = vec![Span::styled(
         main,
-        Style::default().fg(if screen.view.is_main() { ACCENT } else { MUTED }),
+        Style::default().fg(if screen.view.is_main() {
+            accent()
+        } else {
+            muted()
+        }),
     )];
     for (i, label) in labels.iter().enumerate().take(end).skip(first) {
         spans.push(Span::styled(
             format!("  {label}"),
             Style::default().fg(if members[i].id == current {
-                ACCENT
+                accent()
             } else {
-                MUTED
+                muted()
             }),
         ));
     }
@@ -200,14 +204,14 @@ fn strip(screen: &Screen, width: usize) -> Line<'static> {
     } else {
         " · Ctrl-T".into()
     };
-    spans.push(Span::styled(tail, Style::default().fg(MUTED)));
+    spans.push(Span::styled(tail, Style::default().fg(muted())));
     let line = Line::from(spans);
     if line.width() <= width {
         line
     } else {
         Line::styled(
             text::ellipsize(&line.to_string(), width),
-            Style::default().fg(ACCENT),
+            Style::default().fg(accent()),
         )
     }
 }

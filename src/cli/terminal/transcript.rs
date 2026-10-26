@@ -16,6 +16,8 @@ pub enum Kind {
     Assistant,
     Tool,
     Note,
+    /// A contract, revision or acceptance card.
+    Ledger,
 }
 #[derive(Clone, Debug)]
 pub struct Entry {
@@ -37,6 +39,8 @@ pub struct Entry {
     pub running: bool,
     pub success: Option<bool>,
     pub settled: Option<u64>,
+    /// Clauses a focused edit, run or check served; empty when it served all.
+    pub clauses: Vec<String>,
     printed: BTreeSet<String>,
     quiet: bool,
 }
@@ -63,19 +67,105 @@ pub struct Transcript {
     /// current event sequence after older, unseen destination entries.
     boundary: Option<String>,
     deliveries: BTreeMap<String, receipts::Delivery>,
+    /// Action scopes arrive just before the action starts.
+    scopes: BTreeMap<String, BTreeMap<String, u64>>,
+    /// Wording of the active clauses, from the latest contract.
+    clauses: BTreeMap<String, String>,
+    /// Display numbers of evidence, from the latest session view.
+    labels: BTreeMap<String, usize>,
+    /// Running seconds reported by the runtime.
+    elapsed: Option<u64>,
+    /// Member IDs in roster order; their position picks the bar colour.
+    members: Vec<String>,
+    /// The last committed block, for spacing across batches.
+    last: summary::Last,
 }
 impl Transcript {
     pub(crate) fn bind(&mut self, state: &crate::runtime::view::SessionView) {
         self.ownership.bindings.extend(state.bindings.clone());
         self.team(&state.team);
+        self.contract_view(state.contract.as_ref());
+    }
+    /// Clause wording and evidence numbers from the latest session view.
+    pub(super) fn contract_view(
+        &mut self,
+        contract: Option<&crate::runtime::contract::ContractView>,
+    ) {
+        let Some(contract) = contract else {
+            return;
+        };
+        self.clauses = contract
+            .active()
+            .map(|c| (c.id.clone(), c.text.clone()))
+            .collect();
+        self.labels = contract
+            .clauses
+            .iter()
+            .flat_map(|c| c.evidence.iter().map(|e| (e.id.clone(), e.label)))
+            .collect();
     }
     pub(super) fn team(&mut self, team: &crate::runtime::team::TeamView) {
         for member in &team.members {
+            if !self.members.contains(&member.id) {
+                self.members.push(member.id.clone());
+                self.members.sort();
+            }
             self.names.insert(member.id.clone(), member.name.clone());
             for actor in &member.attempts {
                 self.names.insert(actor.clone(), member.name.clone());
             }
         }
+    }
+    /// The bar and colour for an entry in the current view.
+    pub(super) fn voice(&self, entry: &Entry) -> entry::Voice {
+        if entry.kind == Kind::User || entry.origin.is_main() {
+            return entry::Voice::of(entry);
+        }
+        let member = entry.origin.target.member_id();
+        let index = self.members.iter().position(|id| id == member).unwrap_or(0);
+        // Inside a member's own view the bar alone identifies it.
+        let named = self.view.as_ref().is_none_or(|view| view.is_main());
+        entry::Voice::member(member, index, named.then(|| self.name(member)))
+    }
+    /// Tags for a focused edit, run or check. Unknown contracts tag nothing.
+    fn tags(&self, tool: &str, scope: Option<BTreeMap<String, u64>>) -> Vec<String> {
+        let Some(scope) = scope.filter(|_| super::tool_text::serves_clauses(tool)) else {
+            return vec![];
+        };
+        if self.clauses.is_empty() || scope.is_empty() || scope.keys().eq(self.clauses.keys()) {
+            return vec![];
+        }
+        let mut ids = scope.into_keys().collect::<Vec<_>>();
+        ids.sort_by_key(|id| crate::runtime::contract::clause_order(id));
+        ids
+    }
+    /// Local `HH:MM` at which each contract version was recorded.
+    pub(super) fn contract_times(&self) -> BTreeMap<u64, String> {
+        self.entries
+            .iter()
+            .filter_map(|entry| match entry.card()? {
+                super::ledger::Card::Contract { revision, .. } => {
+                    let time = chrono::DateTime::parse_from_rfc3339(&entry.started).ok()?;
+                    Some((
+                        revision,
+                        time.with_timezone(&chrono::Local)
+                            .format("%H:%M")
+                            .to_string(),
+                    ))
+                }
+                super::ledger::Card::Acceptance { .. } => None,
+            })
+            .collect()
+    }
+    /// The complete record of one action, for expanding the evidence it produced.
+    pub(super) fn action_text(&self, action: &str) -> Option<String> {
+        self.entries
+            .iter()
+            .find(|entry| entry.id == action)
+            .map(Entry::full_text)
+    }
+    pub(super) fn member_name(&self, id: &str) -> String {
+        self.name(id)
     }
     fn name(&self, id: &str) -> String {
         self.names
@@ -179,6 +269,7 @@ impl Transcript {
             running: true,
             success: None,
             settled: None,
+            clauses: vec![],
             printed: BTreeSet::new(),
             quiet: false,
         });
@@ -326,7 +417,28 @@ impl Transcript {
                     stamp,
                 );
                 self.entries[i].tool = Some(tool.clone());
+                let scope = self.scopes.remove(id);
+                self.entries[i].clauses = self.tags(tool, scope);
             }
+            EventData::ActionScoped {
+                id, requirements, ..
+            } => {
+                self.scopes.insert(id.clone(), requirements.clone());
+            }
+            EventData::Elapsed { seconds } => self.elapsed = Some(*seconds),
+            EventData::Contract {
+                revision,
+                cause,
+                clauses,
+                changes,
+                ..
+            } => self.contract(*revision, cause, clauses, changes, stamp),
+            EventData::Acceptance {
+                revision,
+                passed,
+                checks,
+                ..
+            } => self.acceptance(*revision, *passed, checks, stamp),
             EventData::ActionFinished {
                 id,
                 success,
@@ -464,6 +576,108 @@ impl Transcript {
             entry.updated = stamp.clone();
         }
     }
+    fn card(&mut self, card: super::ledger::Card, stamp: &str) {
+        let id = format!("ledger:{}", self.sequence);
+        let title = match &card {
+            super::ledger::Card::Contract { revision, .. } => format!("契约 v{revision}"),
+            super::ledger::Card::Acceptance { .. } => "验收回执".into(),
+        };
+        let source = card.speaker();
+        let i = self.add(id, Kind::Ledger, source, title, stamp);
+        self.entries[i].body = card.plain();
+        self.entries[i].result = serde_json::to_value(&card).ok();
+        self.done(i);
+    }
+    fn contract(
+        &mut self,
+        revision: u64,
+        cause: &str,
+        clauses: &[crate::domain::contract::ClauseRecord],
+        changes: &crate::domain::contract::ContractChanges,
+        stamp: &str,
+    ) {
+        self.clauses = clauses
+            .iter()
+            .filter(|c| c.active)
+            .map(|c| (c.id.clone(), c.text.clone()))
+            .collect();
+        // The card supersedes the one-line revision notice written just before
+        // it. A notice already in native history stays; it is not wrong.
+        let notice = format!("需求修订 {revision} · ");
+        if let Some(entry) =
+            self.entries.iter_mut().rev().find(|e| {
+                e.kind == Kind::Note && e.printed.is_empty() && e.body.starts_with(&notice)
+            })
+        {
+            entry.quiet = true;
+        }
+        self.card(
+            super::ledger::Card::Contract {
+                revision,
+                cause: cause.into(),
+                clauses: clauses.to_vec(),
+                changes: changes.clone(),
+                labels: self.labels.clone(),
+            },
+            stamp,
+        );
+    }
+    fn acceptance(
+        &mut self,
+        revision: u64,
+        passed: bool,
+        checks: &[crate::domain::contract::AcceptanceCheck],
+        stamp: &str,
+    ) {
+        // The verifier's own steps since the previous verdict.
+        let since = self
+            .entries
+            .iter()
+            .rposition(|e| e.kind == Kind::Ledger && e.title == "验收回执")
+            .map_or(0, |i| i + 1);
+        let steps = self.entries[since..]
+            .iter()
+            .filter(|e| e.kind == Kind::Tool && e.source.starts_with("verify"))
+            .collect::<Vec<_>>();
+        let files = steps
+            .iter()
+            .filter(|e| e.tool.as_deref() == Some("read_file"))
+            .map(|e| e.title.as_str())
+            .collect::<BTreeSet<_>>()
+            .len();
+        let runs = steps
+            .iter()
+            .filter(|e| matches!(e.tool.as_deref(), Some("check" | "shell")))
+            .count();
+        let seconds = steps.first().and_then(|first| {
+            let start = chrono::DateTime::parse_from_rfc3339(&first.started).ok()?;
+            let end = chrono::DateTime::parse_from_rfc3339(stamp).ok()?;
+            Some(end.signed_duration_since(start).num_seconds().max(0) as u64)
+        });
+        let mut total = crate::domain::Usage::default();
+        for usage in self.usage.values() {
+            total.accumulate(usage);
+        }
+        self.card(
+            super::ledger::Card::Acceptance {
+                revision,
+                passed,
+                checks: checks.to_vec(),
+                clauses: self.clauses.clone(),
+                verifier: super::ledger::Verifier {
+                    files,
+                    checks: runs,
+                    seconds,
+                },
+                totals: super::ledger::Totals {
+                    seconds: self.elapsed,
+                    tokens: total.tokens(),
+                    kv: total.cache_hit(),
+                },
+            },
+            stamp,
+        );
+    }
     pub fn note(&mut self, text: &str) {
         self.local += 1;
         let i = self.add(
@@ -512,7 +726,7 @@ impl Transcript {
     pub fn active_lines(&self, width: usize) -> Vec<Line<'static>> {
         self.visible_entries()
             .filter(|e| e.running)
-            .flat_map(|e| e.lines(width, false))
+            .flat_map(|e| e.compact(width, &self.voice(e)))
             .collect()
     }
     pub fn drain_settled(&mut self, width: usize) -> Vec<Line<'static>> {
@@ -528,13 +742,17 @@ impl Transcript {
             })
             .collect::<Vec<_>>();
         indices.sort_by_key(|i| self.entries[*i].settled);
+        let mut last = std::mem::take(&mut self.last);
         lines.extend(summary::batch(
             &indices
                 .iter()
                 .map(|i| &self.entries[*i])
                 .collect::<Vec<_>>(),
             width,
+            &|e| self.voice(e),
+            &mut last,
         ));
+        self.last = last;
         for i in indices {
             self.entries[i].printed.insert(key.clone());
         }
@@ -545,10 +763,9 @@ impl Transcript {
         let view = self.view.clone();
         let key = self.view_key();
         self.visited.insert(key.clone());
-        let mut entries = self
-            .entries
-            .iter_mut()
-            .filter(|e| {
+        let mut indices = (0..self.entries.len())
+            .filter(|i| {
+                let e = &self.entries[*i];
                 e.settled.is_some()
                     && view.as_ref().is_none_or(|view| {
                         super::ownership::same_view(view, &e.origin)
@@ -556,15 +773,23 @@ impl Transcript {
                     })
             })
             .collect::<Vec<_>>();
-        entries.sort_by_key(|e| e.settled);
-        for e in &mut entries {
-            e.printed.insert(key.clone());
+        indices.sort_by_key(|i| self.entries[*i].settled);
+        for i in &indices {
+            self.entries[*i].printed.insert(key.clone());
         }
-        let first = entries.len().saturating_sub(20);
+        let first = indices.len().saturating_sub(20);
+        // A restore starts a fresh run of native history after its marker.
+        let mut last = summary::Last::default();
         let mut lines = summary::batch(
-            &entries[first..].iter().map(|e| &**e).collect::<Vec<_>>(),
+            &indices[first..]
+                .iter()
+                .map(|i| &self.entries[*i])
+                .collect::<Vec<_>>(),
             width,
+            &|e| self.voice(e),
+            &mut last,
         );
+        self.last = last;
         let marker = text::wrap(
             vec![Span::raw(
                 "── 恢复最近记录（最多20块/200行）；/history 查看完整历史 ──",

@@ -95,7 +95,7 @@ fn tool_output_stays_with_its_command_and_failure_is_visible_when_collapsed() {
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join("\n");
-    assert_eq!(text.matches("Check  cargo test").count(), 1);
+    assert_eq!(text.matches("检查  cargo test").count(), 1);
     assert!(text.contains("✕"));
     assert!(text.contains("expected SQLite"));
     assert!(text.find("expected SQLite").unwrap() < text.find("I will inspect").unwrap());
@@ -175,7 +175,8 @@ fn conversation_modes_dock_the_editor_without_an_active_banner() {
     for (mode, placeholder) in [
         (Mode::Conversation, "继续提问"),
         (Mode::Plan, "补充只读规划"),
-        (Mode::Engineering, "补充要求、纠正方向"),
+        // Narrow editors shorten the prompt; correcting is always offered.
+        (Mode::Engineering, "纠正"),
     ] {
         for height in [18, 32, 50] {
             for width in [40, 80, 120] {
@@ -209,7 +210,8 @@ fn conversation_modes_dock_the_editor_without_an_active_banner() {
                     .collect::<String>();
                 assert!(footer.contains("KV"), "footer not at bottom");
                 let cursor = terminal.get_cursor_position().unwrap();
-                assert_eq!(cursor.y, height - 3);
+                // One rule above the editor, the footer below it.
+                assert_eq!(cursor.y, height - 2);
                 assert!(cursor.x < width);
             }
         }
@@ -299,6 +301,6 @@ fn narrow_blockers_show_whole_action_ids_or_an_explicit_details_route() {
             }
         }
         assert!(!text.contains("/approveshell"));
-        assert_eq!(terminal.get_cursor_position().unwrap().y, 15);
+        assert_eq!(terminal.get_cursor_position().unwrap().y, 16);
     }
 }

@@ -80,20 +80,32 @@ pub(super) fn lines(screen: &Screen) -> Vec<String> {
     for entry in &active {
         let elapsed = age(&entry.started, now);
         let idle = age(&entry.updated, now);
-        let work = if entry.kind == Kind::Assistant && entry.body.is_empty() {
-            "等待模型响应"
-        } else if entry.kind == Kind::Assistant {
-            "正在回复"
+        // The same verb and object as the tool line, so the two read as one step.
+        let work = if entry.kind == Kind::Tool {
+            entry.title.split_whitespace().collect::<Vec<_>>().join(" ")
+        } else if entry.body.is_empty() {
+            format!("{} · 等待模型响应", entry.title)
         } else {
-            "执行工具"
+            format!("{} · 正在回复", entry.title)
         };
-        let title = if entry.kind == Kind::Tool {
+        let serves = if entry.clauses.is_empty() {
             String::new()
         } else {
-            format!("{} · ", entry.title)
+            format!(" · 服务 {}", entry.clauses.join(" "))
+        };
+        // In the main view each member's work is named; its own view needs no name.
+        let who = if screen.view.is_main() && !entry.origin.is_main() {
+            format!(
+                "{} ",
+                screen
+                    .transcript
+                    .member_name(entry.origin.target.member_id())
+            )
+        } else {
+            String::new()
         };
         lines.push(format!(
-            "{work} · {title}已用{elapsed} · 距输出{idle} · /tasks"
+            "{who}⋯ {work}{serves} · 已用 {elapsed} · 距输出 {idle}"
         ));
     }
     if let Some(session) = &screen.session {
@@ -109,7 +121,7 @@ pub(super) fn lines(screen: &Screen) -> Vec<String> {
                 .any(|e| e.id == activity.id || e.source == activity.id)
             {
                 lines.push(format!(
-                    "{} · {} · /tasks",
+                    "⋯ {} · {} · /tasks",
                     super::transcript::actor_label(&activity.actor),
                     activity.title
                 ));
@@ -133,37 +145,24 @@ pub(super) fn lines(screen: &Screen) -> Vec<String> {
                 lines.push(format!("成员等待 · {} · /team", waiting.join("；")));
             }
         }
-        if lines.is_empty() {
-            lines.push(if session.verifying {
-                "等待独立验收调度 · /tasks".into()
-            } else {
-                format!(
-                    "{} · {}{}",
-                    super::present::mode(screen),
-                    super::state::label(&session.status),
-                    if screen.connected {
-                        ""
-                    } else {
-                        " · 后台未连接 · /resume"
-                    }
-                )
-            });
+        // Idle mode and status live in the editor rule; only facts that need
+        // attention take a status line of their own.
+        if lines.is_empty() && session.verifying {
+            lines.push("等待独立验收调度 · /tasks".into());
+        }
+        if !screen.connected {
+            lines.push("后台未连接 · /resume".into());
         }
     }
     if !screen.activity.is_empty() {
         lines.push(screen.activity.clone());
     }
     lines.extend(screen.feedback.lines(&screen.view));
-    if lines.is_empty() {
-        lines.push("输入消息开始对话 · / 查看命令".into());
-    }
     lines
 }
+/// Same format as the tool line's duration, so the two never disagree.
 fn age(value: &str, now: chrono::DateTime<chrono::Utc>) -> String {
-    chrono::DateTime::parse_from_rfc3339(value)
-        .ok()
-        .map(|t| format!("{}s", now.signed_duration_since(t).num_seconds().max(0)))
-        .unwrap_or_else(|| "未知".into())
+    super::tool_text::elapsed(value, &now.to_rfc3339()).unwrap_or_else(|| "未知".into())
 }
 pub(super) fn progress(screen: &Screen, member: &str) -> String {
     screen

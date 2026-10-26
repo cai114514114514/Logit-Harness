@@ -9,30 +9,106 @@ fn data(result: &Value) -> &Value {
         .unwrap_or(result)
 }
 
-pub(super) fn suffix(result: &Value) -> String {
+/// Chinese verb for a tool. Unknown tools keep their own name.
+pub(super) fn verb(tool: &str) -> &str {
+    match tool {
+        "read_file" => "读取",
+        "search_files" | "search" | "search_text" | "list_files" => "搜索",
+        "apply_patch" => "修改",
+        "shell" => "运行",
+        "check" => "检查",
+        "web_fetch" | "fetch" => "抓取",
+        tool if tool.starts_with("browser") => "浏览",
+        tool => tool,
+    }
+}
+
+/// Tools whose step is labelled with the clauses it serves. Reading and
+/// searching serve every clause, so naming them is noise.
+pub(super) fn serves_clauses(tool: &str) -> bool {
+    matches!(tool, "apply_patch" | "shell" | "check")
+}
+
+/// The measured result shown at the right of a tool line, or nothing. Every
+/// value comes from the typed result; nothing is estimated.
+pub(super) fn outcome(result: &Value) -> Option<String> {
     let data = data(result);
     let process = &data["process"];
-    let state = if process["timed_out"] == true {
-        " · 超时"
-    } else if process["cancelled"] == true {
-        " · 已取消"
-    } else {
-        ""
-    };
+    if process["timed_out"] == true {
+        return Some("超时".into());
+    }
+    if process["cancelled"] == true {
+        return Some("已取消".into());
+    }
     if let Some(code) = data["exit_code"]
         .as_i64()
-        .or_else(|| data["process"]["exit_code"].as_i64())
-        .or_else(|| data["process"]["code"].as_i64())
+        .or_else(|| process["exit_code"].as_i64())
+        .or_else(|| process["code"].as_i64())
     {
-        return format!("{state} · 退出 {code}");
-    }
-    if !state.is_empty() {
-        return state.into();
+        return if code != 0 {
+            Some(format!("退出 {code}"))
+        } else {
+            passed_tests(&self::result(result)).map(|n| format!("{n} 通过"))
+        };
     }
     if let Some(matches) = data["matches"].as_array() {
-        return format!(" · {} 个结果", matches.len());
+        return Some(format!("{} 个结果", matches.len()));
     }
-    String::new()
+    if let Some(content) = data["content"]
+        .as_str()
+        .filter(|_| data["path"].is_string())
+    {
+        return Some(format!("{} 行", content.lines().count()));
+    }
+    if let Some(changes) = data["changes"].as_array() {
+        let mut added = 0;
+        let mut removed = 0;
+        for change in changes {
+            added += change["added"].as_u64()?;
+            removed += change["removed"].as_u64()?;
+        }
+        return Some(format!("+{added} −{removed}"));
+    }
+    None
+}
+
+/// Passed-test total from summary lines that test runners print. Only exact,
+/// known summary shapes count; anything else reports nothing.
+fn passed_tests(output: &str) -> Option<u64> {
+    static SUMMARY: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let summary = SUMMARY.get_or_init(|| {
+        regex::Regex::new(
+            r"(?m)^test result: (?:ok|FAILED)\. (\d+) passed;|^=+ (?:.*?, )?(\d+) passed(?:,.*)? in [0-9.]+s",
+        )
+        .unwrap()
+    });
+    let mut total = None;
+    for capture in summary.captures_iter(output) {
+        let count: u64 = capture
+            .get(1)
+            .or_else(|| capture.get(2))?
+            .as_str()
+            .parse()
+            .ok()?;
+        *total.get_or_insert(0) += count;
+    }
+    total
+}
+
+/// Wall time between two event stamps: `0.4s`, `12s`, `1m04s`, `2h05m`.
+pub(super) fn elapsed(started: &str, finished: &str) -> Option<String> {
+    let start = chrono::DateTime::parse_from_rfc3339(started).ok()?;
+    let end = chrono::DateTime::parse_from_rfc3339(finished).ok()?;
+    let millis = end.signed_duration_since(start).num_milliseconds().max(0);
+    Some(if millis < 10_000 {
+        format!("{:.1}s", millis as f64 / 1000.)
+    } else if millis < 60_000 {
+        format!("{}s", millis / 1000)
+    } else if millis < 3_600_000 {
+        format!("{}m{:02}s", millis / 60_000, millis / 1000 % 60)
+    } else {
+        format!("{}h{:02}m", millis / 3_600_000, millis / 60_000 % 60)
+    })
 }
 
 pub(super) fn truncated(result: &Value) -> bool {
@@ -59,14 +135,7 @@ pub(super) fn limitation(result: &Value) -> Option<&'static str> {
 }
 pub(super) fn title(tool: &str, arguments: &Value) -> String {
     let arguments = crate::tools::approval::redact(arguments);
-    let name = match tool {
-        "read_file" => "Read",
-        "search_files" | "search" => "Search",
-        "apply_patch" => "Edit",
-        "shell" => "Run",
-        "check" => "Check",
-        _ => tool,
-    };
+    let name = verb(tool);
     let detail = ["command", "path", "query", "url", "name"]
         .iter()
         .find_map(|k| arguments[*k].as_str())
@@ -90,7 +159,18 @@ pub(super) fn title(tool: &str, arguments: &Value) -> String {
         .take(500)
         .collect()
 }
+/// Result text, falling back to the structured data when there is no output.
 pub(super) fn result(result: &Value) -> String {
+    text(result, true)
+}
+
+/// Only output a person would read: streams, errors, file content, matches.
+/// The compact tail under a tool line uses this; JSON stays in details.
+pub(super) fn readable(result: &Value) -> String {
+    text(result, false)
+}
+
+fn text(result: &Value, metadata: bool) -> String {
     if let Some(error) = result["error"].as_str() {
         return error.into();
     }
@@ -157,7 +237,7 @@ pub(super) fn result(result: &Value) -> String {
     if let Some(output) = data["process"]["output"].as_str() {
         parts.push(output.into());
     }
-    if parts.is_empty() && !data.is_null() {
+    if metadata && parts.is_empty() && !data.is_null() {
         parts.push(serde_json::to_string_pretty(data).unwrap_or_default());
     }
     if truncated(result) {

@@ -26,6 +26,7 @@ pub enum Kind {
     Tasks,
     Btw,
     History,
+    Contract,
     Tools,
     Copy,
     Skills,
@@ -325,6 +326,15 @@ pub const DIRECTORY: &[Entry] = &[
         "/history [tools] [搜索词]",
         "/history",
         Optional,
+        Local
+    ),
+    entry!(
+        Contract,
+        "/contract",
+        "查看契约：条款原话、修订链、证据与验收",
+        "/contract",
+        "/contract",
+        None,
         Local
     ),
     entry!(

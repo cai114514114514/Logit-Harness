@@ -61,6 +61,8 @@ pub enum Outcome {
     },
     Navigate(Navigation),
     History(History),
+    /// Open the contract detail from the client's current session view.
+    Contract,
     Copy {
         origin: ViewTarget,
         selector: String,
@@ -198,6 +200,7 @@ impl<'a> Service<'a> {
                     arguments.trim(),
                 )?,
             ),
+            Kind::Contract => Ok(Outcome::Contract),
             Kind::History => {
                 self.id()?;
                 let (head, tail) = split(&arguments);
