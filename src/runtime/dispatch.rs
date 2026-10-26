@@ -325,7 +325,17 @@ impl Runner {
             } else {
                 instructions
             },
-            input: actor.context.request_items()?,
+            input: if compact {
+                // The summary request must itself fit: bound its input, and
+                // tighten the bounds after each overflow of a summary request.
+                let shrink = actor.compact_shrink.min(8);
+                actor.context.compaction_items(
+                    ((self.settings.context_limit / 4) >> shrink).max(1024),
+                    ((self.settings.context_limit * 2) >> shrink).max(8192),
+                )?
+            } else {
+                actor.context.request_items()?
+            },
             tools: if compact { vec![] } else { tools },
             max_output: if compact {
                 4096

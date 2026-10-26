@@ -67,6 +67,8 @@ pub(super) fn routine(message: &str) -> bool {
             | "completion withheld; verification is incomplete"
             | "compaction queued at a fully paired tool boundary; durable requirements and corrections remain authoritative"
     ) || message.ends_with(" context compacted; current requirements and pending work retained")
+        // Recovered automatically; the provider's raw message stays in details.
+        || message.contains(" context exceeded the model limit; compacting and retrying")
 }
 
 pub(super) fn notice(message: &str) -> String {
@@ -82,6 +84,9 @@ pub(super) fn notice(message: &str) -> String {
             "当前工作已结算，等待答复 · /status 查看待答问题"
         }
         "waiting for scoped authorization" => "等待授权 · /status 查看详情",
+        "context still exceeds the model limit after compaction; progress is saved" => {
+            "上下文压缩后仍超出模型上限，进度已保存 · /history 查看过大的记录"
+        }
         "every active requirement passed independent evidence-backed verification" => {
             "每条有效条款都有独立验收证据 · /contract"
         }

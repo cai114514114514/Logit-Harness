@@ -55,6 +55,10 @@ pub struct Actor {
     pub response: Option<String>,
     #[serde(default)]
     pub compact: bool,
+    /// Summary requests that overflowed the model since the last successful
+    /// compaction; each halves the bounds of the next summary request.
+    #[serde(default)]
+    pub compact_shrink: u32,
     /// Promotion in plan mode is offered only for a fresh, actual user turn.
     /// Reading tool/skill content consumes this opportunity.
     #[serde(default)]
@@ -104,6 +108,7 @@ impl Actor {
             turn: identity(),
             response: None,
             compact: false,
+            compact_shrink: 0,
             allow_goal: false,
             id,
             role,

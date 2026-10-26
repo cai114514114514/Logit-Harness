@@ -9,6 +9,10 @@ use crate::{
 };
 use serde_json::json;
 
+/// Summary requests that may overflow, each with halved bounds, before the
+/// session stops and says the context cannot be reduced enough.
+const COMPACTION_RETRIES: u32 = 3;
+
 impl Runner {
     pub(super) fn handle_wire(&mut self, wire: Wire) -> anyhow::Result<()> {
         if let Wire::Tool { id, .. } = &wire
@@ -231,6 +235,7 @@ impl Runner {
                         if compact {
                             actor.context.compact(&response.text())?;
                             actor.compact = false;
+                            actor.compact_shrink = 0;
                             actor.phase = prior;
                             self.emit(EventData::Diagnostic { message: format!("{} context compacted; current requirements and pending work retained", job.actor) })?;
                             return Ok(());
@@ -292,6 +297,31 @@ impl Runner {
                             let failures = actor.failures;
                             let request_failure =
                                 error.downcast_ref::<crate::model::RequestFailure>();
+                            if request_failure.is_some_and(|failure| failure.context_overflow()) {
+                                // The history is too long, not malformed: compact and
+                                // retry instead of asking the user to fix a request.
+                                // An overflowing summary retries with tighter bounds.
+                                actor.failures -= 1;
+                                if compact {
+                                    actor.compact_shrink += 1;
+                                } else {
+                                    actor.compact = true;
+                                }
+                                let exhausted = actor.compact_shrink > COMPACTION_RETRIES;
+                                self.emit(EventData::Diagnostic {
+                                    message: format!(
+                                        "{} context exceeded the model limit; compacting and retrying: {error}",
+                                        job.actor
+                                    ),
+                                })?;
+                                if exhausted {
+                                    self.halt(
+                                        Status::Failed,
+                                        "context still exceeds the model limit after compaction; progress is saved",
+                                    )?;
+                                }
+                                return Ok(());
+                            }
                             // Invalid credentials and request formats cannot be repaired by
                             // asking the model for a smaller completion with the same request.
                             if request_failure.is_none() {

@@ -33,6 +33,19 @@ impl RequestFailure {
         }
     }
 
+    /// The request exceeded the model's context window. Unlike other 4xx
+    /// rejections the harness can repair this itself by compacting and retrying.
+    pub fn context_overflow(&self) -> bool {
+        let (Self::Rejected { status, detail } | Self::Http { status, detail }) = self else {
+            return false;
+        };
+        let detail = detail.to_lowercase();
+        matches!(status, 400 | 413)
+            && (detail.contains("maximum context length")
+                || detail.contains("context_length_exceeded")
+                || detail.contains("context length"))
+    }
+
     pub fn advice(&self) -> &'static str {
         let status = match self {
             Self::NotSent(_) => return "请检查 API 地址与网络连接；可用 /setup 修改地址。",

@@ -4,6 +4,45 @@ use std::collections::BTreeSet;
 
 mod state;
 
+fn byte_size(item: &Value) -> usize {
+    serde_json::to_vec(item).map_or(0, |bytes| bytes.len())
+}
+
+/// Items this small are never worth replacing by an omission note.
+const OMISSION_FLOOR: usize = 512;
+
+/// The same item with its content replaced by a note, keeping the fields that
+/// pair calls with results and identify the speaker.
+fn omission(item: &Value, bytes: usize) -> Value {
+    let note = format!(
+        "[omitted {} KB from this compaction request; the complete record remains in history]",
+        bytes.div_ceil(1024)
+    );
+    let mut short = item.clone();
+    match item["type"].as_str() {
+        Some("function_call_output" | "custom_tool_call_output") => short["output"] = json!(note),
+        Some("function_call") => short["arguments"] = json!(json!({ "omitted": note }).to_string()),
+        Some("custom_tool_call") => short["input"] = json!(note),
+        Some("reasoning") => {
+            short["content"] = json!([{ "type": "reasoning_text", "text": note }]);
+            if let Some(fields) = short.as_object_mut() {
+                fields.remove("encrypted_content");
+                fields.remove("summary");
+            }
+        }
+        Some("message") => {
+            let kind = if item["role"] == "assistant" {
+                "output_text"
+            } else {
+                "input_text"
+            };
+            short["content"] = json!([{ "type": kind, "text": note }]);
+        }
+        _ => short["content"] = json!(note),
+    }
+    short
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Context {
     pub items: Vec<Value>,
@@ -89,6 +128,40 @@ impl Context {
         // request must re-seed every current section after this cache boundary.
         self.state = None;
         Ok(())
+    }
+    /// Input for a compaction request, bounded so that the summary request itself
+    /// always fits the model. Every item over `item_limit` bytes is replaced by a
+    /// note of what was omitted, then the largest remaining items until the whole
+    /// input is within `total_limit`. Tool calls keep their pairing, so the request
+    /// stays well-formed; the complete record remains in history.
+    pub fn compaction_items(
+        &self,
+        item_limit: usize,
+        total_limit: usize,
+    ) -> anyhow::Result<Vec<Value>> {
+        let mut items = self.request_items()?;
+        let mut sizes = items.iter().map(byte_size).collect::<Vec<_>>();
+        let mut omitted = vec![false; items.len()];
+        loop {
+            // Oversized items first, then the largest remaining until the whole fits.
+            let oversized = (0..items.len()).find(|i| !omitted[*i] && sizes[*i] > item_limit);
+            let largest = || {
+                (0..items.len())
+                    .filter(|i| !omitted[*i] && sizes[*i] > OMISSION_FLOOR)
+                    .max_by_key(|i| sizes[*i])
+            };
+            let next = oversized.or_else(|| {
+                (sizes.iter().sum::<usize>() > total_limit)
+                    .then(largest)
+                    .flatten()
+            });
+            let Some(i) = next else {
+                return Ok(items);
+            };
+            items[i] = omission(&items[i], sizes[i]);
+            sizes[i] = byte_size(&items[i]);
+            omitted[i] = true;
+        }
     }
     pub fn tool_images(&mut self, id: &str, result: &Value, images: &[crate::tools::ToolImage]) {
         if images.is_empty() {

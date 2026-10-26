@@ -107,3 +107,61 @@ fn state_cannot_split_a_tool_batch_or_change_history_on_failure() {
     assert_eq!(wire[3]["role"], "developer");
     assert!(context.sync_state(json!(null)).is_err());
 }
+
+fn oversized_history() -> Context {
+    let mut context = Context::default();
+    context.user("帮我审查一下代码");
+    context.append(&[
+        json!({"type":"function_call","call_id":"diff","name":"project_diff","arguments":"{}"}),
+    ]);
+    // The shape of the 2026-10-26 incident: thousands of fingerprints in one result.
+    let files = (0..9197)
+        .map(|i| (format!("artifacts/run/{i}.txt"), json!(format!("{i:064x}"))))
+        .collect::<serde_json::Map<_, _>>();
+    context.tool_result("diff", &json!({"result":{"files":files}}));
+    context.user("继续");
+    context
+}
+
+#[test]
+fn a_summary_request_omits_oversized_items_but_keeps_tool_pairing() {
+    let context = oversized_history();
+    let full = serde_json::to_vec(&context.request_items().unwrap())
+        .unwrap()
+        .len();
+    assert!(
+        full > 512 * 1024,
+        "fixture must exceed the total limit: {full}"
+    );
+    let items = context.compaction_items(64 * 1024, 512 * 1024).unwrap();
+    let size = serde_json::to_vec(&items).unwrap().len();
+    assert!(size < 4 * 1024, "{size} bytes");
+    assert_eq!(items.len(), 4, "no item is dropped");
+    assert_eq!(
+        items[2]["call_id"], "diff",
+        "the result still answers its call"
+    );
+    assert!(
+        items[2]["output"]
+            .as_str()
+            .unwrap()
+            .starts_with("[omitted ")
+    );
+    assert_eq!(items[0]["content"], "帮我审查一下代码");
+    assert_eq!(items[3]["content"], "继续");
+    // The saved history itself is untouched; only the request is bounded.
+    assert_eq!(context.items.len(), 4);
+    assert!(context.items[2]["output"].as_str().unwrap().len() > 512 * 1024);
+}
+
+#[test]
+fn a_summary_request_also_fits_when_no_single_item_is_oversized() {
+    let mut context = Context::default();
+    for i in 0..40 {
+        context.user(&format!("{i}:{}", "x".repeat(20 * 1024)));
+    }
+    let items = context.compaction_items(64 * 1024, 256 * 1024).unwrap();
+    let size = serde_json::to_vec(&items).unwrap().len();
+    assert!(size <= 256 * 1024, "{size} bytes");
+    assert_eq!(items.len(), 40);
+}
