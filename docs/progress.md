@@ -865,3 +865,13 @@ Spec: docs/spec.md
   `loh` processes remained; the previous binary is kept under `artifacts/contract-ledger-2026-10-26/previous`.
   Installed contract and existing PTY suites passed. Real Flash quality and native Terminal
   acceptance are not established.
+
+## Context overflow fix — 2026-10-26
+
+- Sessions paused on a provider 400 for context length. One `project_diff` call put a 9,197-file
+  fingerprint map (mostly ignored `artifacts/`) into the model context twice; the summary request
+  then overflowed too, and the pause asked the user to fix a request format. See the
+  [incident record](incidents/2026-10-26-context-overflow.md).
+- Fixed in `324ac91` (bounded fingerprint views for the model) and `19276e0` (automatic
+  compaction and retry with bounded, shrinking summary requests). 420 tests passed; installed
+  binary SHA-256 `7d496e75f470e02d89cc971962dfcfdcfa49d5485949f0aa6473956a7c145b24`. No paid calls.
