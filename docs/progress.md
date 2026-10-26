@@ -839,3 +839,29 @@ Spec: docs/spec.md
   Installed macOS PTY budget/config checks passed with **zero provider requests**; evidence is
   `artifacts/unlimited-2026-10-24`. Protected files, frozen research and monetary ledgers are unchanged.
 - Updated distributable: `dist/unlimited-2026-10-24/loh-macos-arm64-0.1.0.tar.gz`.
+
+## Contract-ledger terminal — 2026-10-26
+
+- The user confirmed the four open decisions of the contract-ledger draft and asked to continue.
+  Specification and plan are under `docs/superpowers/`; all work happened in the original tree.
+- Runtime gained additive `Contract`/`Acceptance` events, `SessionView.contract`,
+  `Session.acceptance`, activity clause scopes and exact patch line counts. Completion,
+  scheduling and evidence rules are unchanged; `Evidence::current`/`current_at` are untouched.
+- The terminal now shows speaker bars, Chinese tool lines with measured results, contract,
+  revision and acceptance cards, a contract bar, a single editor rule, `/contract`, light-terminal
+  accent detection and `NO_COLOR`.
+- Real-PTY runs found and fixed: contract data not synced from live session views, JSON leaking
+  under cancelled tools, hour-long durations printed in seconds, a stale bar for up to two seconds
+  after revisions and verdicts, `/contract` empty after archival, English routine diagnostics,
+  status rows wrapping at 60 columns and card edges wrapping at 40 columns.
+- Regression: **414 passed**, formatting, strict Clippy and release build; 8 offline contract PTY
+  runs and the 5 existing PTY suites passed. Evidence and limits are in
+  [contract-ledger acceptance](contract-ledger-acceptance.md). No paid calls.
+- Committed on branch `contract-ledger` in five categorized commits ending at
+  `13e7bd982fa34684d8169f74b614cecb67dd7253`; the runtime commit alone was checked to build and
+  pass its 390 tests. Installed atomically to `/opt/homebrew/bin/loh`: source hash
+  `64df605f46012a720bf6ba5234de472b8b89f189e78dbd062bdb2b99b5d2a388`, signed binary SHA-256
+  `1b745330549666dd319070a4f52832210751c170aa8e1bb95cc03a156fc7c714`. All 123 pre-existing
+  `loh` processes remained; the previous binary is kept under `artifacts/contract-ledger-2026-10-26/previous`.
+  Installed contract and existing PTY suites passed. Real Flash quality and native Terminal
+  acceptance are not established.

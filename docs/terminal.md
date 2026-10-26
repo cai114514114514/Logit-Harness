@@ -52,7 +52,10 @@ Ctrl-W or Alt-Backspace deletes the previous word, Ctrl-K clears the rest of the
 Alt-Left/Right or Alt-B/F moves by word. Input changes repaint immediately; streaming tool output
 is still batched to avoid redrawing for every output fragment.
 
-The activity area keeps one primary action, with measured elapsed time and time since output.
+The activity area keeps one primary action, with measured elapsed time and time since output,
+written with the same verb and object as its tool line (`⋯ 运行 cargo test · 服务 r2 · 已用 12s`).
+When nothing needs attention there is no status line: the single rule above the editor names the
+mode and what input does now (`对话 · 等待输入`, `Engineering · 补充或纠正`, `测试 · 仅此成员`).
 An old draft, pending authorization/question, cancellation settlement or workspace wait takes
 priority over ordinary progress. If the available rows cannot contain an entire actionable command,
 `/status` provides the complete list; a partial authorization ID is never presented as a usable command.
@@ -72,7 +75,8 @@ Known routine diagnostics and successful delivery receipts stay in full history,
 unknown outcomes and required actions stay visible. Question and approval commands retain exact IDs.
 Interrupted actions with an unknown result never acquire
 a success marker. Display text cannot execute terminal escapes; explicitly copied content retains
-its original bytes. The footer shows the model, reported token usage and KV input hit rate; `/usage` and
+its original bytes. The footer shows shortcuts on the left and the model, reported token usage and KV input hit rate
+on the right; `/usage` and
 `/budget` provide details. Context size estimates are separate from provider-reported token usage.
 Main shows the team's total; a member shows only its own reported usage. Missing KV data is `—`.
 Narrow windows first omit secondary shortcuts and token totals, preserving identity, control scope,
@@ -87,6 +91,49 @@ on progress updates. Main also reports member wait reasons when there is no actu
 The `/` menu shows source and execution timing for the selected command, without repeating those
 tags on every row. Existing command parsing, source-qualified Skills and control scopes are unchanged.
 
+### The contract ledger
+
+An engineering goal is recorded as a contract: each requirement is a clause (`r1`, `r2`, …), and
+`r1` is always your complete request. Initial clauses can only be exact quotes of your words; the
+model cannot reword or drop them. Greetings and questions never create a contract.
+
+Every utterance carries a bar instead of a heading: `▌` you, `│` the main agent, `┃` a member,
+`║` the independent verifier. Tool lines use Chinese verbs (读取, 搜索, 修改, 运行, 检查) and show
+measured results on the right — lines read, matches, exact `+added −removed` line counts for
+patches, a parsed test-runner summary such as `12 通过`, or the exit code — then the elapsed time.
+Edits, runs and checks scoped to fewer than all clauses also name the clauses they serve.
+Nothing on the right is estimated; a value that cannot be measured is omitted.
+
+Three kinds of card are written to native history once:
+
+- the contract card, when the goal is split into clauses;
+- a revision card for each correction, listing changed (`~`), added (`+`) and retired (`−`)
+  clauses, cancelled actions (`×`) and whether they had settled, evidence that is no longer
+  current (`⊘`) and why, and kept steps (`=`) — exactly what the runtime did, not a forecast;
+- the acceptance receipt, binding each clause to the evidence the verifier cited. A rejected
+  receipt is red, states each failing clause's reason and that completion stays withheld.
+
+The contract bar above the editor stamps each active clause: `○` no current evidence beyond
+reading, `●` current passing evidence, `◉` accepted by the verifier, `⊘` passing evidence that is
+no longer current, `⊗` the latest current check failed or the verdict rejected it. A clause being
+worked on is underlined. "Current" means bound to the clause's version, the goal epoch and the
+step versions; file fingerprints are checked by the verifier at acceptance, not every refresh.
+A member's view shows only the clauses its assignment serves. Ordinary conversation, Plan mode
+without a contract and archived views show no bar.
+
+`/contract` opens a temporary full screen with every clause: its wording and version, where it
+came from (your full request, a quote, or a later correction with its time), earlier wordings,
+all evidence with its display number (`e3`) and staleness reason, the latest verdict and running
+work. Up/Down select, Enter expands the selected clause's raw evidence, `/` searches and `c`
+copies the clause's source words. After a verified goal is archived, `/contract` shows that
+archived contract. Escape returns without replaying history.
+
+On a light terminal background the accent blue is darkened (about 6.3:1 on white). The background
+is asked once with OSC 11 before input starts; a terminal that does not answer keeps the default.
+`NO_COLOR` removes every colour while bars, stamps, bold and underline keep their meaning.
+
+### History
+
 The history browser reads the full durable event record, including entries older than 300 events.
 Use Up/Down to select, PageUp/PageDown for pages, Enter to expand one entry, `j`/`k` to scroll its
 body, `/` to search and `c` to copy its original content. Escape or `q` returns to the normal buffer.
@@ -98,6 +145,7 @@ history size. Clipboard operations use macOS `pbcopy` and report failures.
 |---|---|
 | `/setup` | Configure the API Base URL and hidden API Key locally |
 | `/status` | Read the current saved session state |
+| `/contract` | Show every clause with its source words, revisions, evidence and verdict |
 | `/sessions` | Select a saved task in this directory from welcome or a live conversation; switching clients does not stop the old task |
 | `/diff` | Show the current Git worktree, including pre-existing user changes |
 | `/budget` | Show consumed, reserved and uncertain token use, and elapsed time |
