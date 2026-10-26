@@ -171,9 +171,10 @@ impl Runner {
         scope.observed = actor.scope.observed.clone();
         actor.scope = scope;
         actor.step = Some(step.into());
-        actor
-            .context
-            .tool_result(&pending.call.id, &json!({"step":step,"scope":actor.scope}));
+        actor.context.tool_result(
+            &pending.call.id,
+            &json!({"step":step,"scope":super::prompts::visible_scope(&actor.scope)}),
+        );
         actor.phase = Phase::Ready;
         Ok(())
     }

@@ -59,6 +59,11 @@ pub struct Actor {
     /// compaction; each halves the bounds of the next summary request.
     #[serde(default)]
     pub compact_shrink: u32,
+    /// Ordinary requests that overflowed since the last one that succeeded.
+    /// Compaction cannot help when the request is too large even right after
+    /// it, for example because the state itself is; this bounds the retries.
+    #[serde(default)]
+    pub overflows: u32,
     /// Promotion in plan mode is offered only for a fresh, actual user turn.
     /// Reading tool/skill content consumes this opportunity.
     #[serde(default)]
@@ -109,6 +114,7 @@ impl Actor {
             response: None,
             compact: false,
             compact_shrink: 0,
+            overflows: 0,
             allow_goal: false,
             id,
             role,

@@ -46,6 +46,8 @@ fn summary(text: &str) -> Response {
 struct Script {
     /// Overflow every summary request instead of answering it.
     summaries_overflow: bool,
+    /// How many ordinary requests overflow before the rest wait to be stopped.
+    main_overflows: usize,
     /// Roles of the requests seen, in order.
     roles: Mutex<Vec<String>>,
     /// Byte size of every summary request's input.
@@ -76,7 +78,7 @@ impl Provider for Script {
                 Ok(summary("已审查工作区；没有需要修改的源码。"))
             };
         }
-        if self.main.fetch_add(1, Ordering::SeqCst) == 0 {
+        if self.main.fetch_add(1, Ordering::SeqCst) < self.main_overflows {
             return Err(overflow());
         }
         // Keep the session busy until the test stops it.
@@ -119,7 +121,10 @@ async fn an_overflowing_request_is_compacted_and_retried_without_pausing() {
     let workspace = tempfile::tempdir().unwrap();
     let state = tempfile::tempdir().unwrap();
     let session = Session::new(workspace.path().into(), "帮我审查一下代码", 100_000_000, 60);
-    let provider = Arc::new(Script::default());
+    let provider = Arc::new(Script {
+        main_overflows: 1,
+        ..Script::default()
+    });
     let (runner, control, mut events) =
         runner(session, provider.clone(), workspace.path(), state.path());
     let running = tokio::spawn(runner.run());
@@ -146,6 +151,48 @@ async fn an_overflowing_request_is_compacted_and_retried_without_pausing() {
     assert!(
         !paused,
         "an overflow must not stop the session for the user"
+    );
+}
+
+#[tokio::test]
+async fn a_request_too_large_even_after_compaction_stops_instead_of_looping() {
+    let workspace = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let session = Session::new(workspace.path().into(), "帮我审查一下代码", 100_000_000, 60);
+    // Summaries succeed, yet every ordinary request still overflows, as when
+    // the state itself exceeds the window. Each compaction is a paid request.
+    let provider = Arc::new(Script {
+        main_overflows: usize::MAX,
+        ..Script::default()
+    });
+    let (runner, _control, _events) =
+        runner(session, provider.clone(), workspace.path(), state.path());
+    let Ok(session) = tokio::time::timeout(std::time::Duration::from_secs(10), runner.run()).await
+    else {
+        let roles = provider.roles.lock().unwrap();
+        panic!(
+            "the overflow loop must end; {} requests: {:?}",
+            roles.len(),
+            &roles[..roles.len().min(12)]
+        );
+    };
+    let session = session.unwrap();
+    assert_eq!(session.status, Status::Failed);
+    assert_eq!(
+        *provider.roles.lock().unwrap(),
+        [
+            "ROLE: main",
+            "ROLE: compact",
+            "ROLE: main",
+            "ROLE: compact",
+            "ROLE: main"
+        ]
+    );
+    let main = &session.actors["main"];
+    assert_eq!(
+        (main.overflows, main.compact_shrink),
+        (0, 0),
+        "a resume retries afresh"
     );
 }
 

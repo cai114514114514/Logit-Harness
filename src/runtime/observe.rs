@@ -12,6 +12,9 @@ use serde_json::json;
 /// Summary requests that may overflow, each with halved bounds, before the
 /// session stops and says the context cannot be reduced enough.
 const COMPACTION_RETRIES: u32 = 3;
+/// Ordinary requests that may overflow again after compacting, before the
+/// session stops: without this a too-large state would compact forever.
+const OVERFLOW_RETRIES: u32 = 2;
 
 impl Runner {
     pub(super) fn handle_wire(&mut self, wire: Wire) -> anyhow::Result<()> {
@@ -232,6 +235,9 @@ impl Runner {
                             return Ok(());
                         }
                         actor.failures = 0;
+                        if !compact {
+                            actor.overflows = 0;
+                        }
                         if compact {
                             actor.context.compact(&response.text())?;
                             actor.compact = false;
@@ -306,8 +312,19 @@ impl Runner {
                                     actor.compact_shrink += 1;
                                 } else {
                                     actor.compact = true;
+                                    actor.overflows += 1;
                                 }
-                                let exhausted = actor.compact_shrink > COMPACTION_RETRIES;
+                                let exhausted = actor.compact_shrink > COMPACTION_RETRIES
+                                    || actor.overflows > OVERFLOW_RETRIES;
+                                if exhausted {
+                                    // Each /resume gets the same bounded attempts again;
+                                    // an oversized history is compacted by size then.
+                                    // A pending compaction flag would also keep a
+                                    // non-lingering runner from ever finishing.
+                                    actor.compact = false;
+                                    actor.compact_shrink = 0;
+                                    actor.overflows = 0;
+                                }
                                 self.emit(EventData::Diagnostic {
                                     message: format!(
                                         "{} context exceeded the model limit; compacting and retrying: {error}",

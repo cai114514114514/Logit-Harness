@@ -66,7 +66,7 @@ pub async fn reconcile(session: &mut Session, store: &Store, logs: &Path) -> any
             .ok_or_else(|| anyhow::anyhow!("interrupted actor missing"))?;
         actor.context.tool_result(&action.pending.call.id, &json!({
             "error":"Operation interrupted; not replayed. Inspect current files and process logs before deciding whether any action remains necessary.",
-            "current_files":snapshot,"logs":logs,"action":id
+            "current_files":crate::domain::visible_fingerprints(&snapshot),"logs":logs,"action":id
         }));
         actor.scope.observed.clear();
         actor.phase = if actor.retired {

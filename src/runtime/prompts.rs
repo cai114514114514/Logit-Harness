@@ -70,7 +70,7 @@ pub fn state(session: &Session, actor: &super::actor::Actor, guidance: &str) -> 
         "task": actor.task,
         "team": {"limit":session.team.limit,"members":session.team.view().members},
         "member": session.team.member_for_actor(&actor.id),
-        "scope": scope(&actor.scope),
+        "scope": visible_scope(&actor.scope),
         "mode": session.mode,
         "goal_id": session.active_goal().map(|goal| &goal.id),
         "queued_tasks": session.queue,
@@ -83,7 +83,7 @@ pub fn state(session: &Session, actor: &super::actor::Actor, guidance: &str) -> 
 
 /// The model's view of a scope: observed fingerprints are bounded, the harness
 /// keeps the complete map for its own checks.
-fn scope(scope: &crate::tools::Scope) -> Value {
+pub(super) fn visible_scope(scope: &crate::tools::Scope) -> Value {
     let mut view = json!(scope);
     view["observed"] = crate::domain::visible_fingerprints(&scope.observed);
     view
@@ -225,6 +225,11 @@ mod tests {
         assert_eq!(state["scope"]["observed"]["count"], 9197);
         let size = serde_json::to_vec(&state).unwrap().len();
         assert!(size < 16 * 1024, "{size} bytes");
+        // focus_step returns the same bounded scope.
+        assert_eq!(
+            super::visible_scope(&actor.scope)["observed"]["count"],
+            9197
+        );
         // The harness itself still has every fingerprint.
         assert_eq!(actor.scope.observed.len(), 9197);
     }
