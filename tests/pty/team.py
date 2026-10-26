@@ -62,7 +62,7 @@ with tempfile.TemporaryDirectory(prefix='loh-team-offline-') as temporary:
         assert 'Bob.txt' not in ''.join(ada.chunks)
         assert 'Bob.txt' in ''.join(bob.chunks)
         assert 'Ada.txt' not in ''.join(bob.chunks)
-        assert 'Read  Ada.txt' not in ''.join(main.chunks)
+        assert '读取  Ada.txt' not in ''.join(main.chunks)
         main.send('/team\r')
         main.wait(lambda: 'o 新窗口' in main.text())
         main.save(output, 'team-picker')

@@ -147,9 +147,11 @@ class Client:
         self.receipts.append(receipt)
         if conversation and not args.baseline:
             assert footer == [self.screen.lines], receipt
-            assert self.screen.cursor.y in range(self.screen.lines - 6, self.screen.lines - 2), receipt
+            # One rule above the editor and the footer below: the cursor row
+            # can be the second-to-last line.
+            assert self.screen.cursor.y in range(self.screen.lines - 6, self.screen.lines - 1), receipt
             assert receipt['brands'] == 1, receipt
-            assert sum('❯' in row for row in rows[-7:]) == 1, rows
+            assert sum('▸' in row for row in rows[-7:]) == 1, rows
 
 
 server = ThreadingHTTPServer(('127.0.0.1', 0), Provider)
@@ -232,7 +234,8 @@ with tempfile.TemporaryDirectory(prefix='loh-layout-') as tmp:
         complete = client.settled_rows(9)
         if not args.baseline:
             assert complete[:len(settled)] == settled
-            assert all(complete[index - 1] == '● Logit' for index, row in enumerate(complete) if 'REPLY-' in row)
+            # Replies carry the main agent's bar on their own line, no heading.
+            assert all(row.startswith('│ ') for row in complete if 'REPLY-' in row)
             assert not any(not a.strip() and not b.strip() for a, b in zip(complete, complete[1:])), complete
         client.send('/')
         client.save('04-menu')
@@ -267,7 +270,8 @@ with tempfile.TemporaryDirectory(prefix='loh-layout-') as tmp:
             client.drain(.4)
             client.save(f'10-resize-{rows}-{columns}')
             if not args.baseline:
-                assert sum('补充要求、纠正方向' in row for row in client.rows()) == 1, client.rows()
+                # Narrow editors use the short prompt; exactly one editor remains.
+                assert sum('纠正' in row and '▸' in row for row in client.rows()) == 1, client.rows()
                 assert question_id in ''.join(row.strip() for row in client.rows()) or '/status' in '\n'.join(client.rows()), client.rows()
         client.send('/new\r')
         client.drain(.4)

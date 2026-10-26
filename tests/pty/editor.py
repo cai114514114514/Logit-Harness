@@ -89,7 +89,7 @@ with tempfile.TemporaryDirectory(prefix='loh-editor-') as directory:
         assert '/goal Zalpha' in text(), text()
         send('\x01X\x0b')  # Ctrl+A, insert X, Ctrl+K
         save('line-edit')
-        assert any(row.strip() == '❯ X' for row in rows()), text()
+        assert any(row.strip() == '▸  X' for row in rows()), text()
         send('\x15\x1b[200~第一行\nalpha beta 👩‍💻\x1b[201~')
         send('\x17\x01X\x0b')
         save('unicode-lines')
